@@ -4,6 +4,7 @@
 
 /* PYPA - Mobile-first PWA Design System
 All colors MUST be HSL.
+Mobile-first responsive design with proper touch targets and spacing.
 */
 
 @layer base {
@@ -113,5 +114,69 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Mobile-first responsive utilities */
+@layer utilities {
+  /* Better touch targets for mobile */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+  
+  /* Responsive text sizes */
+  .text-responsive-xs {
+    @apply text-xs sm:text-sm;
+  }
+  
+  .text-responsive-sm {
+    @apply text-sm sm:text-base;
+  }
+  
+  .text-responsive-base {
+    @apply text-base sm:text-lg;
+  }
+  
+  .text-responsive-lg {
+    @apply text-lg sm:text-xl;
+  }
+  
+  .text-responsive-xl {
+    @apply text-xl sm:text-2xl;
+  }
+  
+  .text-responsive-2xl {
+    @apply text-2xl sm:text-3xl;
+  }
+  
+  .text-responsive-3xl {
+    @apply text-3xl sm:text-4xl;
+  }
+  
+  /* Mobile-first spacing */
+  .mobile-padding {
+    @apply p-4 sm:p-6;
+  }
+  
+  .mobile-padding-x {
+    @apply px-4 sm:px-6;
+  }
+  
+  .mobile-padding-y {
+    @apply py-4 sm:py-6;
+  }
+  
+  .mobile-margin {
+    @apply m-4 sm:m-6;
+  }
+  
+  /* Mobile-first containers */
+  .mobile-container {
+    @apply w-full max-w-sm mx-auto sm:max-w-md md:max-w-lg lg:max-w-xl;
+  }
+  
+  /* Card improvements for mobile */
+  .mobile-card {
+    @apply p-4 sm:p-6 rounded-lg border shadow-sm;
   }
 }

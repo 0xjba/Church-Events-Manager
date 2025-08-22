@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Trophy } from 'lucide-react';
@@ -24,6 +23,15 @@ const Auth = () => {
       navigate('/', { replace: true });
     }
   }, [user, loading, navigate]);
+
+  // Show loading state during auth check
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   // Sign in form state
   const [signInData, setSignInData] = useState({
@@ -79,43 +87,39 @@ const Auth = () => {
     setIsLoading(false);
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-secondary/10 flex items-center justify-center mobile-padding">
+      <div className="mobile-container">
         <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-4">
-            <Trophy className="h-12 w-12 text-primary" />
+          <div className="flex justify-center items-center mb-4">
+            <Trophy className="h-12 w-12 sm:h-16 sm:w-16 text-primary" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground">PYPA</h1>
-          <p className="text-muted-foreground">Devotional & Cultural Competitions</p>
+          <h1 className="text-responsive-3xl font-bold text-foreground mb-2">
+            PYPA
+          </h1>
+          <p className="text-responsive-sm text-muted-foreground">
+            Punjab Youth Preachers Association
+          </p>
         </div>
 
         <Tabs defaultValue="signin" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="signin">Sign In</TabsTrigger>
-            <TabsTrigger value="signup">Sign Up</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 mb-6 h-12">
+            <TabsTrigger value="signin" className="text-responsive-sm h-10">Sign In</TabsTrigger>
+            <TabsTrigger value="signup" className="text-responsive-sm h-10">Sign Up</TabsTrigger>
           </TabsList>
-
+          
           <TabsContent value="signin">
-            <Card>
-              <CardHeader>
-                <CardTitle>Sign In</CardTitle>
-                <CardDescription>
-                  Enter your credentials to access PYPA
+            <Card className="mobile-card">
+              <CardHeader className="text-center pb-4">
+                <CardTitle className="text-responsive-xl">Welcome Back</CardTitle>
+                <CardDescription className="text-responsive-sm">
+                  Sign in to your PYPA account
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleSignIn} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signin-username">Username</Label>
+                <form onSubmit={handleSignIn} className="space-y-6">
+                  <div className="space-y-3">
+                    <Label htmlFor="signin-username" className="text-responsive-sm font-medium">Username</Label>
                     <Input
                       id="signin-username"
                       type="text"
@@ -123,10 +127,11 @@ const Auth = () => {
                       value={signInData.username}
                       onChange={(e) => setSignInData({ ...signInData, username: e.target.value })}
                       required
+                      className="h-12 text-responsive-sm"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signin-password">Password</Label>
+                  <div className="space-y-3">
+                    <Label htmlFor="signin-password" className="text-responsive-sm font-medium">Password</Label>
                     <Input
                       id="signin-password"
                       type="password"
@@ -134,19 +139,20 @@ const Auth = () => {
                       value={signInData.password}
                       onChange={(e) => setSignInData({ ...signInData, password: e.target.value })}
                       required
+                      className="h-12 text-responsive-sm"
                     />
                   </div>
                   
                   {error && (
                     <Alert variant="destructive">
-                      <AlertDescription>{error}</AlertDescription>
+                      <AlertDescription className="text-responsive-sm">{error}</AlertDescription>
                     </Alert>
                   )}
 
-                  <Button type="submit" className="w-full" disabled={isLoading}>
+                  <Button type="submit" className="w-full h-12 text-responsive-sm font-medium" disabled={isLoading}>
                     {isLoading ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                         Signing In...
                       </>
                     ) : (
@@ -157,19 +163,19 @@ const Auth = () => {
               </CardContent>
             </Card>
           </TabsContent>
-
+          
           <TabsContent value="signup">
-            <Card>
-              <CardHeader>
-                <CardTitle>Create Participant Account</CardTitle>
-                <CardDescription>
+            <Card className="mobile-card">
+              <CardHeader className="text-center pb-4">
+                <CardTitle className="text-responsive-xl">Create Account</CardTitle>
+                <CardDescription className="text-responsive-sm">
                   Register as a new participant for PYPA events
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleSignUp} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-username">Username</Label>
+                <form onSubmit={handleSignUp} className="space-y-6">
+                  <div className="space-y-3">
+                    <Label htmlFor="signup-username" className="text-responsive-sm font-medium">Username</Label>
                     <Input
                       id="signup-username"
                       type="text"
@@ -177,10 +183,11 @@ const Auth = () => {
                       value={signUpData.username}
                       onChange={(e) => setSignUpData({ ...signUpData, username: e.target.value })}
                       required
+                      className="h-12 text-responsive-sm"
                     />
                   </div>
-                   <div className="space-y-2">
-                     <Label htmlFor="signup-email">Email Address</Label>
+                   <div className="space-y-3">
+                     <Label htmlFor="signup-email" className="text-responsive-sm font-medium">Email Address</Label>
                      <Input
                        id="signup-email"
                        type="email"
@@ -188,10 +195,11 @@ const Auth = () => {
                        value={signUpData.email}
                        onChange={(e) => setSignUpData({ ...signUpData, email: e.target.value })}
                        required
+                       className="h-12 text-responsive-sm"
                      />
                    </div>
-                   <div className="space-y-2">
-                     <Label htmlFor="signup-fullname">Full Name</Label>
+                   <div className="space-y-3">
+                     <Label htmlFor="signup-fullname" className="text-responsive-sm font-medium">Full Name</Label>
                      <Input
                        id="signup-fullname"
                        type="text"
@@ -199,19 +207,20 @@ const Auth = () => {
                        value={signUpData.fullName}
                        onChange={(e) => setSignUpData({ ...signUpData, fullName: e.target.value })}
                        required
+                       className="h-12 text-responsive-sm"
                      />
                    </div>
-                   <div className="space-y-2">
-                     <Label>Account Type</Label>
-                     <div className="p-3 bg-muted rounded-lg">
-                       <p className="text-sm text-muted-foreground">
+                   <div className="space-y-3">
+                     <Label className="text-responsive-sm font-medium">Account Type</Label>
+                     <div className="p-4 bg-muted rounded-lg border">
+                       <p className="text-responsive-sm text-muted-foreground">
                          <strong>Participant Account</strong> - You will be registered as a participant. 
                          Judges and admins are managed by administrators only.
                        </p>
                      </div>
                    </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
+                  <div className="space-y-3">
+                    <Label htmlFor="signup-password" className="text-responsive-sm font-medium">Password</Label>
                     <Input
                       id="signup-password"
                       type="password"
@@ -219,19 +228,20 @@ const Auth = () => {
                       value={signUpData.password}
                       onChange={(e) => setSignUpData({ ...signUpData, password: e.target.value })}
                       required
+                      className="h-12 text-responsive-sm"
                     />
                   </div>
                   
                   {error && (
                     <Alert variant="destructive">
-                      <AlertDescription>{error}</AlertDescription>
+                      <AlertDescription className="text-responsive-sm">{error}</AlertDescription>
                     </Alert>
                   )}
 
-                  <Button type="submit" className="w-full" disabled={isLoading}>
+                  <Button type="submit" className="w-full h-12 text-responsive-sm font-medium" disabled={isLoading}>
                     {isLoading ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                         Creating Account...
                       </>
                     ) : (
