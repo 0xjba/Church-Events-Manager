@@ -22,12 +22,11 @@ const Auth = () => {
     password: ''
   });
 
-  // Sign up form state
+  // Sign up form state - only participants can register
   const [signUpData, setSignUpData] = useState({
     username: '',
     password: '',
-    fullName: '',
-    role: 'participant' as 'admin' | 'judge' | 'participant'
+    fullName: ''
   });
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -56,7 +55,7 @@ const Auth = () => {
       signUpData.username,
       signUpData.password,
       signUpData.fullName,
-      signUpData.role
+      'participant' // Only participants can register
     );
     
     if (error) {
@@ -151,9 +150,9 @@ const Auth = () => {
           <TabsContent value="signup">
             <Card>
               <CardHeader>
-                <CardTitle>Create Account</CardTitle>
+                <CardTitle>Create Participant Account</CardTitle>
                 <CardDescription>
-                  Register for a new PYPA account
+                  Register as a participant for PYPA events
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -181,17 +180,13 @@ const Auth = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="signup-role">Role</Label>
-                    <Select value={signUpData.role} onValueChange={(value: 'admin' | 'judge' | 'participant') => setSignUpData({ ...signUpData, role: value })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select your role" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="participant">Participant</SelectItem>
-                        <SelectItem value="judge">Judge</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>Account Type</Label>
+                    <div className="p-3 bg-muted rounded-lg">
+                      <p className="text-sm text-muted-foreground">
+                        <strong>Participant Account</strong> - You will be registered as a participant. 
+                        Judges and admins are added by administrators only.
+                      </p>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="signup-password">Password</Label>
