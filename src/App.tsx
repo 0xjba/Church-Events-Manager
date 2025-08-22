@@ -13,6 +13,8 @@ import JudgeManagement from "./pages/admin/JudgeManagement";
 import EventManagement from "./pages/admin/EventManagement";
 import JudgeAssignment from "./pages/admin/JudgeAssignment";
 import JudgeDashboard from "./pages/judge/JudgeDashboard";
+import JudgeScoringInterface from "./pages/judge/JudgeScoringInterface";
+import RealtimeScoreboard from "./pages/admin/RealtimeScoreboard";
 import ParticipantDashboard from "./pages/participant/ParticipantDashboard";
 import NotFound from "./pages/NotFound";
 
@@ -55,11 +57,24 @@ const App = () => (
                 <JudgeAssignment />
               </ProtectedRoute>
             } />
+            <Route 
+              path="/admin/scoreboard/:eventId" 
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <RealtimeScoreboard />
+                </ProtectedRoute>
+              } 
+            />
             
             {/* Judge Routes */}
             <Route path="/judge" element={
               <ProtectedRoute requiredRole="judge">
                 <JudgeDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/judge/score/:eventId" element={
+              <ProtectedRoute requiredRole="judge">
+                <JudgeScoringInterface />
               </ProtectedRoute>
             } />
             
