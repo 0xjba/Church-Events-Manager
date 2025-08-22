@@ -67,7 +67,9 @@ interface Season {
 
 const EventManagement = () => {
   const [events, setEvents] = useState<Event[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
@@ -94,6 +96,26 @@ const EventManagement = () => {
     fetchEvents();
     fetchSeasons();
   }, []);
+
+  useEffect(() => {
+    // Filter events by selected season
+    if (selectedSeasonId === 'all') {
+      setFilteredEvents(events);
+    } else {
+      setFilteredEvents(events.filter(event => event.season_id === selectedSeasonId));
+    }
+  }, [events, selectedSeasonId]);
+
+  useEffect(() => {
+    // Set default season when seasons are loaded and form is in create mode
+    if (seasons.length > 0 && !editingEvent) {
+      const activeSeason = seasons.find(s => s.is_active);
+      const defaultSeasonId = activeSeason?.id || seasons[0]?.id;
+      if (defaultSeasonId && !form.getValues('season_id')) {
+        form.setValue('season_id', defaultSeasonId);
+      }
+    }
+  }, [seasons, editingEvent, form]);
 
   const fetchSeasons = async () => {
     try {
@@ -263,32 +285,56 @@ const EventManagement = () => {
                 Event Management
               </h1>
               <p className="text-muted-foreground">
-                Create and manage competition events
+                Create and manage competition events for your seasons
               </p>
             </div>
             
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => {
-                  setEditingEvent(null);
-                  form.reset();
-                }}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Event
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>
-                    {editingEvent ? 'Edit Event' : 'Create New Event'}
-                  </DialogTitle>
-                  <DialogDescription>
-                    Set up event details and scoring criteria.
-                  </DialogDescription>
-                </DialogHeader>
-                
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="flex items-center gap-4">
+              <Select value={selectedSeasonId} onValueChange={setSelectedSeasonId}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Filter by season" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Seasons</SelectItem>
+                  {seasons.map((season) => (
+                    <SelectItem key={season.id} value={season.id}>
+                      {season.name} ({season.year})
+                      {season.is_active && ' - Active'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={() => {
+                    setEditingEvent(null);
+                    form.reset();
+                    // Set default season for new events
+                    if (seasons.length > 0) {
+                      const activeSeason = seasons.find(s => s.is_active);
+                      const defaultSeasonId = activeSeason?.id || seasons[0]?.id;
+                      if (defaultSeasonId) {
+                        form.setValue('season_id', defaultSeasonId);
+                      }
+                    }
+                  }}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Event
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>
+                      {editingEvent ? 'Edit Event' : 'Create New Event'}
+                    </DialogTitle>
+                    <DialogDescription>
+                      Set up event details and scoring criteria.
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                     <FormField
                       control={form.control}
                       name="name"
@@ -503,10 +549,11 @@ const EventManagement = () => {
                         {editingEvent ? 'Update' : 'Create'} Event
                       </Button>
                     </div>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
 
           <Card>
@@ -519,9 +566,12 @@ const EventManagement = () => {
             <CardContent>
               {loading ? (
                 <div className="text-center py-8">Loading...</div>
-              ) : events.length === 0 ? (
+              ) : filteredEvents.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  No events created yet
+                  {selectedSeasonId === 'all' 
+                    ? 'No events found. Create your first event to get started.'
+                    : 'No events found for the selected season.'
+                  }
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -539,13 +589,18 @@ const EventManagement = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {events.map((event) => (
+                      {filteredEvents.map((event) => (
                         <TableRow key={event.id}>
                           <TableCell className="font-medium">
                             {event.name}
                           </TableCell>
                           <TableCell>
-                            {event.season ? `${event.season.name} (${event.season.year})` : 'No Season'}
+                            <div className="flex items-center gap-2">
+                              <span>{event.season ? `${event.season.name} (${event.season.year})` : 'No Season'}</span>
+                              {event.season && seasons.find(s => s.id === event.season_id)?.is_active && (
+                                <Badge variant="secondary" className="text-xs">Active</Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="capitalize">{event.type}</TableCell>
                           <TableCell>
