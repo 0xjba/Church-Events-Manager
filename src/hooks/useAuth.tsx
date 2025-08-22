@@ -19,7 +19,7 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   signIn: (username: string, password: string) => Promise<{ error?: any }>;
-  signUp: (username: string, email: string, password: string, fullName: string, role: 'admin' | 'judge' | 'participant') => Promise<{ error?: any }>;
+  signUp: (username: string, email: string, password: string, fullName: string, role?: 'admin' | 'judge' | 'participant') => Promise<{ error?: any }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isJudge: boolean;
@@ -108,8 +108,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async (username: string, password: string) => {
     try {
-      console.log('🔐 Sign in attempt for username:', username);
-      
       // Clean up existing state
       cleanupAuthState();
       
@@ -127,8 +125,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .eq('username', username)
         .limit(1);
 
-      console.log('📋 Profile lookup result:', { profiles, profileError });
-
       if (profileError) throw profileError;
       
       if (!profiles || profiles.length === 0) {
@@ -136,7 +132,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       const email = profiles[0].email;
-      console.log('📧 Found email for username:', email);
 
       // Sign in with email and password
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -144,23 +139,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         password,
       });
 
-      console.log('🔑 Sign-in result:', { data: data?.user?.id, error });
-
       if (error) throw error;
       
-      if (data.user) {
-        // Force page reload for clean state
-        window.location.href = '/';
-      }
-
+      // Don't force redirect here - let the auth state change handle it
       return { error: null };
     } catch (error: any) {
-      console.error('❌ Sign-in error:', error);
       return { error };
     }
   };
 
-  const signUp = async (username: string, email: string, password: string, fullName: string, role: 'admin' | 'judge' | 'participant') => {
+  const signUp = async (username: string, email: string, password: string, fullName: string, role: 'admin' | 'judge' | 'participant' = 'participant') => {
     try {
       // Clean up existing state
       cleanupAuthState();

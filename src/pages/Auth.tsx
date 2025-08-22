@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,12 +9,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Trophy } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 const Auth = () => {
-  const { signIn, signUp, loading } = useAuth();
+  const { user, signIn, signUp, loading } = useAuth();
+  const navigate = useNavigate();
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Redirect authenticated users away from auth page
+  useEffect(() => {
+    if (user && !loading) {
+      navigate('/', { replace: true });
+    }
+  }, [user, loading, navigate]);
 
   // Sign in form state
   const [signInData, setSignInData] = useState({
@@ -22,13 +31,12 @@ const Auth = () => {
     password: ''
   });
 
-  // Sign up form state - temporary admin creation enabled
+  // Sign up form state - participants only
   const [signUpData, setSignUpData] = useState({
     username: '',
     email: '',
     password: '',
-    fullName: '',
-    role: 'participant' as 'admin' | 'judge' | 'participant'
+    fullName: ''
   });
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -58,7 +66,7 @@ const Auth = () => {
       signUpData.email,
       signUpData.password,
       signUpData.fullName,
-      signUpData.role // Allow admin creation temporarily
+      'participant' // Only participants can register now
     );
     
     if (error) {
@@ -153,9 +161,9 @@ const Auth = () => {
           <TabsContent value="signup">
             <Card>
               <CardHeader>
-                <CardTitle>Create Account</CardTitle>
+                <CardTitle>Create Participant Account</CardTitle>
                 <CardDescription>
-                  Create your PYPA account (temporary admin setup enabled)
+                  Register as a new participant for PYPA events
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -193,26 +201,15 @@ const Auth = () => {
                        required
                      />
                    </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-role">Role (Temporary Admin Setup)</Label>
-                    <Select value={signUpData.role} onValueChange={(value: 'admin' | 'judge' | 'participant') => setSignUpData({ ...signUpData, role: value })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select your role" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">🔑 Admin (Create First Admin)</SelectItem>
-                        <SelectItem value="participant">👤 Participant</SelectItem>
-                        <SelectItem value="judge">⚖️ Judge</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {signUpData.role === 'admin' && (
-                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <p className="text-sm text-yellow-800">
-                          <strong>⚠️ First Admin Setup:</strong> Create your admin account, then disable this option.
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                   <div className="space-y-2">
+                     <Label>Account Type</Label>
+                     <div className="p-3 bg-muted rounded-lg">
+                       <p className="text-sm text-muted-foreground">
+                         <strong>Participant Account</strong> - You will be registered as a participant. 
+                         Judges and admins are managed by administrators only.
+                       </p>
+                     </div>
+                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="signup-password">Password</Label>
                     <Input
