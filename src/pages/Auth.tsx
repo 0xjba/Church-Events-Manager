@@ -8,11 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Trophy } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 const Auth = () => {
   const { signIn, signUp, loading } = useAuth();
-  const { toast } = useToast();
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,11 +39,9 @@ const Auth = () => {
     
     if (error) {
       setError(error.message || 'Failed to sign in');
-      toast({
-        title: 'Sign In Failed',
-        description: error.message || 'Please check your credentials',
-        variant: 'destructive'
-      });
+      toast.error(error.message || 'Please check your credentials');
+    } else {
+      toast.success('Signed in successfully!');
     }
     
     setIsLoading(false);
@@ -64,17 +61,9 @@ const Auth = () => {
     
     if (error) {
       setError(error.message || 'Failed to create account');
-      toast({
-        title: 'Sign Up Failed',
-        description: error.message || 'Please try again',
-        variant: 'destructive'
-      });
+      toast.error(error.message || 'Please try again');
     } else {
-      toast({
-        title: 'Account Created',
-        description: 'Your account has been created successfully',
-        variant: 'default'
-      });
+      toast.success('Account created successfully!');
     }
     
     setIsLoading(false);
