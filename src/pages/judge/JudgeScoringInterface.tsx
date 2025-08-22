@@ -2,7 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useOfflineSync } from '@/hooks/useOfflineSync';
+import { usePWA } from '@/hooks/usePWA';
 import Navigation from '@/components/Navigation';
+import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
-import { Clock, Play, Pause, Save, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Clock, Play, Pause, Save, AlertTriangle, CheckCircle, Wifi, WifiOff, Download } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Event {
@@ -54,6 +57,8 @@ const JudgeScoringInterface = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { isOnline, syncStatus, unsyncedCount, saveScoreOffline } = useOfflineSync();
+  const { isInstallable, installApp } = usePWA();
   
   const [event, setEvent] = useState<Event | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -256,24 +261,44 @@ const JudgeScoringInterface = () => {
     if (!judgeId || !eventId) return;
     
     try {
-      const scoresToSubmit = scores.map(score => ({
-        event_id: eventId,
-        judge_id: judgeId,
-        participant_id: score.participant_id,
-        criteria_id: score.criteria_id,
-        score: score.score,
-        is_locked: true
-      }));
+      if (isOnline) {
+        // Submit scores normally when online
+        const scoresToSubmit = scores.map(score => ({
+          event_id: eventId,
+          judge_id: judgeId,
+          participant_id: score.participant_id,
+          criteria_id: score.criteria_id,
+          score: score.score,
+          is_locked: true
+        }));
 
-      const { error } = await supabase
-        .from('scores')
-        .upsert(scoresToSubmit, {
-          onConflict: 'event_id,judge_id,participant_id,criteria_id'
-        });
+        const { error } = await supabase
+          .from('scores')
+          .upsert(scoresToSubmit, {
+            onConflict: 'event_id,judge_id,participant_id,criteria_id'
+          });
 
-      if (error) throw error;
+        if (error) throw error;
+        
+        toast.success('Scores submitted successfully!');
+      } else {
+        // Save scores offline when offline
+        const scoresByParticipant = scores.reduce((acc, score) => {
+          if (!acc[score.participant_id]) {
+            acc[score.participant_id] = {};
+          }
+          acc[score.participant_id][score.criteria_id] = score.score;
+          return acc;
+        }, {} as Record<string, Record<string, number>>);
+
+        // Save each participant's scores offline
+        for (const [participantId, participantScores] of Object.entries(scoresByParticipant)) {
+          await saveScoreOffline(eventId, participantId, judgeId, participantScores);
+        }
+        
+        toast.success('Scores saved offline and will sync when online!');
+      }
       
-      toast.success('Scores submitted successfully!');
       setShowSubmitDialog(false);
       fetchEventData(); // Refresh to get updated locked status
     } catch (error) {
@@ -325,17 +350,56 @@ const JudgeScoringInterface = () => {
           {/* Header */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-                {event.name}
-              </h1>
-              <Badge variant={event.status === 'active' ? 'default' : 'secondary'}>
-                {event.status}
-              </Badge>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+                  {event.name}
+                </h1>
+                <p className="text-muted-foreground">
+                  Scoring Event • {participants.length} Participants
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant={event.status === 'active' ? 'default' : 'secondary'}>
+                  {event.status}
+                </Badge>
+                
+                {/* Network Status */}
+                <div className="flex items-center gap-1">
+                  {isOnline ? (
+                    <Wifi className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <WifiOff className="h-4 w-4 text-red-500" />
+                  )}
+                  <span className="text-xs text-muted-foreground hidden sm:inline">
+                    {isOnline ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+                
+                {/* Unsynced count */}
+                {unsyncedCount > 0 && (
+                  <Badge variant="outline" className="text-xs">
+                    {unsyncedCount} unsynced
+                  </Badge>
+                )}
+                
+                {/* PWA Install */}
+                {isInstallable && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={installApp}
+                    className="hidden sm:flex"
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Install
+                  </Button>
+                )}
+              </div>
             </div>
-            <p className="text-muted-foreground">
-              Scoring Event • {participants.length} Participants
-            </p>
           </div>
+
+          {/* PWA Install Prompt */}
+          <PWAInstallPrompt />
 
           {/* Timer */}
           {event.time_limit && (
