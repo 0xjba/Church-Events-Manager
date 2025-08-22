@@ -57,18 +57,33 @@ const SeasonManagement = () => {
   });
 
   useEffect(() => {
+    console.log('SeasonManagement: Component mounted');
     fetchSeasons();
   }, []);
 
+  useEffect(() => {
+    console.log('SeasonManagement: Seasons data updated', { 
+      seasons: seasons.length, 
+      loading, 
+      seasonsData: seasons 
+    });
+  }, [seasons, loading]);
+
   const fetchSeasons = async () => {
     try {
+      console.log('SeasonManagement: Fetching seasons...');
       setLoading(true);
       const { data: seasonsData, error: seasonsError } = await supabase
         .from('seasons')
         .select('*')
         .order('year', { ascending: false });
 
-      if (seasonsError) throw seasonsError;
+      if (seasonsError) {
+        console.error('SeasonManagement: Error fetching seasons:', seasonsError);
+        throw seasonsError;
+      }
+
+      console.log('SeasonManagement: Raw seasons data:', seasonsData);
 
       // Get event counts for each season
       const seasonsWithCounts = await Promise.all(
@@ -87,6 +102,7 @@ const SeasonManagement = () => {
         })
       );
 
+      console.log('SeasonManagement: Seasons with counts:', seasonsWithCounts);
       setSeasons(seasonsWithCounts);
     } catch (error) {
       console.error('Error fetching seasons:', error);
@@ -200,7 +216,10 @@ const SeasonManagement = () => {
             </p>
           </div>
           <Button 
-            onClick={() => setIsDialogOpen(true)}
+            onClick={() => {
+              console.log('SeasonManagement: Create season button clicked');
+              setIsDialogOpen(true);
+            }}
             size="lg"
             className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80 shadow-lg hover:shadow-xl transition-all"
           >
@@ -265,14 +284,20 @@ const SeasonManagement = () => {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleEdit(season)}
+                              onClick={() => {
+                                console.log('SeasonManagement: Edit button clicked for season:', season);
+                                handleEdit(season);
+                              }}
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleDeleteClick(season)}
+                              onClick={() => {
+                                console.log('SeasonManagement: Delete button clicked for season:', season);
+                                handleDeleteClick(season);
+                              }}
                               className="text-destructive hover:text-destructive"
                             >
                               <Trash2 className="h-4 w-4" />
