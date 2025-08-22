@@ -279,7 +279,7 @@ const EventManagement = () => {
       
       <div className="flex-1 pb-16 md:pb-0">
         <div className="p-4 md:p-6">
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:justify-between sm:items-center">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-foreground">
                 Event Management
@@ -289,9 +289,9 @@ const EventManagement = () => {
               </p>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col space-y-2 sm:space-y-0 sm:flex-row sm:items-center sm:gap-4">
               <Select value={selectedSeasonId} onValueChange={setSelectedSeasonId}>
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-full sm:w-[200px]">
                   <SelectValue placeholder="Filter by season" />
                 </SelectTrigger>
                 <SelectContent>
@@ -307,18 +307,21 @@ const EventManagement = () => {
               
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button onClick={() => {
-                    setEditingEvent(null);
-                    form.reset();
-                    // Set default season for new events
-                    if (seasons.length > 0) {
-                      const activeSeason = seasons.find(s => s.is_active);
-                      const defaultSeasonId = activeSeason?.id || seasons[0]?.id;
-                      if (defaultSeasonId) {
-                        form.setValue('season_id', defaultSeasonId);
+                  <Button 
+                    onClick={() => {
+                      setEditingEvent(null);
+                      form.reset();
+                      // Set default season for new events
+                      if (seasons.length > 0) {
+                        const activeSeason = seasons.find(s => s.is_active);
+                        const defaultSeasonId = activeSeason?.id || seasons[0]?.id;
+                        if (defaultSeasonId) {
+                          form.setValue('season_id', defaultSeasonId);
+                        }
                       }
-                    }
-                  }}>
+                    }}
+                    className="w-full sm:w-auto shrink-0"
+                  >
                     <Plus className="h-4 w-4 mr-2" />
                     Create Event
                   </Button>

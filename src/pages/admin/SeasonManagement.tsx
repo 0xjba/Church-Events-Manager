@@ -202,117 +202,127 @@ const SeasonManagement = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/10">
-      <Navigation />
+    <div className="flex min-h-screen bg-background">
+      <div className="w-64 hidden md:block">
+        <Navigation />
+      </div>
       
-      <main className="container mx-auto px-4 py-8 space-y-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
-              Season Management
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              Organize events by seasons and manage competition cycles
-            </p>
-          </div>
-          <Button 
-            onClick={() => {
-              console.log('SeasonManagement: Create season button clicked');
-              setIsDialogOpen(true);
-            }}
-            size="lg"
-            className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80 shadow-lg hover:shadow-xl transition-all"
-          >
-            <Plus className="h-5 w-5 mr-2" />
-            Create Season
-          </Button>
-        </div>
+      <div className="flex-1 pb-16 md:pb-0">
+        <div className="p-4 md:p-6">
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+                  Season Management
+                </h1>
+                <p className="text-muted-foreground mt-1">
+                  Organize events by seasons and manage competition cycles
+                </p>
+              </div>
+              <Button 
+                onClick={() => {
+                  console.log('SeasonManagement: Create season button clicked');
+                  setIsDialogOpen(true);
+                }}
+                className="shrink-0"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Season
+              </Button>
+            </div>
 
-        <Card className="shadow-xl border-0 bg-card/50 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Seasons
-            </CardTitle>
-            <CardDescription>
-              Manage competition seasons and their associated events
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : seasons.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Trophy className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No seasons found. Create your first season to get started.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Season</TableHead>
-                      <TableHead>Year</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Events</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {seasons.map((season) => (
-                      <TableRow key={season.id}>
-                        <TableCell className="font-medium">{season.name}</TableCell>
-                        <TableCell>{season.year}</TableCell>
-                        <TableCell className="max-w-xs truncate">
-                          {season.description || '-'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={season.is_active ? 'default' : 'secondary'}>
-                            {season.is_active ? 'Active' : 'Inactive'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {season.event_count} events
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                console.log('SeasonManagement: Edit button clicked for season:', season);
-                                handleEdit(season);
-                              }}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                console.log('SeasonManagement: Delete button clicked for season:', season);
-                                handleDeleteClick(season);
-                              }}
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </main>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Seasons
+                </CardTitle>
+                <CardDescription>
+                  Manage competition seasons and their associated events
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : seasons.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Trophy className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No seasons found. Create your first season to get started.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Season</TableHead>
+                          <TableHead>Year</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Events</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {seasons.map((season) => (
+                          <TableRow key={season.id}>
+                            <TableCell className="font-medium">{season.name}</TableCell>
+                            <TableCell>{season.year}</TableCell>
+                            <TableCell className="max-w-xs truncate">
+                              {season.description || '-'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={season.is_active ? 'default' : 'secondary'}>
+                                {season.is_active ? 'Active' : 'Inactive'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {season.event_count} events
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    console.log('SeasonManagement: Edit button clicked for season:', season);
+                                    handleEdit(season);
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    console.log('SeasonManagement: Delete button clicked for season:', season);
+                                    handleDeleteClick(season);
+                                  }}
+                                  className="text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Navigation */}
+      <div className="md:hidden">
+        <Navigation />
+      </div>
 
       {/* Create/Edit Season Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
