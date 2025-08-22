@@ -34,17 +34,17 @@ const Navigation = () => {
 
   return (
     <nav className="bg-card border-t border-border fixed bottom-0 left-0 right-0 z-50 md:relative md:border-t-0 md:border-r">
-      <div className="flex md:flex-col h-20 md:h-auto">
-        {/* Mobile header - hidden on mobile as it's in bottom nav */}
-        <div className="hidden md:block mobile-padding border-b border-border">
-          <div className="flex items-center space-x-3">
-            <Trophy className="h-6 w-6 sm:h-7 sm:w-7 text-primary" />
-            <span className="font-bold text-responsive-lg">PYPA</span>
+      <div className="flex md:flex-col h-16 md:h-auto">
+        {/* Mobile header */}
+        <div className="hidden md:block p-4 border-b border-border">
+          <div className="flex items-center space-x-2">
+            <Trophy className="h-6 w-6 text-primary" />
+            <span className="font-bold text-lg">PYPA</span>
           </div>
-          <p className="text-responsive-sm text-muted-foreground mt-2">
+          <p className="text-sm text-muted-foreground mt-1">
             {profile?.full_name}
           </p>
-          <p className="text-responsive-xs text-muted-foreground capitalize">
+          <p className="text-xs text-muted-foreground capitalize">
             {profile?.role}
           </p>
         </div>
@@ -59,14 +59,14 @@ const Navigation = () => {
               <Link
                 key={item.href}
                 to={item.href}
-                className={`flex flex-col md:flex-row items-center justify-center md:justify-start space-y-1 md:space-y-0 md:space-x-3 px-2 py-3 md:px-4 md:py-4 flex-1 md:flex-none transition-colors touch-target ${
+                className={`flex flex-col md:flex-row items-center justify-center md:justify-start space-y-1 md:space-y-0 md:space-x-3 px-2 py-2 md:px-4 md:py-3 flex-1 md:flex-none transition-colors ${
                   active
-                    ? 'text-primary bg-primary/10 border-t-2 md:border-t-0 md:border-r-2 border-primary'
+                    ? 'text-primary bg-primary/10'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
               >
-                <Icon className="h-5 w-5 md:h-4 md:w-4" />
-                <span className="text-xs md:text-responsive-sm font-medium">
+                <Icon className="h-5 w-5" />
+                <span className="text-xs md:text-sm font-medium">
                   {item.label}
                 </span>
               </Link>
@@ -74,14 +74,14 @@ const Navigation = () => {
           })}
         </div>
 
-        {/* Sign out button - desktop only */}
-        <div className="hidden md:block mobile-padding border-t border-border">
+        {/* Sign out button */}
+        <div className="hidden md:block p-4 border-t border-border">
           <Button
             variant="ghost"
             onClick={signOut}
-            className="w-full justify-start text-muted-foreground hover:text-foreground h-12 text-responsive-sm"
+            className="w-full justify-start text-muted-foreground hover:text-foreground"
           >
-            <LogOut className="h-4 w-4 mr-3" />
+            <LogOut className="h-4 w-4 mr-2" />
             Sign Out
           </Button>
         </div>

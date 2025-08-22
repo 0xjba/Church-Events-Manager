@@ -186,38 +186,38 @@ const JudgeAssignment = () => {
         <Navigation />
       </div>
       
-      <div className="flex-1 pb-20 md:pb-0">
-        <div className="mobile-padding">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+      <div className="flex-1 pb-16 md:pb-0">
+        <div className="p-4 md:p-6">
+          <div className="flex justify-between items-center mb-6">
             <div>
-              <h1 className="text-responsive-3xl font-bold text-foreground">
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">
                 Judge Assignment
               </h1>
-              <p className="text-responsive-sm text-muted-foreground mt-2">
+              <p className="text-muted-foreground">
                 Assign judges to events and set event order
               </p>
             </div>
             
             <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="w-full sm:w-auto h-12 text-responsive-sm">
+                <Button>
                   <Plus className="h-4 w-4 mr-2" />
                   Assign Judge
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px] m-4 sm:m-0">
+              <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                  <DialogTitle className="text-responsive-lg">Assign Judge to Event</DialogTitle>
-                  <DialogDescription className="text-responsive-sm">
+                  <DialogTitle>Assign Judge to Event</DialogTitle>
+                  <DialogDescription>
                     Select an event and judge to create an assignment.
                   </DialogDescription>
                 </DialogHeader>
                 
-                <div className="space-y-6">
-                  <div className="space-y-3">
-                    <Label className="text-responsive-sm font-medium">Event</Label>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Event</Label>
                     <Select value={selectedEventId} onValueChange={setSelectedEventId}>
-                      <SelectTrigger className="h-12">
+                      <SelectTrigger>
                         <SelectValue placeholder="Select event" />
                       </SelectTrigger>
                       <SelectContent>
@@ -230,10 +230,10 @@ const JudgeAssignment = () => {
                     </Select>
                   </div>
                   
-                  <div className="space-y-3">
-                    <Label className="text-responsive-sm font-medium">Judge</Label>
+                  <div>
+                    <Label>Judge</Label>
                     <Select value={selectedJudgeId} onValueChange={setSelectedJudgeId}>
-                      <SelectTrigger className="h-12">
+                      <SelectTrigger>
                         <SelectValue placeholder="Select judge" />
                       </SelectTrigger>
                       <SelectContent>
@@ -246,15 +246,14 @@ const JudgeAssignment = () => {
                     </Select>
                   </div>
                   
-                  <div className="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-3">
+                  <div className="flex justify-end space-x-2">
                     <Button 
                       variant="outline" 
                       onClick={() => setIsAssignDialogOpen(false)}
-                      className="h-12 text-responsive-sm"
                     >
                       Cancel
                     </Button>
-                    <Button onClick={handleAssignJudge} className="h-12 text-responsive-sm">
+                    <Button onClick={handleAssignJudge}>
                       Assign Judge
                     </Button>
                   </div>
@@ -263,41 +262,38 @@ const JudgeAssignment = () => {
             </Dialog>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Event Order Management */}
-            <Card className="mobile-card">
+            <Card>
               <CardHeader>
-                <CardTitle className="text-responsive-lg">Event Schedule Order</CardTitle>
-                <CardDescription className="text-responsive-sm">
+                <CardTitle>Event Schedule Order</CardTitle>
+                <CardDescription>
                   Set the order in which events will be conducted
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {loading ? (
-                  <div className="text-center py-8">
-                    <p className="text-responsive-sm">Loading...</p>
-                  </div>
+                  <div className="text-center py-8">Loading...</div>
                 ) : events.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-responsive-sm">No events created yet</p>
+                    No events created yet
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {events.map((event, index) => (
-                      <div key={event.id} className="flex items-center justify-between p-4 border border-border rounded-lg">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-responsive-sm truncate">{event.name}</div>
-                          <div className="text-responsive-xs text-muted-foreground capitalize mt-1">
+                      <div key={event.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
+                        <div>
+                          <div className="font-medium">{event.name}</div>
+                          <div className="text-sm text-muted-foreground capitalize">
                             {event.type} • Order: {event.event_order || 'Not set'}
                           </div>
                         </div>
-                        <div className="flex space-x-2 ml-4">
+                        <div className="flex space-x-1">
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => moveEventUp(index)}
                             disabled={index === 0}
-                            className="h-10 w-10 p-0"
                           >
                             <ArrowUp className="h-4 w-4" />
                           </Button>
@@ -306,7 +302,6 @@ const JudgeAssignment = () => {
                             variant="outline"
                             onClick={() => moveEventDown(index)}
                             disabled={index === events.length - 1}
-                            className="h-10 w-10 p-0"
                           >
                             <ArrowDown className="h-4 w-4" />
                           </Button>
@@ -319,48 +314,46 @@ const JudgeAssignment = () => {
             </Card>
 
             {/* Judge Assignments */}
-            <Card className="mobile-card">
+            <Card>
               <CardHeader>
-                <CardTitle className="text-responsive-lg">Judge Assignments</CardTitle>
-                <CardDescription className="text-responsive-sm">
+                <CardTitle>Judge Assignments</CardTitle>
+                <CardDescription>
                   Current judge assignments by event
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {loading ? (
-                  <div className="text-center py-8">
-                    <p className="text-responsive-sm">Loading...</p>
-                  </div>
+                  <div className="text-center py-8">Loading...</div>
                 ) : events.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-responsive-sm">No events created yet</p>
+                    No events created yet
                   </div>
                 ) : (
                   <div className="space-y-4">
                     {events.map((event) => (
                       <div key={event.id} className="border border-border rounded-lg p-4">
-                        <div className="flex flex-col sm:flex-row justify-between items-start mb-4 gap-3">
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-responsive-sm truncate">{event.name}</h4>
-                            <Badge variant={event.status === 'active' ? 'default' : 'secondary'} className="mt-2">
+                        <div className="flex justify-between items-center mb-3">
+                          <div>
+                            <h4 className="font-medium">{event.name}</h4>
+                            <Badge variant={event.status === 'active' ? 'default' : 'secondary'}>
                               {event.status}
                             </Badge>
                           </div>
                         </div>
                         
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                           {event.event_judges?.length === 0 ? (
-                            <div className="text-responsive-sm text-muted-foreground py-4 text-center bg-muted/30 rounded-lg">
+                            <div className="text-sm text-muted-foreground py-2">
                               No judges assigned
                             </div>
                           ) : (
                             event.event_judges?.map((assignment: any) => (
-                              <div key={assignment.id} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-medium text-responsive-sm truncate">
+                              <div key={assignment.id} className="flex justify-between items-center p-2 bg-muted/50 rounded">
+                                <div>
+                                  <div className="font-medium text-sm">
                                     {assignment.judges.name}
                                   </div>
-                                  <div className="text-responsive-xs text-muted-foreground truncate">
+                                  <div className="text-xs text-muted-foreground">
                                     {assignment.judges.church}
                                   </div>
                                 </div>
@@ -368,9 +361,8 @@ const JudgeAssignment = () => {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => handleUnassignJudge(event.id, assignment.judge_id)}
-                                  className="ml-3 h-10 w-10 p-0 flex-shrink-0"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Trash2 className="h-3 w-3" />
                                 </Button>
                               </div>
                             ))
