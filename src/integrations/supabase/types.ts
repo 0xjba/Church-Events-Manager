@@ -14,16 +14,431 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          new_values: Json | null
+          old_values: Json | null
+          record_id: string | null
+          table_name: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          new_values?: Json | null
+          old_values?: Json | null
+          record_id?: string | null
+          table_name: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          new_values?: Json | null
+          old_values?: Json | null
+          record_id?: string | null
+          table_name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      event_criteria: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          max_score: number
+          name: string
+          weight: number | null
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          max_score?: number
+          name: string
+          weight?: number | null
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          max_score?: number
+          name?: string
+          weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_criteria_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_judges: {
+        Row: {
+          assigned_at: string
+          event_id: string
+          id: string
+          judge_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          event_id: string
+          id?: string
+          judge_id: string
+        }
+        Update: {
+          assigned_at?: string
+          event_id?: string
+          id?: string
+          judge_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_judges_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_judges_judge_id_fkey"
+            columns: ["judge_id"]
+            isOneToOne: false
+            referencedRelation: "judges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_participants: {
+        Row: {
+          event_id: string
+          id: string
+          participant_id: string
+          registered_at: string
+        }
+        Insert: {
+          event_id: string
+          id?: string
+          participant_id: string
+          registered_at?: string
+        }
+        Update: {
+          event_id?: string
+          id?: string
+          participant_id?: string
+          registered_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_participants_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_participants_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          created_at: string
+          event_order: number | null
+          id: string
+          max_participants: number | null
+          name: string
+          results_published: boolean
+          rules: string | null
+          status: string
+          time_limit: number | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          event_order?: number | null
+          id?: string
+          max_participants?: number | null
+          name: string
+          results_published?: boolean
+          rules?: string | null
+          status?: string
+          time_limit?: number | null
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          event_order?: number | null
+          id?: string
+          max_participants?: number | null
+          name?: string
+          results_published?: boolean
+          rules?: string | null
+          status?: string
+          time_limit?: number | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      judges: {
+        Row: {
+          church: string
+          contact: string | null
+          created_at: string
+          id: string
+          name: string
+          profile_id: string
+          updated_at: string
+        }
+        Insert: {
+          church: string
+          contact?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          profile_id: string
+          updated_at?: string
+        }
+        Update: {
+          church?: string
+          contact?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          profile_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "judges_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      participants: {
+        Row: {
+          age: number
+          category: string
+          chest_number: string
+          church: string
+          created_at: string
+          district: string
+          full_name: string
+          id: string
+          profile_id: string
+          updated_at: string
+        }
+        Insert: {
+          age: number
+          category: string
+          chest_number: string
+          church: string
+          created_at?: string
+          district: string
+          full_name: string
+          id?: string
+          profile_id: string
+          updated_at?: string
+        }
+        Update: {
+          age?: number
+          category?: string
+          chest_number?: string
+          church?: string
+          created_at?: string
+          district?: string
+          full_name?: string
+          id?: string
+          profile_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "participants_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          full_name: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string
+          user_id: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          full_name: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+          user_id: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+          user_id?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      results: {
+        Row: {
+          average_score: number
+          calculated_at: string
+          event_id: string
+          id: string
+          participant_id: string
+          rank: number | null
+          tie_breaker_reason: string | null
+          total_score: number
+        }
+        Insert: {
+          average_score: number
+          calculated_at?: string
+          event_id: string
+          id?: string
+          participant_id: string
+          rank?: number | null
+          tie_breaker_reason?: string | null
+          total_score: number
+        }
+        Update: {
+          average_score?: number
+          calculated_at?: string
+          event_id?: string
+          id?: string
+          participant_id?: string
+          rank?: number | null
+          tie_breaker_reason?: string | null
+          total_score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "results_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "results_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scores: {
+        Row: {
+          created_at: string
+          criteria_id: string
+          event_id: string
+          id: string
+          is_locked: boolean
+          judge_id: string
+          participant_id: string
+          score: number
+          unlock_reason: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          criteria_id: string
+          event_id: string
+          id?: string
+          is_locked?: boolean
+          judge_id: string
+          participant_id: string
+          score: number
+          unlock_reason?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          criteria_id?: string
+          event_id?: string
+          id?: string
+          is_locked?: boolean
+          judge_id?: string
+          participant_id?: string
+          score?: number
+          unlock_reason?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scores_criteria_id_fkey"
+            columns: ["criteria_id"]
+            isOneToOne: false
+            referencedRelation: "event_criteria"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scores_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scores_judge_id_fkey"
+            columns: ["judge_id"]
+            isOneToOne: false
+            referencedRelation: "judges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scores_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_role: {
+        Args: { user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "judge" | "participant"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +565,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "judge", "participant"],
+    },
   },
 } as const
