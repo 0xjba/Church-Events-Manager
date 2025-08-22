@@ -100,18 +100,18 @@ const AdminDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <div className="p-3 border border-border rounded-lg cursor-pointer hover:bg-accent transition-colors">
+                  <a href="/admin/events" className="block p-3 border border-border rounded-lg cursor-pointer hover:bg-accent transition-colors">
                     <div className="font-medium">Add New Event</div>
                     <div className="text-sm text-muted-foreground">Create a new competition event</div>
-                  </div>
-                  <div className="p-3 border border-border rounded-lg cursor-pointer hover:bg-accent transition-colors">
+                  </a>
+                  <a href="/admin/participants" className="block p-3 border border-border rounded-lg cursor-pointer hover:bg-accent transition-colors">
                     <div className="font-medium">Register Participant</div>
                     <div className="text-sm text-muted-foreground">Add a new participant</div>
-                  </div>
-                  <div className="p-3 border border-border rounded-lg cursor-pointer hover:bg-accent transition-colors">
+                  </a>
+                  <a href="/admin/assignments" className="block p-3 border border-border rounded-lg cursor-pointer hover:bg-accent transition-colors">
                     <div className="font-medium">Assign Judge</div>
                     <div className="text-sm text-muted-foreground">Assign judges to events</div>
-                  </div>
+                  </a>
                 </div>
               </CardContent>
             </Card>

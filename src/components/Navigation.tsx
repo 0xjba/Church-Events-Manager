@@ -9,10 +9,11 @@ const Navigation = () => {
 
   const navItems = [
     ...(isAdmin ? [
-      { href: '/admin', icon: Settings, label: 'Admin', exact: false },
+      { href: '/admin', icon: Settings, label: 'Dashboard', exact: true },
       { href: '/admin/participants', icon: Users, label: 'Participants', exact: true },
+      { href: '/admin/judges', icon: Trophy, label: 'Judges', exact: true },
       { href: '/admin/events', icon: Calendar, label: 'Events', exact: true },
-      { href: '/admin/results', icon: BarChart3, label: 'Results', exact: true },
+      { href: '/admin/assignments', icon: BarChart3, label: 'Assignments', exact: true },
     ] : []),
     ...(isJudge ? [
       { href: '/judge', icon: Trophy, label: 'My Events', exact: false },

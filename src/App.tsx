@@ -8,6 +8,10 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import ParticipantManagement from "./pages/admin/ParticipantManagement";
+import JudgeManagement from "./pages/admin/JudgeManagement";
+import EventManagement from "./pages/admin/EventManagement";
+import JudgeAssignment from "./pages/admin/JudgeAssignment";
 import JudgeDashboard from "./pages/judge/JudgeDashboard";
 import ParticipantDashboard from "./pages/participant/ParticipantDashboard";
 import NotFound from "./pages/NotFound";
@@ -29,6 +33,26 @@ const App = () => (
             <Route path="/admin" element={
               <ProtectedRoute requiredRole="admin">
                 <AdminDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/participants" element={
+              <ProtectedRoute requiredRole="admin">
+                <ParticipantManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/judges" element={
+              <ProtectedRoute requiredRole="admin">
+                <JudgeManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/events" element={
+              <ProtectedRoute requiredRole="admin">
+                <EventManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/assignments" element={
+              <ProtectedRoute requiredRole="admin">
+                <JudgeAssignment />
               </ProtectedRoute>
             } />
             
