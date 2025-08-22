@@ -8,6 +8,7 @@ interface Profile {
   username: string;
   full_name: string;
   role: 'admin' | 'judge' | 'participant';
+  email: string;
   created_at: string;
   updated_at: string;
 }
@@ -117,10 +118,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Continue even if this fails
       }
 
-      // Try to find user by username first
+      // Try to find user by username and get their email
       const { data: profiles, error: profileError } = await supabase
         .from('profiles')
-        .select('user_id')
+        .select('email')
         .eq('username', username)
         .limit(1);
 
@@ -130,13 +131,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         throw new Error('User not found');
       }
 
-      // Get the email for this user
-      const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(profiles[0].user_id);
-      if (authError) throw authError;
-
       // Sign in with email and password
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: authUser.user.email!,
+        email: profiles[0].email,
         password,
       });
 
