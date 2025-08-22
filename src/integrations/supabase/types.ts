@@ -163,6 +163,7 @@ export type Database = {
           name: string
           results_published: boolean
           rules: string | null
+          season_id: string | null
           status: string
           time_limit: number | null
           type: string
@@ -176,6 +177,7 @@ export type Database = {
           name: string
           results_published?: boolean
           rules?: string | null
+          season_id?: string | null
           status?: string
           time_limit?: number | null
           type: string
@@ -189,12 +191,21 @@ export type Database = {
           name?: string
           results_published?: boolean
           rules?: string | null
+          season_id?: string | null
           status?: string
           time_limit?: number | null
           type?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "events_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       judges: {
         Row: {
@@ -429,6 +440,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      seasons: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: []
       }
     }
     Views: {

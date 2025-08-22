@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { Trophy, Users, Calendar, BarChart3, Settings, LogOut } from 'lucide-react';
+import { Trophy, Users, Calendar, BarChart3, Settings, LogOut, CalendarDays } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const Navigation = () => {
@@ -12,6 +12,7 @@ const Navigation = () => {
       { href: '/admin', icon: Settings, label: 'Dashboard', exact: true },
       { href: '/admin/participants', icon: Users, label: 'Participants', exact: true },
       { href: '/admin/judges', icon: Trophy, label: 'Judges', exact: true },
+      { href: '/admin/seasons', icon: CalendarDays, label: 'Seasons', exact: true },
       { href: '/admin/events', icon: Calendar, label: 'Events', exact: true },
       { href: '/admin/assignments', icon: BarChart3, label: 'Assignments', exact: true },
       { href: '/admin/results', icon: Trophy, label: 'Results', exact: true },

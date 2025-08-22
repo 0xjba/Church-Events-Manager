@@ -25,6 +25,7 @@ const criteriaSchema = z.object({
 const eventSchema = z.object({
   name: z.string().min(2, 'Event name must be at least 2 characters'),
   type: z.enum(['writing', 'stage']),
+  season_id: z.string().min(1, 'Season is required'),
   rules: z.string().optional(),
   time_limit: z.number().optional(),
   max_participants: z.number().optional(),
@@ -37,12 +38,18 @@ interface Event {
   id: string;
   name: string;
   type: string;
+  season_id: string;
   rules: string | null;
   time_limit: number | null;
   max_participants: number | null;
   status: string;
   event_order: number | null;
   created_at: string;
+  season?: {
+    id: string;
+    name: string;
+    year: number;
+  };
   criteria?: Array<{
     id: string;
     name: string;
@@ -51,8 +58,16 @@ interface Event {
   }>;
 }
 
+interface Season {
+  id: string;
+  name: string;
+  year: number;
+  is_active: boolean;
+}
+
 const EventManagement = () => {
   const [events, setEvents] = useState<Event[]>([]);
+  const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
@@ -62,6 +77,7 @@ const EventManagement = () => {
     defaultValues: {
       name: '',
       type: 'stage',
+      season_id: '',
       rules: '',
       time_limit: undefined,
       max_participants: undefined,
@@ -76,7 +92,23 @@ const EventManagement = () => {
 
   useEffect(() => {
     fetchEvents();
+    fetchSeasons();
   }, []);
+
+  const fetchSeasons = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('seasons')
+        .select('id, name, year, is_active')
+        .order('year', { ascending: false });
+
+      if (error) throw error;
+      setSeasons(data || []);
+    } catch (error) {
+      console.error('Error fetching seasons:', error);
+      toast.error('Failed to load seasons');
+    }
+  };
 
   const fetchEvents = async () => {
     try {
@@ -84,6 +116,11 @@ const EventManagement = () => {
         .from('events')
         .select(`
           *,
+          seasons (
+            id,
+            name,
+            year
+          ),
           event_criteria (
             id,
             name,
@@ -111,6 +148,7 @@ const EventManagement = () => {
           .update({
             name: data.name,
             type: data.type,
+            season_id: data.season_id,
             rules: data.rules,
             time_limit: data.time_limit,
             max_participants: data.max_participants,
@@ -145,6 +183,7 @@ const EventManagement = () => {
           .insert({
             name: data.name,
             type: data.type,
+            season_id: data.season_id,
             rules: data.rules,
             time_limit: data.time_limit,
             max_participants: data.max_participants,
@@ -184,6 +223,7 @@ const EventManagement = () => {
     form.reset({
       name: event.name,
       type: event.type as 'writing' | 'stage',
+      season_id: event.season_id,
       rules: event.rules || '',
       time_limit: event.time_limit || undefined,
       max_participants: event.max_participants || undefined,
@@ -278,6 +318,32 @@ const EventManagement = () => {
                             <SelectContent>
                               <SelectItem value="stage">Stage Performance</SelectItem>
                               <SelectItem value="writing">Writing Competition</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="season_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Season</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a season" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {seasons.map((season) => (
+                                <SelectItem key={season.id} value={season.id}>
+                                  {season.name} ({season.year})
+                                  {season.is_active && ' - Active'}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -463,6 +529,7 @@ const EventManagement = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Name</TableHead>
+                        <TableHead>Season</TableHead>
                         <TableHead>Type</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Time Limit</TableHead>
@@ -476,6 +543,9 @@ const EventManagement = () => {
                         <TableRow key={event.id}>
                           <TableCell className="font-medium">
                             {event.name}
+                          </TableCell>
+                          <TableCell>
+                            {event.season ? `${event.season.name} (${event.season.year})` : 'No Season'}
                           </TableCell>
                           <TableCell className="capitalize">{event.type}</TableCell>
                           <TableCell>
