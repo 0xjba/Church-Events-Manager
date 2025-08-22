@@ -166,7 +166,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       cleanupAuthState();
       
       // Create a dummy email for username-based auth
-      const email = `${username}@pypa.local`;
+      const email = `${username}@pypa.app`;
       const redirectUrl = `${window.location.origin}/`;
       
       const { data, error } = await supabase.auth.signUp({
