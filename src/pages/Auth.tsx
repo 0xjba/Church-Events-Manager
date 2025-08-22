@@ -22,11 +22,12 @@ const Auth = () => {
     password: ''
   });
 
-  // Sign up form state - only participants can register
+  // Sign up form state - temporary admin creation enabled
   const [signUpData, setSignUpData] = useState({
     username: '',
     password: '',
-    fullName: ''
+    fullName: '',
+    role: 'participant' as 'admin' | 'judge' | 'participant'
   });
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -55,7 +56,7 @@ const Auth = () => {
       signUpData.username,
       signUpData.password,
       signUpData.fullName,
-      'participant' // Only participants can register
+      signUpData.role // Allow admin creation temporarily
     );
     
     if (error) {
@@ -150,9 +151,9 @@ const Auth = () => {
           <TabsContent value="signup">
             <Card>
               <CardHeader>
-                <CardTitle>Create Participant Account</CardTitle>
+                <CardTitle>Create Account</CardTitle>
                 <CardDescription>
-                  Register as a participant for PYPA events
+                  Create your PYPA account (temporary admin setup enabled)
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -180,13 +181,24 @@ const Auth = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Account Type</Label>
-                    <div className="p-3 bg-muted rounded-lg">
-                      <p className="text-sm text-muted-foreground">
-                        <strong>Participant Account</strong> - You will be registered as a participant. 
-                        Judges and admins are added by administrators only.
-                      </p>
-                    </div>
+                    <Label htmlFor="signup-role">Role (Temporary Admin Setup)</Label>
+                    <Select value={signUpData.role} onValueChange={(value: 'admin' | 'judge' | 'participant') => setSignUpData({ ...signUpData, role: value })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select your role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">🔑 Admin (Create First Admin)</SelectItem>
+                        <SelectItem value="participant">👤 Participant</SelectItem>
+                        <SelectItem value="judge">⚖️ Judge</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {signUpData.role === 'admin' && (
+                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm text-yellow-800">
+                          <strong>⚠️ First Admin Setup:</strong> Create your admin account, then disable this option.
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="signup-password">Password</Label>
