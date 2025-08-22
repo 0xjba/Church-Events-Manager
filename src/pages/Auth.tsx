@@ -25,6 +25,7 @@ const Auth = () => {
   // Sign up form state - temporary admin creation enabled
   const [signUpData, setSignUpData] = useState({
     username: '',
+    email: '',
     password: '',
     fullName: '',
     role: 'participant' as 'admin' | 'judge' | 'participant'
@@ -54,6 +55,7 @@ const Auth = () => {
 
     const { error } = await signUp(
       signUpData.username,
+      signUpData.email,
       signUpData.password,
       signUpData.fullName,
       signUpData.role // Allow admin creation temporarily
@@ -169,17 +171,28 @@ const Auth = () => {
                       required
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-fullname">Full Name</Label>
-                    <Input
-                      id="signup-fullname"
-                      type="text"
-                      placeholder="Enter your full name"
-                      value={signUpData.fullName}
-                      onChange={(e) => setSignUpData({ ...signUpData, fullName: e.target.value })}
-                      required
-                    />
-                  </div>
+                   <div className="space-y-2">
+                     <Label htmlFor="signup-email">Email Address</Label>
+                     <Input
+                       id="signup-email"
+                       type="email"
+                       placeholder="Enter your email address"
+                       value={signUpData.email}
+                       onChange={(e) => setSignUpData({ ...signUpData, email: e.target.value })}
+                       required
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <Label htmlFor="signup-fullname">Full Name</Label>
+                     <Input
+                       id="signup-fullname"
+                       type="text"
+                       placeholder="Enter your full name"
+                       value={signUpData.fullName}
+                       onChange={(e) => setSignUpData({ ...signUpData, fullName: e.target.value })}
+                       required
+                     />
+                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="signup-role">Role (Temporary Admin Setup)</Label>
                     <Select value={signUpData.role} onValueChange={(value: 'admin' | 'judge' | 'participant') => setSignUpData({ ...signUpData, role: value })}>

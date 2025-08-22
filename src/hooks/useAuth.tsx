@@ -19,7 +19,7 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   signIn: (username: string, password: string) => Promise<{ error?: any }>;
-  signUp: (username: string, password: string, fullName: string, role: 'admin' | 'judge' | 'participant') => Promise<{ error?: any }>;
+  signUp: (username: string, email: string, password: string, fullName: string, role: 'admin' | 'judge' | 'participant') => Promise<{ error?: any }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isJudge: boolean;
@@ -160,17 +160,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const signUp = async (username: string, password: string, fullName: string, role: 'admin' | 'judge' | 'participant') => {
+  const signUp = async (username: string, email: string, password: string, fullName: string, role: 'admin' | 'judge' | 'participant') => {
     try {
       // Clean up existing state
       cleanupAuthState();
       
-      // Create a dummy email for username-based auth
-      const email = `${username}@pypa.app`;
+      // Use the provided email directly
       const redirectUrl = `${window.location.origin}/`;
       
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email, // Use the provided email
         password,
         options: {
           emailRedirectTo: redirectUrl,
