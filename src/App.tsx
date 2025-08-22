@@ -12,10 +12,12 @@ import ParticipantManagement from "./pages/admin/ParticipantManagement";
 import JudgeManagement from "./pages/admin/JudgeManagement";
 import EventManagement from "./pages/admin/EventManagement";
 import JudgeAssignment from "./pages/admin/JudgeAssignment";
-import JudgeDashboard from "./pages/judge/JudgeDashboard";
-import JudgeScoringInterface from "./pages/judge/JudgeScoringInterface";
 import RealtimeScoreboard from "./pages/admin/RealtimeScoreboard";
+import ResultsManagement from "./pages/admin/ResultsManagement";
+import JudgeScoringInterface from "./pages/judge/JudgeScoringInterface";
 import ParticipantDashboard from "./pages/participant/ParticipantDashboard";
+import JudgeDashboard from "./pages/judge/JudgeDashboard";
+import Leaderboard from "./pages/Leaderboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -65,6 +67,14 @@ const App = () => (
                 </ProtectedRoute>
               } 
             />
+            <Route 
+              path="/admin/results" 
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <ResultsManagement />
+                </ProtectedRoute>
+              } 
+            />
             
             {/* Judge Routes */}
             <Route path="/judge" element={
@@ -84,6 +94,9 @@ const App = () => (
                 <ParticipantDashboard />
               </ProtectedRoute>
             } />
+            
+            {/* Public Routes */}
+            <Route path="/leaderboard" element={<Leaderboard />} />
             
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

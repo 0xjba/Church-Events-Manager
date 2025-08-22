@@ -14,13 +14,14 @@ const Navigation = () => {
       { href: '/admin/judges', icon: Trophy, label: 'Judges', exact: true },
       { href: '/admin/events', icon: Calendar, label: 'Events', exact: true },
       { href: '/admin/assignments', icon: BarChart3, label: 'Assignments', exact: true },
+      { href: '/admin/results', icon: Trophy, label: 'Results', exact: true },
     ] : []),
     ...(isJudge ? [
       { href: '/judge', icon: Trophy, label: 'My Events', exact: false },
     ] : []),
     ...(isParticipant ? [
       { href: '/participant', icon: Trophy, label: 'My Events', exact: false },
-      { href: '/results', icon: BarChart3, label: 'Results', exact: true },
+      { href: '/leaderboard', icon: BarChart3, label: 'Leaderboard', exact: true },
     ] : []),
   ];
 
