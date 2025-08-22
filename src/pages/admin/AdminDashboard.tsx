@@ -2,6 +2,8 @@ import { useAuth } from '@/hooks/useAuth';
 import Navigation from '@/components/Navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, Calendar, Trophy, BarChart3 } from 'lucide-react';
+import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
+import { NetworkStatus } from '@/components/NetworkStatus';
 
 const AdminDashboard = () => {
   const { profile } = useAuth();
@@ -46,13 +48,18 @@ const AdminDashboard = () => {
       <div className="flex-1 pb-16 md:pb-0">
         <div className="p-4 md:p-6">
           <div className="mb-6">
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-              Admin Dashboard
-            </h1>
+            <div className="flex items-center justify-between mb-2">
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+                Admin Dashboard
+              </h1>
+              <NetworkStatus />
+            </div>
             <p className="text-muted-foreground">
               Welcome back, {profile?.full_name}
             </p>
           </div>
+
+          <PWAInstallPrompt />
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             {stats.map((stat) => {

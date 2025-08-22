@@ -2,13 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { offlineStorageService } from '@/utils/offlineStorage';
 import { notificationService } from '@/utils/notifications';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 export function useOfflineSync() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
   const [unsyncedCount, setUnsyncedCount] = useState(0);
-  const { toast } = useToast();
 
   // Initialize offline storage and check for unsynced data
   useEffect(() => {
@@ -31,20 +30,14 @@ export function useOfflineSync() {
       if (online) {
         // Auto-sync when coming back online
         syncOfflineData();
-        toast({
-          title: "Back Online",
-          description: "Syncing offline data...",
-        });
+        toast.success("Back Online - Syncing offline data...");
       } else {
-        toast({
-          title: "Offline Mode",
-          description: "Scores will be saved locally and synced when online",
-        });
+        toast.info("Offline Mode - Scores will be saved locally and synced when online");
       }
     });
 
     return cleanup;
-  }, [toast]);
+  }, []);
 
   const updateUnsyncedCount = useCallback(async () => {
     try {
@@ -94,21 +87,14 @@ export function useOfflineSync() {
       setSyncStatus('idle');
       
       if (unsyncedScores.length > 0) {
-        toast({
-          title: "Sync Complete",
-          description: `Synced ${unsyncedScores.length} offline scores`,
-        });
+        toast.success(`Sync Complete - Synced ${unsyncedScores.length} offline scores`);
       }
     } catch (error) {
       console.error('Sync failed:', error);
       setSyncStatus('error');
-      toast({
-        title: "Sync Failed",
-        description: "Some data couldn't be synced. Will retry automatically.",
-        variant: "destructive"
-      });
+      toast.error("Sync Failed - Some data couldn't be synced. Will retry automatically.");
     }
-  }, [isOnline, syncStatus, toast, updateUnsyncedCount]);
+  }, [isOnline, syncStatus, updateUnsyncedCount]);
 
   const saveScoreOffline = useCallback(async (
     eventId: string,
@@ -127,12 +113,9 @@ export function useOfflineSync() {
 
       await updateUnsyncedCount();
       
-      toast({
-        title: isOnline ? "Score Saved" : "Score Saved Offline",
-        description: isOnline 
-          ? "Score saved and will be synced automatically" 
-          : "Score saved locally and will sync when online",
-      });
+      toast.success(isOnline 
+        ? "Score Saved - Will be synced automatically" 
+        : "Score Saved Offline - Will sync when online");
 
       // Try to sync immediately if online
       if (isOnline) {
@@ -142,14 +125,10 @@ export function useOfflineSync() {
       return scoreId;
     } catch (error) {
       console.error('Failed to save offline score:', error);
-      toast({
-        title: "Save Failed",
-        description: "Failed to save score offline",
-        variant: "destructive"
-      });
+      toast.error("Save Failed - Failed to save score offline");
       throw error;
     }
-  }, [isOnline, syncOfflineData, toast, updateUnsyncedCount]);
+  }, [isOnline, syncOfflineData, updateUnsyncedCount]);
 
   return {
     isOnline,
