@@ -30,7 +30,6 @@ type ParticipantFormData = z.infer<typeof participantSchema>;
 
 interface Participant extends Omit<ParticipantFormData, 'username' | 'password'> {
   id: string;
-  profile_id: string | null;
   created_at: string;
   username?: string;
 }

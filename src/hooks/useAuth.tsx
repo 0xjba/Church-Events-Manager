@@ -70,6 +70,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } catch (error) {
       console.error('Error fetching profile:', error);
       setProfile(null);
+    } finally {
+      // Always set loading to false after profile fetch completes
+      setLoading(false);
     }
   };
 
@@ -81,14 +84,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          // Defer profile fetching to prevent deadlocks
-          setTimeout(() => {
-            fetchProfile(session.user.id);
-          }, 0);
+          // Fetch profile immediately but keep loading true until profile is loaded
+          fetchProfile(session.user.id);
         } else {
           setProfile(null);
+          setLoading(false);
         }
-        setLoading(false);
       }
     );
 
@@ -98,8 +99,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
