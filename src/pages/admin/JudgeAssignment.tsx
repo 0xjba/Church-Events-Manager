@@ -1,16 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Layout, Card, Button, Select, Table, Modal, Badge, Input, Typography, Space, Spin, message } from 'antd';
 import { Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
-import { toast } from 'sonner';
+
+const { Content } = Layout;
+const { Title, Text } = Typography;
 
 interface Event {
   id: string;
@@ -47,9 +42,10 @@ const JudgeAssignment = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [judges, setJudges] = useState<Judge[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
   const [selectedJudgeId, setSelectedJudgeId] = useState<string>('');
+  const [assigningJudges, setAssigningJudges] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -76,6 +72,7 @@ const JudgeAssignment = () => {
         .order('event_order', { ascending: true, nullsFirst: false });
 
       if (eventsError) throw eventsError;
+      setEvents(eventsData || []);
 
       // Fetch all judges
       const { data: judgesData, error: judgesError } = await supabase
@@ -84,23 +81,36 @@ const JudgeAssignment = () => {
         .order('name');
 
       if (judgesError) throw judgesError;
-
-      setEvents(eventsData || []);
       setJudges(judgesData || []);
     } catch (error) {
-      toast.error('Failed to load data');
+      message.error('Failed to load data');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAssignJudge = async () => {
+  const assignJudge = async () => {
     if (!selectedEventId || !selectedJudgeId) {
-      toast.error('Please select both event and judge');
+      message.error('Please select both event and judge');
       return;
     }
 
     try {
+      setAssigningJudges(true);
+      
+      // Check if judge is already assigned to this event
+      const { data: existing } = await supabase
+        .from('event_judges')
+        .select('id')
+        .eq('event_id', selectedEventId)
+        .eq('judge_id', selectedJudgeId)
+        .single();
+
+      if (existing) {
+        message.error('Judge is already assigned to this event');
+        return;
+      }
+
       const { error } = await supabase
         .from('event_judges')
         .insert({
@@ -109,279 +119,240 @@ const JudgeAssignment = () => {
         });
 
       if (error) throw error;
-      
-      toast.success('Judge assigned successfully');
-      setIsAssignDialogOpen(false);
+
+      message.success('Judge assigned successfully');
+      setIsAssignModalOpen(false);
       setSelectedEventId('');
       setSelectedJudgeId('');
       fetchData();
     } catch (error) {
-      toast.error('Failed to assign judge');
+      message.error('Failed to assign judge');
+    } finally {
+      setAssigningJudges(false);
     }
   };
 
-  const handleUnassignJudge = async (eventId: string, judgeId: string) => {
-    if (!confirm('Are you sure you want to unassign this judge?')) return;
+  const removeJudge = async (assignmentId: string) => {
+    Modal.confirm({
+      title: 'Remove Judge Assignment',
+      content: 'Are you sure you want to remove this judge from the event?',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const { error } = await supabase
+            .from('event_judges')
+            .delete()
+            .eq('id', assignmentId);
 
-    try {
-      const { error } = await supabase
-        .from('event_judges')
-        .delete()
-        .eq('event_id', eventId)
-        .eq('judge_id', judgeId);
+          if (error) throw error;
 
-      if (error) throw error;
-      
-      toast.success('Judge unassigned successfully');
-      fetchData();
-    } catch (error) {
-      toast.error('Failed to unassign judge');
+          message.success('Judge removed successfully');
+          fetchData();
+        } catch (error) {
+          message.error('Failed to remove judge');
+        }
+      }
+    });
+  };
+
+  const getStatusColor = (status: string): "success" | "processing" | "default" | "error" | "warning" => {
+    switch (status) {
+      case 'active':
+        return 'processing';
+      case 'completed':
+        return 'success';
+      case 'upcoming':
+        return 'default';
+      default:
+        return 'default';
     }
-  };
-
-  const handleUpdateEventOrder = async (eventId: string, order: number) => {
-    try {
-      const { error } = await supabase
-        .from('events')
-        .update({ event_order: order })
-        .eq('id', eventId);
-
-      if (error) throw error;
-      
-      fetchData();
-    } catch (error) {
-      toast.error('Failed to update event order');
-    }
-  };
-
-  const moveEventUp = (eventIndex: number) => {
-    if (eventIndex === 0) return;
-    
-    const currentEvent = events[eventIndex];
-    const previousEvent = events[eventIndex - 1];
-    
-    handleUpdateEventOrder(currentEvent.id, (previousEvent.event_order || 0) - 1);
-  };
-
-  const moveEventDown = (eventIndex: number) => {
-    if (eventIndex === events.length - 1) return;
-    
-    const currentEvent = events[eventIndex];
-    const nextEvent = events[eventIndex + 1];
-    
-    handleUpdateEventOrder(currentEvent.id, (nextEvent.event_order || 0) + 1);
   };
 
   const getAvailableJudges = (eventId: string) => {
-    const assignedJudgeIdsForEvent = events
-      .find(e => e.id === eventId)
-      ?.event_judges?.map((ej: any) => ej.judge_id) || [];
+    const event = events.find(e => e.id === eventId);
+    if (!event) return judges;
     
-    return judges.filter(judge => !assignedJudgeIdsForEvent.includes(judge.id));
+    const assignedJudgeIds = event.event_judges?.map(ej => ej.judge_id) || [];
+    return judges.filter(judge => !assignedJudgeIds.includes(judge.id));
   };
 
-  return (
-    <div className="flex min-h-screen bg-background">
-      <div className="w-64 hidden md:block">
-        <Navigation />
-      </div>
-      
-      <div className="flex-1 pb-16 md:pb-0">
-        <div className="p-4 md:p-6">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-                Judge Assignment
-              </h1>
-              <p className="text-muted-foreground">
-                Assign judges to events and set event order
-              </p>
-            </div>
-            
-            <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Assign Judge
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>Assign Judge to Event</DialogTitle>
-                  <DialogDescription>
-                    Select an event and judge to create an assignment.
-                  </DialogDescription>
-                </DialogHeader>
-                
-                <div className="space-y-4">
-                  <div>
-                    <Label>Event</Label>
-                    <Select value={selectedEventId} onValueChange={setSelectedEventId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select event" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {events.map((event) => (
-                          <SelectItem key={event.id} value={event.id}>
-                            {event.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div>
-                    <Label>Judge</Label>
-                    <Select value={selectedJudgeId} onValueChange={setSelectedJudgeId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select judge" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {selectedEventId && getAvailableJudges(selectedEventId).map((judge) => (
-                          <SelectItem key={judge.id} value={judge.id}>
-                            {judge.name} - {judge.church}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="flex justify-end space-x-2">
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setIsAssignDialogOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button onClick={handleAssignJudge}>
-                      Assign Judge
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Event Order Management */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Event Schedule Order</CardTitle>
-                <CardDescription>
-                  Set the order in which events will be conducted
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="text-center py-8">Loading...</div>
-                ) : events.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No events created yet
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {events.map((event, index) => (
-                      <div key={event.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
-                        <div>
-                          <div className="font-medium">{event.name}</div>
-                          <div className="text-sm text-muted-foreground capitalize">
-                            {event.type} • Order: {event.event_order || 'Not set'}
-                          </div>
-                        </div>
-                        <div className="flex space-x-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => moveEventUp(index)}
-                            disabled={index === 0}
-                          >
-                            <ArrowUp className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => moveEventDown(index)}
-                            disabled={index === events.length - 1}
-                          >
-                            <ArrowDown className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Judge Assignments */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Judge Assignments</CardTitle>
-                <CardDescription>
-                  Current judge assignments by event
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="text-center py-8">Loading...</div>
-                ) : events.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No events created yet
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {events.map((event) => (
-                      <div key={event.id} className="border border-border rounded-lg p-4">
-                        <div className="flex justify-between items-center mb-3">
-                          <div>
-                            <h4 className="font-medium">{event.name}</h4>
-                            <Badge variant={event.status === 'active' ? 'default' : 'secondary'}>
-                              {event.status}
-                            </Badge>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          {event.event_judges?.length === 0 ? (
-                            <div className="text-sm text-muted-foreground py-2">
-                              No judges assigned
-                            </div>
-                          ) : (
-                            event.event_judges?.map((assignment: any) => (
-                              <div key={assignment.id} className="flex justify-between items-center p-2 bg-muted/50 rounded">
-                                <div>
-                                  <div className="font-medium text-sm">
-                                    {assignment.judges.name}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {assignment.judges.church}
-                                  </div>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleUnassignJudge(event.id, assignment.judge_id)}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+  const columns = [
+    {
+      title: 'Event',
+      dataIndex: 'name',
+      key: 'name',
+      render: (text: string, record: Event) => (
+        <div>
+          <div style={{ fontWeight: 'medium' }}>{text}</div>
+          <Text type="secondary" style={{ fontSize: '12px', textTransform: 'capitalize' }}>
+            {record.type} Performance
+          </Text>
         </div>
-      </div>
+      ),
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      width: 120,
+      render: (status: string) => (
+        <Badge status={getStatusColor(status)} text={status} />
+      ),
+    },
+    {
+      title: 'Order',
+      dataIndex: 'event_order',
+      key: 'event_order',
+      width: 80,
+      render: (order: number | null) => order ? `#${order}` : '-',
+    },
+    {
+      title: 'Assigned Judges',
+      dataIndex: 'event_judges',
+      key: 'judges',
+      render: (eventJudges: Event['event_judges']) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {eventJudges && eventJudges.length > 0 ? (
+            eventJudges.map((ej) => (
+              <div key={ej.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <Text strong style={{ fontSize: '14px' }}>{ej.judges.name}</Text>
+                  <Text type="secondary" style={{ fontSize: '12px', display: 'block' }}>
+                    {ej.judges.church}
+                  </Text>
+                </div>
+                <Button
+                  type="text"
+                  danger
+                  size="small"
+                  icon={<Trash2 size={14} />}
+                  onClick={() => removeJudge(ej.id)}
+                />
+              </div>
+            ))
+          ) : (
+            <Text type="secondary">No judges assigned</Text>
+          )}
+        </div>
+      ),
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 120,
+      render: (_: any, record: Event) => {
+        const availableJudges = getAvailableJudges(record.id);
+        return (
+          <Button
+            type="primary"
+            icon={<Plus size={16} />}
+            disabled={availableJudges.length === 0}
+            onClick={() => {
+              setSelectedEventId(record.id);
+              setIsAssignModalOpen(true);
+            }}
+          >
+            Add Judge
+          </Button>
+        );
+      },
+    },
+  ];
 
-      <div className="md:hidden">
-        <Navigation />
-      </div>
-    </div>
+  return (
+    <Layout style={{ minHeight: '100vh' }}>
+      <Navigation />
+      
+      <Layout style={{ marginLeft: '256px' }}>
+        <Content style={{ padding: '16px 24px', paddingBottom: '80px' }}>
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+              <div>
+                <Title level={2} style={{ margin: 0 }}>
+                  Judge Assignment
+                </Title>
+                <Text type="secondary">
+                  Assign judges to events for scoring
+                </Text>
+              </div>
+            </div>
+          </div>
+
+          <Card>
+            <div style={{ marginBottom: '16px' }}>
+              <Title level={4} style={{ margin: 0 }}>Event Judge Assignments</Title>
+              <Text type="secondary">
+                Manage which judges are assigned to score each event
+              </Text>
+            </div>
+
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <Spin size="large" />
+              </div>
+            ) : (
+              <Table
+                columns={columns}
+                dataSource={events}
+                rowKey="id"
+                pagination={{ pageSize: 10 }}
+                locale={{
+                  emptyText: 'No events found'
+                }}
+              />
+            )}
+          </Card>
+
+          {/* Assign Judge Modal */}
+          <Modal
+            title="Assign Judge to Event"
+            open={isAssignModalOpen}
+            onCancel={() => {
+              setIsAssignModalOpen(false);
+              setSelectedEventId('');
+              setSelectedJudgeId('');
+            }}
+            onOk={assignJudge}
+            confirmLoading={assigningJudges}
+            okText="Assign Judge"
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <Text strong style={{ display: 'block', marginBottom: '8px' }}>Event</Text>
+                <Select
+                  value={selectedEventId}
+                  onChange={setSelectedEventId}
+                  style={{ width: '100%' }}
+                  placeholder="Select event"
+                >
+                  {events.map(event => (
+                    <Select.Option key={event.id} value={event.id}>
+                      {event.name}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </div>
+              
+              <div>
+                <Text strong style={{ display: 'block', marginBottom: '8px' }}>Judge</Text>
+                <Select
+                  value={selectedJudgeId}
+                  onChange={setSelectedJudgeId}
+                  style={{ width: '100%' }}
+                  placeholder="Select judge"
+                >
+                  {getAvailableJudges(selectedEventId).map(judge => (
+                    <Select.Option key={judge.id} value={judge.id}>
+                      {judge.name} - {judge.church}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+          </Modal>
+        </Content>
+      </Layout>
+    </Layout>
   );
 };
 

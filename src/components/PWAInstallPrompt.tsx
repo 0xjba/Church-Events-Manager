@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button, Card, Space, Typography } from 'antd';
 import { Download, X } from 'lucide-react';
 import { usePWA } from '@/hooks/usePWA';
+
+const { Title, Text } = Typography;
 
 export function PWAInstallPrompt() {
   const { isInstallable, installApp, isInstalled } = usePWA();
@@ -34,37 +35,36 @@ export function PWAInstallPrompt() {
   }
 
   return (
-    <Card className="mb-6 border-primary/20 bg-primary/5">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Download className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">Install App</CardTitle>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleDismiss}
-            className="h-6 w-6 p-0"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-        <CardDescription>
-          Install Devotional Events Pro for offline access and better performance
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <div className="flex space-x-2">
-          <Button onClick={handleInstall} size="sm">
-            <Download className="h-4 w-4 mr-1" />
-            Install Now
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleDismiss}>
-            Later
-          </Button>
-        </div>
-      </CardContent>
+    <Card 
+      style={{ 
+        marginBottom: '24px', 
+        borderColor: '#8b5cf6', 
+        backgroundColor: '#f3f0ff' 
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+        <Space>
+          <Download size={20} color="#8b5cf6" />
+          <Title level={4} style={{ margin: 0 }}>Install App</Title>
+        </Space>
+        <Button
+          type="text"
+          size="small"
+          icon={<X size={16} />}
+          onClick={handleDismiss}
+        />
+      </div>
+      <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
+        Install Devotional Events Pro for offline access and better performance
+      </Text>
+      <Space>
+        <Button type="primary" onClick={handleInstall} icon={<Download size={16} />}>
+          Install Now
+        </Button>
+        <Button onClick={handleDismiss}>
+          Later
+        </Button>
+      </Space>
     </Card>
   );
 }

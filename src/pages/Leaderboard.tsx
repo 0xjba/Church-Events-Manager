@@ -2,13 +2,11 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { ResultsCalculator } from '@/utils/resultsCalculator';
 import Navigation from '@/components/Navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Layout, Card, Button, Select, Table, Badge, Typography, Space, Spin, message } from 'antd';
 import { Trophy, Medal, Award, Filter, RefreshCw } from 'lucide-react';
-import { toast } from 'sonner';
+
+const { Content } = Layout;
+const { Title, Text } = Typography;
 
 interface Event {
   id: string;
@@ -71,7 +69,7 @@ const Leaderboard = () => {
         setSelectedEvent(data[0].id);
       }
     } catch (error) {
-      toast.error('Failed to load published events');
+      message.error('Failed to load published events');
     } finally {
       setLoading(false);
     }
@@ -124,7 +122,7 @@ const Leaderboard = () => {
       
       setEventResults(filteredResults);
     } catch (error) {
-      toast.error('Failed to load event results');
+      message.error('Failed to load event results');
     }
   };
 
@@ -154,20 +152,20 @@ const Leaderboard = () => {
       
       setShowChampionship(true);
     } catch (error) {
-      toast.error('Failed to load championship standings');
+      message.error('Failed to load championship standings');
     }
   };
 
   const getRankIcon = (rank: number) => {
     switch (rank) {
       case 1:
-        return <Trophy className="h-5 w-5 text-yellow-500" />;
+        return <Trophy size={20} style={{ color: '#fadb14' }} />;
       case 2:
-        return <Medal className="h-5 w-5 text-gray-400" />;
+        return <Medal size={20} style={{ color: '#bfbfbf' }} />;
       case 3:
-        return <Award className="h-5 w-5 text-amber-600" />;
+        return <Award size={20} style={{ color: '#d48806' }} />;
       default:
-        return <span className="font-bold">#{rank}</span>;
+        return <span style={{ fontWeight: 'bold' }}>#{rank}</span>;
     }
   };
 
@@ -180,249 +178,291 @@ const Leaderboard = () => {
     }
   };
 
+  const eventResultColumns = [
+    {
+      title: 'Rank',
+      dataIndex: 'rank',
+      key: 'rank',
+      width: 80,
+      render: (rank: number, record: EventResult) => (
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '18px', marginBottom: '4px' }}>
+            {getRankEmoji(rank)}
+          </div>
+          {record.tie_breaker_reason && (
+            <Badge color="orange" text="Tie" />
+          )}
+        </div>
+      ),
+    },
+    {
+      title: 'Participant',
+      dataIndex: 'participants',
+      key: 'participant',
+      render: (participant: any) => (
+        <div>
+          <div style={{ fontWeight: 'medium' }}>{participant.full_name}</div>
+          <Text type="secondary" style={{ fontSize: '12px' }}>
+            #{participant.chest_number}
+          </Text>
+        </div>
+      ),
+    },
+    {
+      title: 'Category',
+      dataIndex: ['participants', 'category'],
+      key: 'category',
+      render: (category: string) => <span style={{ textTransform: 'capitalize' }}>{category}</span>,
+    },
+    {
+      title: 'Church',
+      dataIndex: ['participants', 'church'],
+      key: 'church',
+    },
+    {
+      title: 'District',
+      dataIndex: ['participants', 'district'],
+      key: 'district',
+    },
+    {
+      title: 'Total Score',
+      dataIndex: 'total_score',
+      key: 'total_score',
+      render: (score: number) => <span style={{ fontWeight: 'bold', fontSize: '16px' }}>{score}</span>,
+    },
+    {
+      title: 'Average Score',
+      dataIndex: 'average_score',
+      key: 'average_score',
+    },
+  ];
+
+  const championshipColumns = [
+    {
+      title: 'Rank',
+      dataIndex: 'rank',
+      key: 'rank',
+      width: 80,
+      render: (rank: number) => (
+        <div style={{ textAlign: 'center' }}>
+          {getRankIcon(rank)}
+        </div>
+      ),
+    },
+    {
+      title: 'Participant',
+      dataIndex: 'participant',
+      key: 'participant',
+      render: (participant: any) => (
+        <div>
+          <div style={{ fontWeight: 'medium' }}>{participant.full_name}</div>
+          <Text type="secondary" style={{ fontSize: '12px' }}>
+            #{participant.chest_number}
+          </Text>
+        </div>
+      ),
+    },
+    {
+      title: 'Category',
+      dataIndex: ['participant', 'category'],
+      key: 'category',
+      render: (category: string) => <span style={{ textTransform: 'capitalize' }}>{category}</span>,
+    },
+    {
+      title: 'Church',
+      dataIndex: ['participant', 'church'],
+      key: 'church',
+    },
+    {
+      title: 'District',
+      dataIndex: ['participant', 'district'],
+      key: 'district',
+    },
+    {
+      title: 'Events',
+      dataIndex: 'events_participated',
+      key: 'events_participated',
+    },
+    {
+      title: 'Championship Points',
+      dataIndex: 'total_championship_points',
+      key: 'total_championship_points',
+      render: (points: number) => <span style={{ fontWeight: 'bold', fontSize: '16px' }}>{points}</span>,
+    },
+    {
+      title: 'Avg Score',
+      dataIndex: 'average_score',
+      key: 'average_score',
+      render: (score: number) => score.toFixed(1),
+    },
+    {
+      title: 'Best Rank',
+      dataIndex: 'best_rank',
+      key: 'best_rank',
+      render: (rank: number) => `#${rank}`,
+    },
+  ];
+
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <div className="w-64 hidden md:block">
-          <Navigation />
-        </div>
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">Loading...</div>
-        </div>
-      </div>
+      <Layout style={{ minHeight: '100vh' }}>
+        <Navigation />
+        <Layout style={{ marginLeft: '256px' }}>
+          <Content style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Spin size="large" />
+          </Content>
+        </Layout>
+      </Layout>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <div className="w-64 hidden md:block">
-        <Navigation />
-      </div>
+    <Layout style={{ minHeight: '100vh' }}>
+      <Navigation />
       
-      <div className="flex-1 pb-16 md:pb-0">
-        <div className="p-4 md:p-6">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-                Leaderboard
-              </h1>
-              <p className="text-muted-foreground">
-                Competition results and rankings
-              </p>
+      <Layout style={{ marginLeft: '256px' }}>
+        <Content style={{ padding: '16px 24px', paddingBottom: '80px' }}>
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+              <div>
+                <Title level={2} style={{ margin: 0 }}>
+                  Leaderboard
+                </Title>
+                <Text type="secondary">
+                  Competition results and rankings
+                </Text>
+              </div>
+              
+              <Button 
+                type="primary" 
+                icon={<Trophy size={16} />} 
+                onClick={fetchChampionshipStandings}
+              >
+                Championship Standings
+              </Button>
             </div>
-            
-            <Button onClick={fetchChampionshipStandings}>
-              <Trophy className="h-4 w-4 mr-2" />
-              Championship Standings
-            </Button>
           </div>
 
           {/* Filters */}
-          <Card className="mb-6">
-            <CardContent className="p-4">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1">
-                  <label className="text-sm font-medium mb-2 block">Event</label>
-                  <Select value={selectedEvent} onValueChange={setSelectedEvent}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select event" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {events.map(event => (
-                        <SelectItem key={event.id} value={event.id}>
-                          {event.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="flex-1">
-                  <label className="text-sm font-medium mb-2 block">Category</label>
-                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Categories</SelectItem>
-                      {categories.map(category => (
-                        <SelectItem key={category} value={category}>
-                          {category}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="flex items-end">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowChampionship(!showChampionship)}
-                  >
-                    {showChampionship ? 'Event Results' : 'Championship'}
-                  </Button>
-                </div>
+          <Card style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'end' }}>
+              <div>
+                <Text strong style={{ display: 'block', marginBottom: '8px' }}>Event</Text>
+                <Select 
+                  value={selectedEvent} 
+                  onChange={setSelectedEvent}
+                  style={{ width: '100%' }}
+                  placeholder="Select event"
+                >
+                  {events.map(event => (
+                    <Select.Option key={event.id} value={event.id}>
+                      {event.name}
+                    </Select.Option>
+                  ))}
+                </Select>
               </div>
-            </CardContent>
+              
+              <div>
+                <Text strong style={{ display: 'block', marginBottom: '8px' }}>Category</Text>
+                <Select 
+                  value={selectedCategory} 
+                  onChange={setSelectedCategory}
+                  style={{ width: '100%' }}
+                  placeholder="Select category"
+                >
+                  <Select.Option value="all">All Categories</Select.Option>
+                  {categories.map(category => (
+                    <Select.Option key={category} value={category}>
+                      {category}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </div>
+              
+              <div>
+                <Button
+                  onClick={() => setShowChampionship(!showChampionship)}
+                >
+                  {showChampionship ? 'Event Results' : 'Championship'}
+                </Button>
+              </div>
+            </div>
           </Card>
 
           {/* Championship Standings */}
           {showChampionship && championshipData ? (
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Trophy className="h-6 w-6 mr-2 text-yellow-500" />
-                  Championship Standings
+              <div style={{ marginBottom: '16px' }}>
+                <Space align="center">
+                  <Trophy size={24} style={{ color: '#fadb14' }} />
+                  <Title level={3} style={{ margin: 0 }}>Championship Standings</Title>
                   {selectedCategory !== 'all' && (
-                    <Badge variant="outline" className="ml-2">
-                      {selectedCategory}
-                    </Badge>
+                    <Badge color="blue" text={selectedCategory} />
                   )}
-                </CardTitle>
-                <CardDescription>
+                </Space>
+                <Text type="secondary">
                   Overall rankings across {championshipData.events_count} events
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-16">Rank</TableHead>
-                        <TableHead>Participant</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead>Church</TableHead>
-                        <TableHead>District</TableHead>
-                        <TableHead>Events</TableHead>
-                        <TableHead>Championship Points</TableHead>
-                        <TableHead>Avg Score</TableHead>
-                        <TableHead>Best Rank</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {championshipData.participants.map((participant: any, index: number) => (
-                        <TableRow key={participant.participant.id} className={index < 3 ? 'bg-muted/30' : ''}>
-                          <TableCell>
-                            <div className="flex items-center justify-center">
-                              {getRankIcon(participant.rank)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">{participant.participant.full_name}</div>
-                              <div className="text-sm text-muted-foreground">
-                                #{participant.participant.chest_number}
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="capitalize">{participant.participant.category}</TableCell>
-                          <TableCell>{participant.participant.church}</TableCell>
-                          <TableCell>{participant.participant.district}</TableCell>
-                          <TableCell>{participant.events_participated}</TableCell>
-                          <TableCell className="font-bold text-lg">
-                            {participant.total_championship_points}
-                          </TableCell>
-                          <TableCell>{participant.average_score.toFixed(1)}</TableCell>
-                          <TableCell>#{participant.best_rank}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
+                </Text>
+              </div>
+              
+              <Table
+                columns={championshipColumns}
+                dataSource={championshipData.participants}
+                rowKey="participant.id"
+                pagination={{ pageSize: 50 }}
+                rowClassName={(_, index) => index < 3 ? 'championship-top-three' : ''}
+              />
             </Card>
           ) : (
             /* Event Results */
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Medal className="h-5 w-5 mr-2" />
-                  {events.find(e => e.id === selectedEvent)?.name || 'Event Results'}
+              <div style={{ marginBottom: '16px' }}>
+                <Space align="center">
+                  <Medal size={20} />
+                  <Title level={3} style={{ margin: 0 }}>
+                    {events.find(e => e.id === selectedEvent)?.name || 'Event Results'}
+                  </Title>
                   {selectedCategory !== 'all' && (
-                    <Badge variant="outline" className="ml-2">
-                      {selectedCategory}
-                    </Badge>
+                    <Badge color="blue" text={selectedCategory} />
                   )}
-                </CardTitle>
-                <CardDescription>
+                </Space>
+                <Text type="secondary">
                   Event leaderboard and participant rankings
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {eventResults.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
+                </Text>
+              </div>
+              
+              {eventResults.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                  <Text type="secondary">
                     {selectedEvent ? 'No results available for this event' : 'Select an event to view results'}
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-16">Rank</TableHead>
-                          <TableHead>Participant</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead>Church</TableHead>
-                          <TableHead>District</TableHead>
-                          <TableHead>Total Score</TableHead>
-                          <TableHead>Average Score</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {eventResults.map((result, index) => (
-                          <TableRow key={result.id} className={index < 3 ? 'bg-muted/30' : ''}>
-                            <TableCell>
-                              <div className="flex flex-col items-center">
-                                <div className="text-lg">
-                                  {getRankEmoji(result.rank)}
-                                </div>
-                                {result.tie_breaker_reason && (
-                                  <Badge variant="outline" className="text-xs mt-1">
-                                    Tie
-                                  </Badge>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div>
-                                <div className="font-medium">{result.participants.full_name}</div>
-                                <div className="text-sm text-muted-foreground">
-                                  #{result.participants.chest_number}
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="capitalize">{result.participants.category}</TableCell>
-                            <TableCell>{result.participants.church}</TableCell>
-                            <TableCell>{result.participants.district}</TableCell>
-                            <TableCell className="font-bold text-lg">{result.total_score}</TableCell>
-                            <TableCell>{result.average_score}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
+                  </Text>
+                </div>
+              ) : (
+                <Table
+                  columns={eventResultColumns}
+                  dataSource={eventResults}
+                  rowKey="id"
+                  pagination={{ pageSize: 50 }}
+                  rowClassName={(_, index) => index < 3 ? 'event-top-three' : ''}
+                />
+              )}
             </Card>
           )}
 
           {events.length === 0 && (
             <Card>
-              <CardContent className="text-center py-8">
-                <Trophy className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">No Published Results</h3>
-                <p className="text-muted-foreground">
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <Trophy size={48} style={{ color: '#bfbfbf', marginBottom: '16px' }} />
+                <Title level={4} style={{ marginBottom: '8px' }}>No Published Results</Title>
+                <Text type="secondary">
                   Results will appear here once events are completed and published by administrators.
-                </p>
-              </CardContent>
+                </Text>
+              </div>
             </Card>
           )}
-        </div>
-      </div>
-
-      <div className="md:hidden">
-        <Navigation />
-      </div>
-    </div>
+        </Content>
+      </Layout>
+    </Layout>
   );
 };
 

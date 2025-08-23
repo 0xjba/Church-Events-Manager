@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { Badge, Space } from 'antd';
 import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 
@@ -11,27 +11,42 @@ export function NetworkStatus() {
   }
 
   return (
-    <div className="flex items-center space-x-2">
+    <Space>
       {!isOnline && (
-        <Badge variant="destructive" className="flex items-center space-x-1">
-          <WifiOff className="h-3 w-3" />
-          <span>Offline</span>
-        </Badge>
+        <Badge
+          color="red"
+          text={
+            <Space size={4}>
+              <WifiOff size={12} />
+              <span>Offline</span>
+            </Space>
+          }
+        />
       )}
       
       {syncStatus === 'syncing' && (
-        <Badge variant="outline" className="flex items-center space-x-1">
-          <RefreshCw className="h-3 w-3 animate-spin" />
-          <span>Syncing...</span>
-        </Badge>
+        <Badge
+          color="blue"
+          text={
+            <Space size={4}>
+              <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} />
+              <span>Syncing...</span>
+            </Space>
+          }
+        />
       )}
 
       {unsyncedCount > 0 && (
-        <Badge variant="outline" className="flex items-center space-x-1">
-          <Wifi className="h-3 w-3" />
-          <span>{unsyncedCount} pending</span>
-        </Badge>
+        <Badge
+          color="orange"
+          text={
+            <Space size={4}>
+              <Wifi size={12} />
+              <span>{unsyncedCount} pending</span>
+            </Space>
+          }
+        />
       )}
-    </div>
+    </Space>
   );
 }

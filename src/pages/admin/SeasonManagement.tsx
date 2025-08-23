@@ -1,30 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { toast } from 'sonner';
-import { Loader2, Plus, Edit, Trash2, Calendar, Trophy } from 'lucide-react';
 import Navigation from '@/components/Navigation';
+import { Layout, Card, Button, Form, Input, Switch, Table, Modal, Badge, Typography, Space, Spin, message } from 'antd';
+import { Plus, Edit, Trash2, Calendar, Trophy } from 'lucide-react';
 
-const seasonSchema = z.object({
-  name: z.string().min(1, 'Season name is required'),
-  year: z.number().min(2020).max(2050),
-  description: z.string().optional(),
-  is_active: z.boolean().default(false),
-});
-
-type SeasonFormData = z.infer<typeof seasonSchema>;
+const { Content } = Layout;
+const { Title, Text } = Typography;
+const { TextArea } = Input;
 
 interface Season {
   id: string;
@@ -40,21 +22,12 @@ interface Season {
 const SeasonManagement = () => {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [editingSeason, setEditingSeason] = useState<Season | null>(null);
   const [seasonToDelete, setSeasonToDelete] = useState<Season | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  const form = useForm<SeasonFormData>({
-    resolver: zodResolver(seasonSchema),
-    defaultValues: {
-      name: '',
-      year: new Date().getFullYear(),
-      description: '',
-      is_active: false,
-    },
-  });
+  const [form] = Form.useForm();
 
   useEffect(() => {
     console.log('SeasonManagement: Component mounted');
@@ -106,13 +79,13 @@ const SeasonManagement = () => {
       setSeasons(seasonsWithCounts);
     } catch (error) {
       console.error('Error fetching seasons:', error);
-      toast.error('Failed to fetch seasons');
+      message.error('Failed to fetch seasons');
     } finally {
       setLoading(false);
     }
   };
 
-  const onSubmit = async (data: SeasonFormData) => {
+  const onSubmit = async (values: any) => {
     try {
       setSubmitting(true);
 
@@ -120,34 +93,34 @@ const SeasonManagement = () => {
         const { error } = await supabase
           .from('seasons')
           .update({
-            name: data.name,
-            year: data.year,
-            description: data.description || null,
-            is_active: data.is_active,
+            name: values.name,
+            year: values.year,
+            description: values.description || null,
+            is_active: values.is_active,
           })
           .eq('id', editingSeason.id);
 
         if (error) throw error;
-        toast.success('Season updated successfully');
+        message.success('Season updated successfully');
       } else {
         const { error } = await supabase
           .from('seasons')
           .insert([{
-            name: data.name,
-            year: data.year,
-            description: data.description || null,
-            is_active: data.is_active,
+            name: values.name,
+            year: values.year,
+            description: values.description || null,
+            is_active: values.is_active,
           }]);
 
         if (error) throw error;
-        toast.success('Season created successfully');
+        message.success('Season created successfully');
       }
 
       fetchSeasons();
-      handleCloseDialog();
+      handleCloseModal();
     } catch (error: any) {
       console.error('Error saving season:', error);
-      toast.error(error.message || 'Failed to save season');
+      message.error(error.message || 'Failed to save season');
     } finally {
       setSubmitting(false);
     }
@@ -155,24 +128,24 @@ const SeasonManagement = () => {
 
   const handleEdit = (season: Season) => {
     setEditingSeason(season);
-    form.reset({
+    form.setFieldsValue({
       name: season.name,
       year: season.year,
       description: season.description || '',
       is_active: season.is_active,
     });
-    setIsDialogOpen(true);
+    setIsModalOpen(true);
   };
 
-  const handleCloseDialog = () => {
-    setIsDialogOpen(false);
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
     setEditingSeason(null);
-    form.reset();
+    form.resetFields();
   };
 
   const handleDeleteClick = (season: Season) => {
     setSeasonToDelete(season);
-    setIsDeleteDialogOpen(true);
+    setIsDeleteModalOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
@@ -189,342 +162,247 @@ const SeasonManagement = () => {
 
       if (error) throw error;
 
-      toast.success(`Season "${seasonToDelete.name}" and all its events deleted successfully`);
+      message.success(`Season "${seasonToDelete.name}" and all its events deleted successfully`);
       fetchSeasons();
-      setIsDeleteDialogOpen(false);
+      setIsDeleteModalOpen(false);
       setSeasonToDelete(null);
     } catch (error: any) {
       console.error('Error deleting season:', error);
-      toast.error(error.message || 'Failed to delete season');
+      message.error(error.message || 'Failed to delete season');
     } finally {
       setSubmitting(false);
     }
   };
 
+  const columns = [
+    {
+      title: 'Season',
+      dataIndex: 'name',
+      key: 'name',
+      render: (text: string) => <span style={{ fontWeight: 'medium' }}>{text}</span>,
+    },
+    {
+      title: 'Year',
+      dataIndex: 'year',
+      key: 'year',
+      width: 100,
+    },
+    {
+      title: 'Description',
+      dataIndex: 'description',
+      key: 'description',
+      render: (text: string | null) => text || '-',
+      ellipsis: true,
+    },
+    {
+      title: 'Status',
+      dataIndex: 'is_active',
+      key: 'is_active',
+      width: 100,
+      render: (isActive: boolean) => (
+        <Badge color={isActive ? 'green' : 'default'} text={isActive ? 'Active' : 'Inactive'} />
+      ),
+    },
+    {
+      title: 'Events',
+      dataIndex: 'event_count',
+      key: 'event_count',
+      width: 100,
+      render: (count: number) => (
+        <Badge count={count} color="blue" />
+      ),
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 120,
+      render: (_: any, record: Season) => (
+        <Space>
+          <Button
+            type="text"
+            icon={<Edit size={16} />}
+            onClick={() => {
+              console.log('SeasonManagement: Edit button clicked for season:', record);
+              handleEdit(record);
+            }}
+          />
+          <Button
+            type="text"
+            danger
+            icon={<Trash2 size={16} />}
+            onClick={() => {
+              console.log('SeasonManagement: Delete button clicked for season:', record);
+              handleDeleteClick(record);
+            }}
+          />
+        </Space>
+      ),
+    },
+  ];
+
   return (
-    <div className="flex min-h-screen bg-background">
-      <div className="w-64 hidden md:block">
-        <Navigation />
-      </div>
+    <Layout style={{ minHeight: '100vh' }}>
+      <Navigation />
       
-      <div className="flex-1 pb-16 md:pb-0">
-        <div className="p-4 md:p-6">
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <Layout style={{ marginLeft: '256px' }}>
+        <Content style={{ padding: '16px 24px', paddingBottom: '80px' }}>
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+                <Title level={2} style={{ margin: 0 }}>
                   Season Management
-                </h1>
-                <p className="text-muted-foreground mt-1">
+                </Title>
+                <Text type="secondary">
                   Organize events by seasons and manage competition cycles
-                </p>
+                </Text>
               </div>
-              <Button 
+              
+              <Button
+                type="primary"
+                icon={<Plus size={16} />}
                 onClick={() => {
                   console.log('SeasonManagement: Create season button clicked');
-                  setIsDialogOpen(true);
+                  setIsModalOpen(true);
                 }}
-                className="shrink-0"
               >
-                <Plus className="h-4 w-4 mr-2" />
                 Create Season
               </Button>
             </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Seasons
-                </CardTitle>
-                <CardDescription>
-                  Manage competition seasons and their associated events
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="flex justify-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  </div>
-                ) : seasons.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Trophy className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No seasons found. Create your first season to get started.</p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Desktop Table */}
-                    <div className="hidden md:block overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Season</TableHead>
-                            <TableHead>Year</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Events</TableHead>
-                            <TableHead>Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {seasons.map((season) => (
-                            <TableRow key={season.id}>
-                              <TableCell className="font-medium">{season.name}</TableCell>
-                              <TableCell>{season.year}</TableCell>
-                              <TableCell className="max-w-xs truncate">
-                                {season.description || '-'}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={season.is_active ? 'default' : 'secondary'}>
-                                  {season.is_active ? 'Active' : 'Inactive'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline">
-                                  {season.event_count} events
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      console.log('SeasonManagement: Edit button clicked for season:', season);
-                                      handleEdit(season);
-                                    }}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      console.log('SeasonManagement: Delete button clicked for season:', season);
-                                      handleDeleteClick(season);
-                                    }}
-                                    className="text-destructive hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-
-                    {/* Mobile Cards */}
-                    <div className="md:hidden space-y-4">
-                      {seasons.map((season) => (
-                        <Card key={season.id}>
-                          <CardContent className="p-4">
-                            <div className="space-y-3">
-                              <div className="flex items-start justify-between">
-                                <div>
-                                  <h3 className="font-medium text-lg">{season.name}</h3>
-                                  <p className="text-sm text-muted-foreground">{season.year}</p>
-                                </div>
-                                <div className="flex gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      console.log('SeasonManagement: Edit button clicked for season:', season);
-                                      handleEdit(season);
-                                    }}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      console.log('SeasonManagement: Delete button clicked for season:', season);
-                                      handleDeleteClick(season);
-                                    }}
-                                    className="text-destructive hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                              
-                              {season.description && (
-                                <p className="text-sm text-muted-foreground">
-                                  {season.description}
-                                </p>
-                              )}
-                              
-                              <div className="flex items-center justify-between">
-                                <div className="flex gap-2">
-                                  <Badge variant={season.is_active ? 'default' : 'secondary'}>
-                                    {season.is_active ? 'Active' : 'Inactive'}
-                                  </Badge>
-                                  <Badge variant="outline">
-                                    {season.event_count} events
-                                  </Badge>
-                                </div>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
           </div>
-        </div>
-      </div>
 
-      {/* Mobile Navigation */}
-      <div className="md:hidden">
-        <Navigation />
-      </div>
+          <Card>
+            <div style={{ marginBottom: '16px' }}>
+              <Space align="center">
+                <Calendar size={20} />
+                <Title level={4} style={{ margin: 0 }}>Seasons</Title>
+              </Space>
+              <Text type="secondary">
+                Manage competition seasons and their associated events
+              </Text>
+            </div>
 
-      {/* Create/Edit Season Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {editingSeason ? 'Edit Season' : 'Create Season'}
-            </DialogTitle>
-            <DialogDescription>
+            {loading ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
+                <Spin size="large" />
+              </div>
+            ) : seasons.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <Trophy size={48} style={{ color: '#bfbfbf', marginBottom: '16px' }} />
+                <Title level={4} style={{ marginBottom: '8px' }}>No seasons found</Title>
+                <Text type="secondary">Create your first season to get started.</Text>
+              </div>
+            ) : (
+              <Table
+                columns={columns}
+                dataSource={seasons}
+                rowKey="id"
+                pagination={{ pageSize: 10 }}
+              />
+            )}
+          </Card>
+
+          {/* Create/Edit Season Modal */}
+          <Modal
+            title={editingSeason ? 'Edit Season' : 'Create Season'}
+            open={isModalOpen}
+            onCancel={handleCloseModal}
+            footer={null}
+            width={500}
+          >
+            <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
               {editingSeason 
                 ? 'Update the season details below.' 
                 : 'Create a new season to organize your events.'
               }
-            </DialogDescription>
-          </DialogHeader>
+            </Text>
 
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
+            <Form
+              form={form}
+              layout="vertical"
+              onFinish={onSubmit}
+              initialValues={{
+                year: new Date().getFullYear(),
+                is_active: false,
+              }}
+            >
+              <Form.Item
+                label="Season Name"
                 name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Season Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Spring Championship" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                rules={[{ required: true, message: 'Season name is required' }]}
+              >
+                <Input placeholder="e.g., Spring Championship" />
+              </Form.Item>
 
-              <FormField
-                control={form.control}
+              <Form.Item
+                label="Year"
                 name="year"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Year</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        min="2020" 
-                        max="2050" 
-                        placeholder="2024"
-                        {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value) || new Date().getFullYear())}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                rules={[
+                  { required: true, message: 'Year is required' },
+                  { type: 'number', min: 2020, max: 2050, message: 'Year must be between 2020 and 2050' }
+                ]}
+              >
+                <Input type="number" min="2020" max="2050" placeholder="2024" />
+              </Form.Item>
 
-              <FormField
-                control={form.control}
+              <Form.Item
+                label="Description (Optional)"
                 name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description (Optional)</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Season description..."
-                        rows={3}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              >
+                <TextArea rows={3} placeholder="Season description..." />
+              </Form.Item>
 
-              <FormField
-                control={form.control}
+              <Form.Item
                 name="is_active"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-base">Active Season</FormLabel>
-                      <div className="text-sm text-muted-foreground">
-                        Mark this season as currently active
-                      </div>
+                valuePropName="checked"
+              >
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  padding: '16px',
+                  border: '1px solid #d9d9d9',
+                  borderRadius: '6px'
+                }}>
+                  <div>
+                    <Text strong>Set as Active Season</Text>
+                    <div>
+                      <Text type="secondary" style={{ fontSize: '12px' }}>
+                        Only one season can be active at a time
+                      </Text>
                     </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
+                  </div>
+                  <Switch />
+                </div>
+              </Form.Item>
 
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleCloseDialog}
-                  disabled={submitting}
-                >
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
+                <Button onClick={handleCloseModal}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={submitting}>
-                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {editingSeason ? 'Update Season' : 'Create Season'}
+                <Button type="primary" htmlType="submit" loading={submitting}>
+                  {editingSeason ? 'Update' : 'Create'} Season
                 </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+              </div>
+            </Form>
+          </Modal>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Season</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete the season "{seasonToDelete?.name}" ({seasonToDelete?.year})?
-              <br /><br />
-              <strong className="text-destructive">
-                This will permanently delete all {seasonToDelete?.event_count} events in this season 
-                and all associated data (participants, judges, scores, results).
-              </strong>
-              <br /><br />
-              This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleDeleteConfirm}
-              disabled={submitting}
-              className="bg-destructive hover:bg-destructive/80"
-            >
-              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Delete Season
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+          {/* Delete Confirmation Modal */}
+          <Modal
+            title="Delete Season"
+            open={isDeleteModalOpen}
+            onCancel={() => setIsDeleteModalOpen(false)}
+            onOk={handleDeleteConfirm}
+            okType="danger"
+            confirmLoading={submitting}
+          >
+            <Text>
+              Are you sure you want to delete season "{seasonToDelete?.name}"? 
+              This will also delete all associated events and cannot be undone.
+            </Text>
+          </Modal>
+        </Content>
+      </Layout>
+    </Layout>
   );
 };
 

@@ -1,5 +1,5 @@
 import { Suspense, ReactNode } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from 'antd';
 
 interface LazyLoadWrapperProps {
   children: ReactNode;
@@ -8,10 +8,10 @@ interface LazyLoadWrapperProps {
 
 export function LazyLoadWrapper({ children, fallback }: LazyLoadWrapperProps) {
   const defaultFallback = (
-    <div className="space-y-4">
-      <Skeleton className="h-8 w-full" />
-      <Skeleton className="h-32 w-full" />
-      <Skeleton className="h-24 w-full" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <Skeleton.Button active style={{ height: '32px', width: '100%' }} />
+      <Skeleton active paragraph={{ rows: 4 }} />
+      <Skeleton active paragraph={{ rows: 2 }} />
     </div>
   );
 

@@ -1,138 +1,154 @@
 import { useParticipantAuth } from '@/hooks/useParticipantAuth';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button, Card, Typography, Space, Layout } from 'antd';
 import { Trophy, User, Calendar, LogOut, BarChart3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+
+const { Title, Text } = Typography;
+const { Header, Content } = Layout;
 
 const ParticipantDashboard = () => {
   const { participant, signOut } = useParticipantAuth();
 
   if (!participant) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <Trophy className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">Not authenticated</p>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <Trophy size={48} style={{ color: '#bfbfbf', marginBottom: '16px' }} />
+          <Text type="secondary">Not authenticated</Text>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <Layout style={{ minHeight: '100vh' }}>
       {/* Header */}
-      <div className="bg-card border-b border-border p-4">
-        <div className="flex justify-between items-center max-w-4xl mx-auto">
-          <div className="flex items-center space-x-3">
-            <Trophy className="h-8 w-8 text-primary" />
+      <Header style={{ background: '#fff', borderBottom: '1px solid #f0f0f0', padding: '0 16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: '1200px', margin: '0 auto' }}>
+          <Space>
+            <Trophy size={32} color="#8b5cf6" />
             <div>
-              <h1 className="text-xl font-bold">PYPA</h1>
-              <p className="text-sm text-muted-foreground">Participant Portal</p>
+              <Title level={4} style={{ margin: 0 }}>PYPA</Title>
+              <Text type="secondary" style={{ fontSize: '12px' }}>Participant Portal</Text>
             </div>
-          </div>
-          <Button variant="ghost" onClick={signOut} className="text-muted-foreground hover:text-foreground">
-            <LogOut className="h-4 w-4 mr-2" />
+          </Space>
+          <Button 
+            type="text" 
+            icon={<LogOut size={16} />}
+            onClick={signOut}
+          >
             Sign Out
           </Button>
         </div>
-      </div>
+      </Header>
 
       {/* Main Content */}
-      <div className="p-4 max-w-4xl mx-auto">
+      <Content style={{ padding: '16px', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
         {/* Welcome Section */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-foreground mb-2">
+        <div style={{ marginBottom: '32px' }}>
+          <Title level={2} style={{ marginBottom: '8px' }}>
             Welcome, {participant.full_name}!
-          </h2>
-          <p className="text-muted-foreground">
+          </Title>
+          <Text type="secondary">
             Chest Number: {participant.chest_number} | Category: {participant.category}
-          </p>
+          </Text>
         </div>
 
         {/* Participant Info */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '32px' }}>
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
-                My Profile
-              </CardTitle>
-              <CardDescription>Your participant information</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
+            <div style={{ marginBottom: '16px' }}>
+              <Space align="center">
+                <User size={20} />
+                <Title level={4} style={{ margin: 0 }}>My Profile</Title>
+              </Space>
+              <Text type="secondary">Your participant information</Text>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
-                <span className="text-sm font-medium">Name:</span>
-                <p className="text-sm text-muted-foreground">{participant.full_name}</p>
+                <Text strong style={{ fontSize: '14px' }}>Name:</Text>
+                <div>
+                  <Text type="secondary">{participant.full_name}</Text>
+                </div>
               </div>
               <div>
-                <span className="text-sm font-medium">Age:</span>
-                <p className="text-sm text-muted-foreground">{participant.age} years</p>
+                <Text strong style={{ fontSize: '14px' }}>Age:</Text>
+                <div>
+                  <Text type="secondary">{participant.age} years</Text>
+                </div>
               </div>
               <div>
-                <span className="text-sm font-medium">Chest Number:</span>
-                <p className="text-sm text-muted-foreground">{participant.chest_number}</p>
+                <Text strong style={{ fontSize: '14px' }}>Chest Number:</Text>
+                <div>
+                  <Text type="secondary">{participant.chest_number}</Text>
+                </div>
               </div>
               <div>
-                <span className="text-sm font-medium">Category:</span>
-                <p className="text-sm text-muted-foreground capitalize">{participant.category}</p>
+                <Text strong style={{ fontSize: '14px' }}>Category:</Text>
+                <div>
+                  <Text type="secondary" style={{ textTransform: 'capitalize' }}>{participant.category}</Text>
+                </div>
               </div>
               <div>
-                <span className="text-sm font-medium">Church:</span>
-                <p className="text-sm text-muted-foreground">{participant.church}</p>
+                <Text strong style={{ fontSize: '14px' }}>Church:</Text>
+                <div>
+                  <Text type="secondary">{participant.church}</Text>
+                </div>
               </div>
               <div>
-                <span className="text-sm font-medium">District:</span>
-                <p className="text-sm text-muted-foreground">{participant.district}</p>
+                <Text strong style={{ fontSize: '14px' }}>District:</Text>
+                <div>
+                  <Text type="secondary">{participant.district}</Text>
+                </div>
               </div>
-            </CardContent>
+            </div>
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                My Events
-              </CardTitle>
-              <CardDescription>Your registered events and competitions</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8">
-                <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No events registered yet</p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Events will appear here once you're registered by administrators
-                </p>
-              </div>
-            </CardContent>
+            <div style={{ marginBottom: '16px' }}>
+              <Space align="center">
+                <Calendar size={20} />
+                <Title level={4} style={{ margin: 0 }}>My Events</Title>
+              </Space>
+              <Text type="secondary">Your registered events and competitions</Text>
+            </div>
+            
+            <div style={{ textAlign: 'center', padding: '32px 0' }}>
+              <Calendar size={48} style={{ color: '#bfbfbf', marginBottom: '16px' }} />
+              <Text type="secondary" style={{ display: 'block' }}>No events registered yet</Text>
+              <Text type="secondary" style={{ fontSize: '12px', marginTop: '8px' }}>
+                Events will appear here once you're registered by administrators
+              </Text>
+            </div>
           </Card>
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Link to="/leaderboard">
-            <Card className="cursor-pointer hover:bg-accent transition-colors">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5" />
-                  View Leaderboard
-                </CardTitle>
-                <CardDescription>Check rankings and results</CardDescription>
-              </CardHeader>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
+          <Link to="/leaderboard" style={{ textDecoration: 'none' }}>
+            <Card 
+              hoverable
+              style={{ height: '100%', cursor: 'pointer' }}
+            >
+              <Space align="center" style={{ marginBottom: '8px' }}>
+                <BarChart3 size={20} />
+                <Title level={4} style={{ margin: 0 }}>View Leaderboard</Title>
+              </Space>
+              <Text type="secondary">Check rankings and results</Text>
             </Card>
           </Link>
 
-          <Card className="opacity-50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Trophy className="h-5 w-5" />
-                My Results
-              </CardTitle>
-              <CardDescription>View your scores and rankings (Coming Soon)</CardDescription>
-            </CardHeader>
+          <Card style={{ opacity: 0.5 }}>
+            <Space align="center" style={{ marginBottom: '8px' }}>
+              <Trophy size={20} />
+              <Title level={4} style={{ margin: 0 }}>My Results</Title>
+            </Space>
+            <Text type="secondary">View your scores and rankings (Coming Soon)</Text>
           </Card>
         </div>
-      </div>
-    </div>
+      </Content>
+    </Layout>
   );
 };
 

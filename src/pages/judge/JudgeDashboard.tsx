@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Layout, Card, Button, Badge, Typography, Space, Progress, Spin, message } from 'antd';
 import { Calendar, Users, Trophy, Clock, Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { toast } from 'sonner';
+
+const { Content } = Layout;
+const { Title, Text } = Typography;
 
 interface AssignedEvent {
   id: string;
@@ -105,22 +105,22 @@ const JudgeDashboard = () => {
 
       setAssignedEvents(enrichedEvents);
     } catch (error) {
-      toast.error('Failed to load assigned events');
+      message.error('Failed to load assigned events');
     } finally {
       setLoading(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string): "success" | "processing" | "default" | "error" | "warning" => {
     switch (status) {
       case 'active':
-        return 'default';
+        return 'processing';
       case 'completed':
-        return 'secondary';
+        return 'success';
       case 'upcoming':
-        return 'outline';
+        return 'default';
       default:
-        return 'secondary';
+        return 'default';
     }
   };
 
@@ -137,195 +137,187 @@ const JudgeDashboard = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <div className="w-64 hidden md:block">
-        <Navigation />
-      </div>
+    <Layout style={{ minHeight: '100vh' }}>
+      <Navigation />
       
-      <div className="flex-1 pb-16 md:pb-0">
-        <div className="p-4 md:p-6">
-          <div className="mb-6">
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+      <Layout style={{ marginLeft: '256px' }}>
+        <Content style={{ padding: '16px 24px', paddingBottom: '80px' }}>
+          <div style={{ marginBottom: '24px' }}>
+            <Title level={2} style={{ margin: 0 }}>
               Judge Dashboard
-            </h1>
-            <p className="text-muted-foreground">
+            </Title>
+            <Text type="secondary">
               Welcome back, {profile?.full_name}
-            </p>
+            </Text>
           </div>
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px', marginBottom: '24px' }}>
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <Text strong style={{ fontSize: '14px' }}>
                   Assigned Events
-                </CardTitle>
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{assignedEvents.length}</div>
-                <p className="text-xs text-muted-foreground">
+                </Text>
+                <Calendar size={16} color="#8c8c8c" />
+              </div>
+              <div>
+                <Title level={2} style={{ margin: 0 }}>{assignedEvents.length}</Title>
+                <Text type="secondary" style={{ fontSize: '12px' }}>
                   Events to judge
-                </p>
-              </CardContent>
+                </Text>
+              </div>
             </Card>
 
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <Text strong style={{ fontSize: '14px' }}>
                   Active Events
-                </CardTitle>
-                <Play className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
+                </Text>
+                <Play size={16} color="#8c8c8c" />
+              </div>
+              <div>
+                <Title level={2} style={{ margin: 0 }}>
                   {assignedEvents.filter(e => e.status === 'active').length}
-                </div>
-                <p className="text-xs text-muted-foreground">
+                </Title>
+                <Text type="secondary" style={{ fontSize: '12px' }}>
                   Ready to score
-                </p>
-              </CardContent>
+                </Text>
+              </div>
             </Card>
 
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <Text strong style={{ fontSize: '14px' }}>
                   Completed
-                </CardTitle>
-                <Trophy className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
+                </Text>
+                <Trophy size={16} color="#8c8c8c" />
+              </div>
+              <div>
+                <Title level={2} style={{ margin: 0 }}>
                   {assignedEvents.filter(e => isEventComplete(e)).length}
-                </div>
-                <p className="text-xs text-muted-foreground">
+                </Title>
+                <Text type="secondary" style={{ fontSize: '12px' }}>
                   Fully scored
-                </p>
-              </CardContent>
+                </Text>
+              </div>
             </Card>
           </div>
 
           {/* Assigned Events */}
           <Card>
-            <CardHeader>
-              <CardTitle>My Assigned Events</CardTitle>
-              <CardDescription>
+            <div style={{ marginBottom: '16px' }}>
+              <Title level={4} style={{ margin: 0 }}>My Assigned Events</Title>
+              <Text type="secondary">
                 Events you are assigned to judge
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="text-center py-8">Loading...</div>
-              ) : assignedEvents.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No events assigned yet
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {assignedEvents.map((event) => {
-                    const progress = getScoringProgress(event);
-                    const isComplete = isEventComplete(event);
-                    
-                    return (
-                      <div key={event.id} className="border border-border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <h3 className="font-medium text-lg">{event.name}</h3>
-                            <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                              <span className="capitalize">{event.type} Performance</span>
-                              <span className="flex items-center">
-                                <Users className="h-3 w-3 mr-1" />
+              </Text>
+            </div>
+            
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <Spin size="large" />
+              </div>
+            ) : assignedEvents.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <Text type="secondary">No events assigned yet</Text>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {assignedEvents.map((event) => {
+                  const progress = getScoringProgress(event);
+                  const isComplete = isEventComplete(event);
+                  
+                  return (
+                    <Card key={event.id} size="small">
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
+                        <div style={{ flex: 1 }}>
+                          <Title level={5} style={{ margin: 0, marginBottom: '4px' }}>{event.name}</Title>
+                          <Space size={16} wrap>
+                            <Text type="secondary" style={{ textTransform: 'capitalize' }}>
+                              {event.type} Performance
+                            </Text>
+                            <Space size={4}>
+                              <Users size={12} />
+                              <Text type="secondary" style={{ fontSize: '12px' }}>
                                 {event.participants_count} participants
-                              </span>
-                              {event.time_limit && (
-                                <span className="flex items-center">
-                                  <Clock className="h-3 w-3 mr-1" />
+                              </Text>
+                            </Space>
+                            {event.time_limit && (
+                              <Space size={4}>
+                                <Clock size={12} />
+                                <Text type="secondary" style={{ fontSize: '12px' }}>
                                   {event.time_limit} min limit
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Badge variant={getStatusColor(event.status)}>
-                              {event.status}
-                            </Badge>
-                            {event.event_order && (
-                              <Badge variant="outline">
-                                Order #{event.event_order}
-                              </Badge>
+                                </Text>
+                              </Space>
                             )}
-                          </div>
+                          </Space>
                         </div>
-                        
-                        <div className="mb-3">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-sm font-medium">Scoring Progress</span>
-                            <span className="text-sm text-muted-foreground">
-                              {event.my_scores_count}/{event.participants_count * event.total_criteria} scores
-                            </span>
-                          </div>
-                          <div className="w-full bg-muted rounded-full h-2">
-                            <div 
-                              className={`h-2 rounded-full transition-all ${
-                                progress === 100 ? 'bg-green-500' : 'bg-primary'
-                              }`}
-                              style={{ width: `${progress}%` }}
-                            />
-                          </div>
+                        <Space>
+                          <Badge status={getStatusColor(event.status)} text={event.status} />
+                          {event.event_order && (
+                            <Badge count={`#${event.event_order}`} color="blue" />
+                          )}
+                        </Space>
+                      </div>
+                      
+                      <div style={{ marginBottom: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <Text strong style={{ fontSize: '14px' }}>Scoring Progress</Text>
+                          <Text type="secondary" style={{ fontSize: '12px' }}>
+                            {event.my_scores_count}/{event.participants_count * event.total_criteria} scores
+                          </Text>
                         </div>
+                        <Progress 
+                          percent={progress} 
+                          status={progress === 100 ? 'success' : 'active'}
+                          showInfo={false}
+                        />
+                      </div>
 
-                        <div className="flex justify-between items-center">
-                          <div className="text-sm">
-                            {isComplete ? (
-                              <span className="text-green-600 font-medium">
-                                ✓ Scoring Complete
-                              </span>
-                            ) : event.status === 'active' ? (
-                              <span className="text-orange-600 font-medium">
-                                Ready to Score
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">
-                                {event.status === 'upcoming' ? 'Upcoming' : 'Not Started'}
-                              </span>
-                            )}
-                          </div>
-                          
-                          {event.status === 'active' ? (
-                            <div className="flex space-x-2">
-                              <Button asChild>
-                                <Link to={`/judge/score/${event.id}`}>
-                                  {progress > 0 ? 'Continue Scoring' : 'Start Scoring'}
-                                </Link>
-                              </Button>
-                              {isAdmin && (
-                                <Button variant="outline" asChild>
-                                  <Link to={`/admin/scoreboard/${event.id}`}>
-                                    View Scoreboard
-                                  </Link>
-                                </Button>
-                              )}
-                            </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          {isComplete ? (
+                            <Text type="success" strong>
+                              ✓ Scoring Complete
+                            </Text>
+                          ) : event.status === 'active' ? (
+                            <Text style={{ color: '#fa8c16' }} strong>
+                              Ready to Score
+                            </Text>
                           ) : (
-                            <Button variant="outline" disabled>
-                              {event.status === 'completed' ? 'View Details' : 'Not Available'}
-                            </Button>
+                            <Text type="secondary">
+                              {event.status === 'upcoming' ? 'Upcoming' : 'Not Started'}
+                            </Text>
                           )}
                         </div>
+                        
+                        {event.status === 'active' ? (
+                          <Space>
+                            <Link to={`/judge/score/${event.id}`}>
+                              <Button type="primary">
+                                {progress > 0 ? 'Continue Scoring' : 'Start Scoring'}
+                              </Button>
+                            </Link>
+                            {isAdmin && (
+                              <Link to={`/admin/scoreboard/${event.id}`}>
+                                <Button>View Scoreboard</Button>
+                              </Link>
+                            )}
+                          </Space>
+                        ) : (
+                          <Button disabled>
+                            {event.status === 'completed' ? 'View Details' : 'Not Available'}
+                          </Button>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
           </Card>
-        </div>
-      </div>
-
-      <div className="md:hidden">
-        <Navigation />
-      </div>
-    </div>
+        </Content>
+      </Layout>
+    </Layout>
   );
 };
 
