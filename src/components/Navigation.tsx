@@ -1,7 +1,10 @@
 import { useAuth } from '@/hooks/useAuth';
-import { Button } from '@/components/ui/button';
+import { Button, Menu, Layout, Avatar, Typography } from 'antd';
 import { Trophy, Users, Calendar, BarChart3, Settings, LogOut, CalendarDays } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+
+const { Sider } = Layout;
+const { Text } = Typography;
 
 const Navigation = () => {
   const { profile, signOut, isAdmin, isJudge } = useAuth();
@@ -9,81 +12,97 @@ const Navigation = () => {
 
   const navItems = [
     ...(isAdmin ? [
-      { href: '/admin', icon: Settings, label: 'Dashboard', exact: true },
-      { href: '/admin/participants', icon: Users, label: 'Participants', exact: true },
-      { href: '/admin/judges', icon: Trophy, label: 'Judges', exact: true },
-      { href: '/admin/seasons', icon: CalendarDays, label: 'Seasons', exact: true },
-      { href: '/admin/events', icon: Calendar, label: 'Events', exact: true },
-      { href: '/admin/assignments', icon: BarChart3, label: 'Assignments', exact: true },
-      { href: '/admin/results', icon: Trophy, label: 'Results', exact: true },
+      { key: '/admin', icon: <Settings size={18} />, label: 'Dashboard', path: '/admin' },
+      { key: '/admin/participants', icon: <Users size={18} />, label: 'Participants', path: '/admin/participants' },
+      { key: '/admin/judges', icon: <Trophy size={18} />, label: 'Judges', path: '/admin/judges' },
+      { key: '/admin/seasons', icon: <CalendarDays size={18} />, label: 'Seasons', path: '/admin/seasons' },
+      { key: '/admin/events', icon: <Calendar size={18} />, label: 'Events', path: '/admin/events' },
+      { key: '/admin/assignments', icon: <BarChart3 size={18} />, label: 'Assignments', path: '/admin/assignments' },
+      { key: '/admin/results', icon: <Trophy size={18} />, label: 'Results', path: '/admin/results' },
     ] : []),
     ...(isJudge ? [
-      { href: '/judge', icon: Trophy, label: 'My Events', exact: false },
+      { key: '/judge', icon: <Trophy size={18} />, label: 'My Events', path: '/judge' },
     ] : []),
   ];
 
-  const isActive = (href: string, exact: boolean) => {
-    if (exact) {
-      return location.pathname === href;
-    }
-    return location.pathname.startsWith(href);
-  };
+  const menuItems = navItems.map(item => ({
+    key: item.key,
+    icon: item.icon,
+    label: <Link to={item.path}>{item.label}</Link>,
+  }));
 
   return (
-    <nav className="bg-card border-t border-border fixed bottom-0 left-0 right-0 z-50 md:relative md:border-t-0 md:border-r">
-      <div className="flex md:flex-col h-16 md:h-auto">
-        {/* Mobile header */}
-        <div className="hidden md:block p-4 border-b border-border">
-          <div className="flex items-center space-x-2">
-            <Trophy className="h-6 w-6 text-primary" />
-            <span className="font-bold text-lg">PYPA</span>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            {profile?.full_name}
-          </p>
-          <p className="text-xs text-muted-foreground capitalize">
-            {profile?.role}
-          </p>
+    <Sider 
+      width={256} 
+      theme="light"
+      className="hidden md:block"
+      style={{ 
+        height: '100vh', 
+        position: 'fixed', 
+        left: 0, 
+        top: 0,
+        borderRight: '1px solid #f0f0f0'
+      }}
+    >
+      <div style={{ padding: '16px', borderBottom: '1px solid #f0f0f0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+          <Trophy size={24} style={{ color: '#8b5cf6', marginRight: '8px' }} />
+          <Text strong style={{ fontSize: '18px' }}>PYPA</Text>
         </div>
+        <Text type="secondary" style={{ fontSize: '14px', display: 'block' }}>
+          {profile?.full_name}
+        </Text>
+        <Text type="secondary" style={{ fontSize: '12px', textTransform: 'capitalize' }}>
+          {profile?.role}
+        </Text>
+      </div>
 
-        {/* Navigation items */}
-        <div className="flex md:flex-col flex-1 overflow-hidden">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.href, item.exact);
-            
-            return (
-              <Link
-                key={item.href}
-                to={item.href}
-                className={`flex flex-col md:flex-row items-center justify-center md:justify-start space-y-1 md:space-y-0 md:space-x-3 px-2 py-2 md:px-4 md:py-3 flex-1 md:flex-none transition-colors ${
-                  active
-                    ? 'text-primary bg-primary/10'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-              >
-                <Icon className="h-5 w-5" />
-                <span className="text-xs md:text-sm font-medium">
-                  {item.label}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
+      <Menu
+        mode="inline"
+        selectedKeys={[location.pathname]}
+        items={menuItems}
+        style={{ border: 'none' }}
+      />
 
-        {/* Sign out button */}
-        <div className="hidden md:block p-4 border-t border-border">
-          <Button
-            variant="ghost"
-            onClick={signOut}
-            className="w-full justify-start text-muted-foreground hover:text-foreground"
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Sign Out
-          </Button>
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px', borderTop: '1px solid #f0f0f0' }}>
+        <Button
+          type="text"
+          icon={<LogOut size={16} />}
+          onClick={signOut}
+          style={{ width: '100%', justifyContent: 'flex-start' }}
+        >
+          Sign Out
+        </Button>
+      </div>
+
+      {/* Mobile Navigation (Bottom Bar) */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t z-50">
+        <div style={{ display: 'flex', height: '64px' }}>
+          {navItems.map((item) => (
+            <Link
+              key={item.key}
+              to={item.path}
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '8px',
+                textDecoration: 'none',
+                color: location.pathname === item.path ? '#8b5cf6' : '#666',
+                backgroundColor: location.pathname === item.path ? '#f3f0ff' : 'transparent',
+              }}
+            >
+              {item.icon}
+              <Text style={{ fontSize: '12px', marginTop: '4px', color: 'inherit' }}>
+                {item.label}
+              </Text>
+            </Link>
+          ))}
         </div>
       </div>
-    </nav>
+    </Sider>
   );
 };
 

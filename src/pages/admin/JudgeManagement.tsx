@@ -1,28 +1,17 @@
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Layout, Card, Button, Input, Form, Table, Modal, message, Spin, Space, Typography } from 'antd';
 import { Plus, Edit, Trash2 } from 'lucide-react';
-import { toast } from 'sonner';
 
-const judgeSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  church: z.string().min(1, 'Church is required'),
-  contact: z.string().optional(),
-});
+const { Content } = Layout;
+const { Title, Text } = Typography;
 
-type JudgeFormData = z.infer<typeof judgeSchema>;
-
-interface Judge extends JudgeFormData {
+interface Judge {
   id: string;
+  name: string;
+  church: string;
+  contact: string | null;
   profile_id: string;
   created_at: string;
 }
@@ -30,17 +19,10 @@ interface Judge extends JudgeFormData {
 const JudgeManagement = () => {
   const [judges, setJudges] = useState<Judge[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJudge, setEditingJudge] = useState<Judge | null>(null);
-
-  const form = useForm<JudgeFormData>({
-    resolver: zodResolver(judgeSchema),
-    defaultValues: {
-      name: '',
-      church: '',
-      contact: '',
-    },
-  });
+  const [submitting, setSubmitting] = useState(false);
+  const [form] = Form.useForm();
 
   useEffect(() => {
     fetchJudges();
@@ -56,232 +38,217 @@ const JudgeManagement = () => {
       if (error) throw error;
       setJudges(data || []);
     } catch (error) {
-      toast.error('Failed to load judges');
+      message.error('Failed to load judges');
     } finally {
       setLoading(false);
     }
   };
 
-  const onSubmit = async (data: JudgeFormData) => {
+  const onSubmit = async (values: any) => {
     try {
+      setSubmitting(true);
+
       if (editingJudge) {
         // Update existing judge
         const { error } = await supabase
           .from('judges')
-          .update(data)
+          .update(values)
           .eq('id', editingJudge.id);
 
         if (error) throw error;
-        toast.success('Judge updated successfully');
+        message.success('Judge updated successfully');
       } else {
         // Create the judge record (profile will be created via trigger)
         const { error: judgeError } = await supabase
           .from('judges')
           .insert({
-            name: data.name,
-            church: data.church,
-            contact: data.contact || null,
+            name: values.name,
+            church: values.church,
+            contact: values.contact || null,
             profile_id: crypto.randomUUID() // Temporary, will be updated via trigger
           });
 
         if (judgeError) throw judgeError;
-        toast.success('Judge added successfully');
+        message.success('Judge added successfully');
       }
 
-      setIsDialogOpen(false);
-      form.reset();
+      setIsModalOpen(false);
+      form.resetFields();
       setEditingJudge(null);
       fetchJudges();
     } catch (error) {
-      toast.error(editingJudge ? 'Failed to update judge' : 'Failed to add judge');
+      message.error(editingJudge ? 'Failed to update judge' : 'Failed to add judge');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleEdit = (judge: Judge) => {
     setEditingJudge(judge);
-    form.reset(judge);
-    setIsDialogOpen(true);
+    form.setFieldsValue(judge);
+    setIsModalOpen(true);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this judge?')) return;
+    Modal.confirm({
+      title: 'Are you sure you want to delete this judge?',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const { error } = await supabase
+            .from('judges')
+            .delete()
+            .eq('id', id);
 
-    try {
-      const { error } = await supabase
-        .from('judges')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      toast.success('Judge deleted successfully');
-      fetchJudges();
-    } catch (error) {
-      toast.error('Failed to delete judge');
-    }
+          if (error) throw error;
+          message.success('Judge deleted successfully');
+          fetchJudges();
+        } catch (error) {
+          message.error('Failed to delete judge');
+        }
+      }
+    });
   };
 
+  const columns = [
+    {
+      title: 'Name',
+      dataIndex: 'name',
+      key: 'name',
+    },
+    {
+      title: 'Church',
+      dataIndex: 'church',
+      key: 'church',
+    },
+    {
+      title: 'Contact',
+      dataIndex: 'contact',
+      key: 'contact',
+      render: (contact: string | null) => contact || 'N/A',
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 120,
+      render: (_: any, record: Judge) => (
+        <Space>
+          <Button
+            type="text"
+            icon={<Edit size={16} />}
+            onClick={() => handleEdit(record)}
+          />
+          <Button
+            type="text"
+            danger
+            icon={<Trash2 size={16} />}
+            onClick={() => handleDelete(record.id)}
+          />
+        </Space>
+      ),
+    },
+  ];
+
   return (
-    <div className="flex min-h-screen bg-background">
-      <div className="w-64 hidden md:block">
-        <Navigation />
-      </div>
+    <Layout style={{ minHeight: '100vh' }}>
+      <Navigation />
       
-      <div className="flex-1 pb-16 md:pb-0">
-        <div className="p-4 md:p-6">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-                Judge Management
-              </h1>
-              <p className="text-muted-foreground">
-                Manage event judges
-              </p>
-            </div>
-            
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => {
+      <Layout style={{ marginLeft: '256px' }}>
+        <Content style={{ padding: '16px 24px', paddingBottom: '80px' }}>
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+              <div>
+                <Title level={2} style={{ margin: 0 }}>
+                  Judge Management
+                </Title>
+                <Text type="secondary">
+                  Manage event judges
+                </Text>
+              </div>
+              
+              <Button
+                type="primary"
+                icon={<Plus size={16} />}
+                onClick={() => {
                   setEditingJudge(null);
-                  form.reset();
-                }}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Judge
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>
-                    {editingJudge ? 'Edit Judge' : 'Add New Judge'}
-                  </DialogTitle>
-                  <DialogDescription>
-                    Fill in the judge details below.
-                  </DialogDescription>
-                </DialogHeader>
-                
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Judge Name</FormLabel>
-                          <FormControl>
-                            <Input {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="church"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Church</FormLabel>
-                          <FormControl>
-                            <Input {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="contact"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Contact (Optional)</FormLabel>
-                          <FormControl>
-                            <Input {...field} placeholder="Phone or email" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <div className="flex justify-end space-x-2">
-                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button type="submit">
-                        {editingJudge ? 'Update' : 'Add'} Judge
-                      </Button>
-                    </div>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
+                  form.resetFields();
+                  setIsModalOpen(true);
+                }}
+              >
+                Add Judge
+              </Button>
+            </div>
           </div>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Judges</CardTitle>
-              <CardDescription>
-                All registered judges
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="text-center py-8">Loading...</div>
-              ) : judges.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No judges registered yet
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Church</TableHead>
-                        <TableHead>Contact</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {judges.map((judge) => (
-                        <TableRow key={judge.id}>
-                          <TableCell className="font-medium">
-                            {judge.name}
-                          </TableCell>
-                          <TableCell>{judge.church}</TableCell>
-                          <TableCell>{judge.contact || 'N/A'}</TableCell>
-                          <TableCell>
-                            <div className="flex space-x-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleEdit(judge)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleDelete(judge.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
+            <div style={{ marginBottom: '16px' }}>
+              <Title level={4} style={{ margin: 0 }}>Judges</Title>
+              <Text type="secondary">All registered judges</Text>
+            </div>
+            
+            <Table
+              columns={columns}
+              dataSource={judges}
+              loading={loading}
+              rowKey="id"
+              locale={{
+                emptyText: loading ? <Spin /> : 'No judges registered yet'
+              }}
+            />
           </Card>
-        </div>
-      </div>
 
-      <div className="md:hidden">
-        <Navigation />
-      </div>
-    </div>
+          <Modal
+            title={editingJudge ? 'Edit Judge' : 'Add New Judge'}
+            open={isModalOpen}
+            onCancel={() => {
+              setIsModalOpen(false);
+              setEditingJudge(null);
+              form.resetFields();
+            }}
+            footer={null}
+            width={500}
+          >
+            <Form
+              form={form}
+              layout="vertical"
+              onFinish={onSubmit}
+            >
+              <Form.Item
+                label="Judge Name"
+                name="name"
+                rules={[{ required: true, message: 'Name must be at least 2 characters', min: 2 }]}
+              >
+                <Input />
+              </Form.Item>
+              
+              <Form.Item
+                label="Church"
+                name="church"
+                rules={[{ required: true, message: 'Church is required' }]}
+              >
+                <Input />
+              </Form.Item>
+              
+              <Form.Item
+                label="Contact (Optional)"
+                name="contact"
+              >
+                <Input placeholder="Phone or email" />
+              </Form.Item>
+              
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
+                <Button onClick={() => setIsModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="primary" htmlType="submit" loading={submitting}>
+                  {editingJudge ? 'Update' : 'Add'} Judge
+                </Button>
+              </div>
+            </Form>
+          </Modal>
+        </Content>
+      </Layout>
+    </Layout>
   );
 };
 

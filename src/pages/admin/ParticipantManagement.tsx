@@ -1,35 +1,20 @@
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Layout, Card, Button, Input, Form, Table, Modal, Select, message, Spin, Space, Typography } from 'antd';
 import { Plus, Edit, Trash2 } from 'lucide-react';
-import { toast } from 'sonner';
 
-const participantSchema = z.object({
-  full_name: z.string().min(2, 'Name must be at least 2 characters'),
-  age: z.number().min(1).max(100),
-  chest_number: z.string().min(1, 'Chest number is required'),
-  category: z.string().min(1, 'Category is required'),
-  church: z.string().min(1, 'Church is required'),
-  district: z.string().min(1, 'District is required'),
-  username: z.string().min(3, 'Username must be at least 3 characters'),
-  password: z.string().min(4, 'Password must be at least 4 characters'),
-});
+const { Content } = Layout;
+const { Title, Text } = Typography;
 
-type ParticipantFormData = z.infer<typeof participantSchema>;
-
-interface Participant extends Omit<ParticipantFormData, 'username' | 'password'> {
+interface Participant {
   id: string;
+  full_name: string;
+  age: number;
+  chest_number: string;
+  category: string;
+  church: string;
+  district: string;
   created_at: string;
   username?: string;
 }
@@ -37,21 +22,10 @@ interface Participant extends Omit<ParticipantFormData, 'username' | 'password'>
 const ParticipantManagement = () => {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null);
-
-  const form = useForm<ParticipantFormData>({
-    resolver: zodResolver(participantSchema),
-    defaultValues: {
-      full_name: '',
-      age: 18,
-      chest_number: '',
-      category: '',
-      church: '',
-      username: '',
-      password: '',
-    },
-  });
+  const [submitting, setSubmitting] = useState(false);
+  const [form] = Form.useForm();
 
   useEffect(() => {
     fetchParticipants();
@@ -67,25 +41,27 @@ const ParticipantManagement = () => {
       if (error) throw error;
       setParticipants(data || []);
     } catch (error) {
-      toast.error('Failed to load participants');
+      message.error('Failed to load participants');
     } finally {
       setLoading(false);
     }
   };
 
-  const onSubmit = async (data: ParticipantFormData) => {
+  const onSubmit = async (values: any) => {
     try {
+      setSubmitting(true);
+      
       // Use the new edge function to create participant with authentication
       const { data: result, error } = await supabase.functions.invoke('participant-auth/create', {
         body: {
-          full_name: data.full_name,
-          age: data.age,
-          chest_number: data.chest_number,
-          category: data.category,
-          church: data.church,
-          district: data.district,
-          username: data.username,
-          password: data.password
+          full_name: values.full_name,
+          age: values.age,
+          chest_number: values.chest_number,
+          category: values.category,
+          church: values.church,
+          district: values.district,
+          username: values.username,
+          password: values.password
         }
       });
 
@@ -93,291 +69,248 @@ const ParticipantManagement = () => {
         throw new Error(result?.error || error?.message || 'Failed to create participant');
       }
 
-      toast.success('Participant created successfully with login credentials');
-      setIsDialogOpen(false);
-      form.reset();
+      message.success('Participant created successfully with login credentials');
+      setIsModalOpen(false);
+      form.resetFields();
       fetchParticipants();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to add participant');
+      message.error(error.message || 'Failed to add participant');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleEdit = (participant: Participant) => {
     setEditingParticipant(participant);
-    form.reset(participant);
-    setIsDialogOpen(true);
+    form.setFieldsValue(participant);
+    setIsModalOpen(true);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this participant?')) return;
+    Modal.confirm({
+      title: 'Are you sure you want to delete this participant?',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const { error } = await supabase
+            .from('participants')
+            .delete()
+            .eq('id', id);
 
-    try {
-      const { error } = await supabase
-        .from('participants')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      toast.success('Participant deleted successfully');
-      fetchParticipants();
-    } catch (error) {
-      toast.error('Failed to delete participant');
-    }
+          if (error) throw error;
+          message.success('Participant deleted successfully');
+          fetchParticipants();
+        } catch (error) {
+          message.error('Failed to delete participant');
+        }
+      }
+    });
   };
 
+  const columns = [
+    {
+      title: 'Chest #',
+      dataIndex: 'chest_number',
+      key: 'chest_number',
+      width: 100,
+    },
+    {
+      title: 'Name',
+      dataIndex: 'full_name',
+      key: 'full_name',
+    },
+    {
+      title: 'Age',
+      dataIndex: 'age',
+      key: 'age',
+      width: 80,
+    },
+    {
+      title: 'Category',
+      dataIndex: 'category',
+      key: 'category',
+      render: (category: string) => <span style={{ textTransform: 'capitalize' }}>{category}</span>,
+    },
+    {
+      title: 'Church',
+      dataIndex: 'church',
+      key: 'church',
+    },
+    {
+      title: 'District',
+      dataIndex: 'district',
+      key: 'district',
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 120,
+      render: (_: any, record: Participant) => (
+        <Space>
+          <Button
+            type="text"
+            icon={<Edit size={16} />}
+            onClick={() => handleEdit(record)}
+          />
+          <Button
+            type="text"
+            danger
+            icon={<Trash2 size={16} />}
+            onClick={() => handleDelete(record.id)}
+          />
+        </Space>
+      ),
+    },
+  ];
+
   return (
-    <div className="flex min-h-screen bg-background">
-      <div className="w-64 hidden md:block">
-        <Navigation />
-      </div>
+    <Layout style={{ minHeight: '100vh' }}>
+      <Navigation />
       
-      <div className="flex-1 pb-16 md:pb-0">
-        <div className="p-4 md:p-6">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-                Participant Management
-              </h1>
-              <p className="text-muted-foreground">
-                Manage event participants
-              </p>
-            </div>
-            
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => {
+      <Layout style={{ marginLeft: '256px' }}>
+        <Content style={{ padding: '16px 24px', paddingBottom: '80px' }}>
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+              <div>
+                <Title level={2} style={{ margin: 0 }}>
+                  Participant Management
+                </Title>
+                <Text type="secondary">
+                  Manage event participants
+                </Text>
+              </div>
+              
+              <Button
+                type="primary"
+                icon={<Plus size={16} />}
+                onClick={() => {
                   setEditingParticipant(null);
-                  form.reset();
-                }}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Participant
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>
-                    {editingParticipant ? 'Edit Participant' : 'Add New Participant'}
-                  </DialogTitle>
-                  <DialogDescription>
-                    Fill in the participant details below.
-                  </DialogDescription>
-                </DialogHeader>
-                
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="full_name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Full Name</FormLabel>
-                          <FormControl>
-                            <Input {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="age"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Age</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="number" 
-                                {...field} 
-                                onChange={(e) => field.onChange(parseInt(e.target.value))}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <FormField
-                        control={form.control}
-                        name="chest_number"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Chest Number</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    
-                    <FormField
-                      control={form.control}
-                      name="category"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Category</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select category" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="children">Children</SelectItem>
-                              <SelectItem value="teens">Teens</SelectItem>
-                              <SelectItem value="youth">Youth</SelectItem>
-                              <SelectItem value="adults">Adults</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="church"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Church</FormLabel>
-                          <FormControl>
-                            <Input {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="district"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>District</FormLabel>
-                          <FormControl>
-                            <Input {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="username"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Username</FormLabel>
-                          <FormControl>
-                            <Input {...field} placeholder="Enter username for login" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Password</FormLabel>
-                          <FormControl>
-                            <Input {...field} type="password" placeholder="Enter password for login" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <div className="flex justify-end space-x-2">
-                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button type="submit">
-                        {editingParticipant ? 'Update' : 'Add'} Participant
-                      </Button>
-                    </div>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
+                  form.resetFields();
+                  setIsModalOpen(true);
+                }}
+              >
+                Add Participant
+              </Button>
+            </div>
           </div>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Participants</CardTitle>
-              <CardDescription>
-                All registered participants
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="text-center py-8">Loading...</div>
-              ) : participants.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No participants registered yet
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Chest #</TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Age</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead>Church</TableHead>
-                        <TableHead>District</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {participants.map((participant) => (
-                        <TableRow key={participant.id}>
-                          <TableCell className="font-medium">
-                            {participant.chest_number}
-                          </TableCell>
-                          <TableCell>{participant.full_name}</TableCell>
-                          <TableCell>{participant.age}</TableCell>
-                          <TableCell className="capitalize">{participant.category}</TableCell>
-                          <TableCell>{participant.church}</TableCell>
-                          <TableCell>{participant.district}</TableCell>
-                          <TableCell>
-                            <div className="flex space-x-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleEdit(participant)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleDelete(participant.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
+            <div style={{ marginBottom: '16px' }}>
+              <Title level={4} style={{ margin: 0 }}>Participants</Title>
+              <Text type="secondary">All registered participants</Text>
+            </div>
+            
+            <Table
+              columns={columns}
+              dataSource={participants}
+              loading={loading}
+              rowKey="id"
+              locale={{
+                emptyText: loading ? <Spin /> : 'No participants registered yet'
+              }}
+            />
           </Card>
-        </div>
-      </div>
 
-      <div className="md:hidden">
-        <Navigation />
-      </div>
-    </div>
+          <Modal
+            title={editingParticipant ? 'Edit Participant' : 'Add New Participant'}
+            open={isModalOpen}
+            onCancel={() => {
+              setIsModalOpen(false);
+              setEditingParticipant(null);
+              form.resetFields();
+            }}
+            footer={null}
+            width={600}
+          >
+            <Form
+              form={form}
+              layout="vertical"
+              onFinish={onSubmit}
+            >
+              <Form.Item
+                label="Full Name"
+                name="full_name"
+                rules={[{ required: true, message: 'Name must be at least 2 characters', min: 2 }]}
+              >
+                <Input />
+              </Form.Item>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <Form.Item
+                  label="Age"
+                  name="age"
+                  rules={[{ required: true, type: 'number', min: 1, max: 100 }]}
+                >
+                  <Input type="number" />
+                </Form.Item>
+                
+                <Form.Item
+                  label="Chest Number"
+                  name="chest_number"
+                  rules={[{ required: true, message: 'Chest number is required' }]}
+                >
+                  <Input />
+                </Form.Item>
+              </div>
+              
+              <Form.Item
+                label="Category"
+                name="category"
+                rules={[{ required: true, message: 'Category is required' }]}
+              >
+                <Select placeholder="Select category">
+                  <Select.Option value="children">Children</Select.Option>
+                  <Select.Option value="teens">Teens</Select.Option>
+                  <Select.Option value="youth">Youth</Select.Option>
+                  <Select.Option value="adults">Adults</Select.Option>
+                </Select>
+              </Form.Item>
+              
+              <Form.Item
+                label="Church"
+                name="church"
+                rules={[{ required: true, message: 'Church is required' }]}
+              >
+                <Input />
+              </Form.Item>
+              
+              <Form.Item
+                label="District"
+                name="district"
+                rules={[{ required: true, message: 'District is required' }]}
+              >
+                <Input />
+              </Form.Item>
+
+              <Form.Item
+                label="Username"
+                name="username"
+                rules={[{ required: true, message: 'Username must be at least 3 characters', min: 3 }]}
+              >
+                <Input placeholder="Enter username for login" />
+              </Form.Item>
+              
+              <Form.Item
+                label="Password"
+                name="password"
+                rules={[{ required: true, message: 'Password must be at least 4 characters', min: 4 }]}
+              >
+                <Input.Password placeholder="Enter password for login" />
+              </Form.Item>
+              
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
+                <Button onClick={() => setIsModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="primary" htmlType="submit" loading={submitting}>
+                  {editingParticipant ? 'Update' : 'Add'} Participant
+                </Button>
+              </div>
+            </Form>
+          </Modal>
+        </Content>
+      </Layout>
+    </Layout>
   );
 };
 

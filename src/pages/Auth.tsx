@@ -1,15 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useParticipantAuth } from '@/hooks/useParticipantAuth';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Trophy, Users, UserCheck } from 'lucide-react';
-import { toast } from 'sonner';
+import { Button, Input, Card, Form, Alert, Typography, Row, Col, Spin, message } from 'antd';
+import { Trophy, Users, UserCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+
+const { Title, Text } = Typography;
 
 const Auth = () => {
   const { user: adminUser, signIn: adminSignIn, signUp: adminSignUp, loading: adminLoading } = useAuth();
@@ -30,48 +26,33 @@ const Auth = () => {
     }
   }, [adminUser, participant, adminLoading, participantLoading, navigate]);
 
-  // Admin/Judge sign in form state
-  const [adminSignInData, setAdminSignInData] = useState({
-    username: '',
-    password: ''
-  });
-
-  // Participant sign in form state
-  const [participantSignInData, setParticipantSignInData] = useState({
-    username: '',
-    password: ''
-  });
-
-
-  const handleAdminSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAdminSignIn = async (values: { username: string; password: string }) => {
     setIsLoading(true);
     setError('');
 
-    const { error } = await adminSignIn(adminSignInData.username, adminSignInData.password);
+    const { error } = await adminSignIn(values.username, values.password);
     
     if (error) {
       setError(error.message || 'Failed to sign in');
-      toast.error(error.message || 'Please check your credentials');
+      message.error(error.message || 'Please check your credentials');
     } else {
-      toast.success('Signed in successfully!');
+      message.success('Signed in successfully!');
     }
     
     setIsLoading(false);
   };
 
-  const handleParticipantSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleParticipantSignIn = async (values: { username: string; password: string }) => {
     setIsLoading(true);
     setError('');
 
-    const { error } = await participantSignIn(participantSignInData.username, participantSignInData.password);
+    const { error } = await participantSignIn(values.username, values.password);
     
     if (error) {
       setError(error.message || error || 'Failed to sign in');
-      toast.error(error.message || error || 'Please check your credentials');
+      message.error(error.message || error || 'Please check your credentials');
     } else {
-      toast.success('Signed in successfully!');
+      message.success('Signed in successfully!');
       navigate('/participant', { replace: true });
     }
     
@@ -80,178 +61,165 @@ const Auth = () => {
 
   if (adminLoading || participantLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Spin size="large" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-4">
-            <Trophy className="h-12 w-12 text-primary" />
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div style={{ width: '100%', maxWidth: '400px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+            <Trophy size={48} color="#8b5cf6" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground">PYPA</h1>
-          <p className="text-muted-foreground">Devotional & Cultural Competitions</p>
+          <Title level={2} style={{ margin: 0 }}>PYPA</Title>
+          <Text type="secondary">Devotional & Cultural Competitions</Text>
         </div>
 
         {/* User Type Selection */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-center">Select Your Role</CardTitle>
-            <CardDescription className="text-center">
-              Choose your account type to continue
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <button
+        <Card style={{ marginBottom: '24px' }}>
+          <Title level={4} style={{ textAlign: 'center', marginBottom: '8px' }}>Select Your Role</Title>
+          <Text type="secondary" style={{ display: 'block', textAlign: 'center', marginBottom: '16px' }}>
+            Choose your account type to continue
+          </Text>
+          
+          <Row gutter={16}>
+            <Col span={12}>
+              <Card
+                hoverable
+                size="small"
+                style={{
+                  textAlign: 'center',
+                  border: userType === 'admin' ? '2px solid #8b5cf6' : '1px solid #d9d9d9',
+                  backgroundColor: userType === 'admin' ? '#f3f0ff' : 'white',
+                }}
                 onClick={() => setUserType('admin')}
-                className={`p-4 rounded-lg border-2 transition-colors ${
-                  userType === 'admin' 
-                    ? 'border-primary bg-primary/10' 
-                    : 'border-border hover:border-primary/50'
-                }`}
               >
-                <Users className="h-8 w-8 mx-auto mb-2 text-primary" />
-                <div className="text-sm font-medium">Admin/Judge</div>
-                <div className="text-xs text-muted-foreground">Staff Members</div>
-              </button>
-              <button
+                <Users size={32} color="#8b5cf6" style={{ marginBottom: '8px' }} />
+                <div style={{ fontWeight: 'medium' }}>Admin/Judge</div>
+                <Text type="secondary" style={{ fontSize: '12px' }}>Staff Members</Text>
+              </Card>
+            </Col>
+            <Col span={12}>
+              <Card
+                hoverable
+                size="small"
+                style={{
+                  textAlign: 'center',
+                  border: userType === 'participant' ? '2px solid #8b5cf6' : '1px solid #d9d9d9',
+                  backgroundColor: userType === 'participant' ? '#f3f0ff' : 'white',
+                }}
                 onClick={() => setUserType('participant')}
-                className={`p-4 rounded-lg border-2 transition-colors ${
-                  userType === 'participant' 
-                    ? 'border-primary bg-primary/10' 
-                    : 'border-border hover:border-primary/50'
-                }`}
               >
-                <UserCheck className="h-8 w-8 mx-auto mb-2 text-primary" />
-                <div className="text-sm font-medium">Participant</div>
-                <div className="text-xs text-muted-foreground">Contestants</div>
-              </button>
-            </div>
-          </CardContent>
+                <UserCheck size={32} color="#8b5cf6" style={{ marginBottom: '8px' }} />
+                <div style={{ fontWeight: 'medium' }}>Participant</div>
+                <Text type="secondary" style={{ fontSize: '12px' }}>Contestants</Text>
+              </Card>
+            </Col>
+          </Row>
         </Card>
 
         {userType === 'admin' && (
           <Card>
-            <CardHeader>
-              <CardTitle>Admin/Judge Sign In</CardTitle>
-              <CardDescription>
-                Enter your credentials to access PYPA admin panel
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleAdminSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="admin-signin-username">Username</Label>
-                  <Input
-                    id="admin-signin-username"
-                    type="text"
-                    placeholder="Enter your username"
-                    value={adminSignInData.username}
-                    onChange={(e) => setAdminSignInData({ ...adminSignInData, username: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="admin-signin-password">Password</Label>
-                  <Input
-                    id="admin-signin-password"
-                    type="password"
-                    placeholder="Enter your password"
-                    value={adminSignInData.password}
-                    onChange={(e) => setAdminSignInData({ ...adminSignInData, password: e.target.value })}
-                    required
-                  />
-                </div>
-                
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
+            <Title level={4} style={{ marginBottom: '8px' }}>Admin/Judge Sign In</Title>
+            <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
+              Enter your credentials to access PYPA admin panel
+            </Text>
+            
+            <Form onFinish={handleAdminSignIn} layout="vertical">
+              <Form.Item
+                label="Username"
+                name="username"
+                rules={[{ required: true, message: 'Please enter your username' }]}
+              >
+                <Input placeholder="Enter your username" />
+              </Form.Item>
+              
+              <Form.Item
+                label="Password"
+                name="password"
+                rules={[{ required: true, message: 'Please enter your password' }]}
+              >
+                <Input.Password placeholder="Enter your password" />
+              </Form.Item>
+              
+              {error && (
+                <Alert
+                  message={error}
+                  type="error"
+                  style={{ marginBottom: '16px' }}
+                />
+              )}
 
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Signing In...
-                    </>
-                  ) : (
-                    'Sign In'
-                  )}
+              <Form.Item>
+                <Button type="primary" htmlType="submit" loading={isLoading} block>
+                  Sign In
                 </Button>
-              </form>
+              </Form.Item>
+            </Form>
 
-              <div className="mt-4 p-3 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">
+            <Alert
+              message={
+                <div>
                   <strong>Need an admin account?</strong> Contact your system administrator to create admin or judge accounts.
-                </p>
-              </div>
-            </CardContent>
+                </div>
+              }
+              type="info"
+              showIcon={false}
+            />
           </Card>
         )}
 
         {userType === 'participant' && (
           <Card>
-            <CardHeader>
-              <CardTitle>Participant Sign In</CardTitle>
-              <CardDescription>
-                Enter your participant credentials to access PYPA
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleParticipantSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="participant-signin-username">Username</Label>
-                  <Input
-                    id="participant-signin-username"
-                    type="text"
-                    placeholder="Enter your username"
-                    value={participantSignInData.username}
-                    onChange={(e) => setParticipantSignInData({ ...participantSignInData, username: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="participant-signin-password">Password</Label>
-                  <Input
-                    id="participant-signin-password"
-                    type="password"
-                    placeholder="Enter your password"
-                    value={participantSignInData.password}
-                    onChange={(e) => setParticipantSignInData({ ...participantSignInData, password: e.target.value })}
-                    required
-                  />
-                </div>
-                
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
+            <Title level={4} style={{ marginBottom: '8px' }}>Participant Sign In</Title>
+            <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
+              Enter your participant credentials to access PYPA
+            </Text>
+            
+            <Form onFinish={handleParticipantSignIn} layout="vertical">
+              <Form.Item
+                label="Username"
+                name="username"
+                rules={[{ required: true, message: 'Please enter your username' }]}
+              >
+                <Input placeholder="Enter your username" />
+              </Form.Item>
+              
+              <Form.Item
+                label="Password"
+                name="password"
+                rules={[{ required: true, message: 'Please enter your password' }]}
+              >
+                <Input.Password placeholder="Enter your password" />
+              </Form.Item>
+              
+              {error && (
+                <Alert
+                  message={error}
+                  type="error"
+                  style={{ marginBottom: '16px' }}
+                />
+              )}
 
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Signing In...
-                    </>
-                  ) : (
-                    'Sign In'
-                  )}
+              <Form.Item>
+                <Button type="primary" htmlType="submit" loading={isLoading} block>
+                  Sign In
                 </Button>
-              </form>
+              </Form.Item>
+            </Form>
 
-              <div className="mt-4 p-3 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">
+            <Alert
+              message={
+                <div>
                   <strong>Don't have participant credentials?</strong> Contact your administrator to create your participant account.
-                </p>
-              </div>
-            </CardContent>
+                </div>
+              }
+              type="info"
+              showIcon={false}
+            />
           </Card>
         )}
       </div>

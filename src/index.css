@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import '~antd/dist/reset.css';
 
 /* PYPA - Mobile-first PWA Design System
 All colors MUST be HSL.
