@@ -33,6 +33,14 @@ const Navigation = () => {
 
   return (
     <>
+      {/* Mobile Header - Simple App Name */}
+      <Layout.Header
+        className="flex items-center justify-center px-4 bg-white border-b md:hidden"
+        style={{ height: 64, lineHeight: 'normal', position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000 }}
+      >
+        <Text strong className="text-lg">PYPA</Text>
+      </Layout.Header>
+
       {/* Desktop Sidebar */}
       <Sider 
         width={256} 

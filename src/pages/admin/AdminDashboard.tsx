@@ -43,39 +43,8 @@ const AdminDashboard = () => {
       <Navigation />
       
       <Layout className="md:ml-64">
-        {/* Mobile header */}
-        <Header 
-          className="md:hidden" 
-          style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between',
-            padding: '0 16px',
-            background: '#fff',
-            borderBottom: '1px solid #f0f0f0'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <Trophy size={24} color="#8b5cf6" style={{ marginRight: '8px' }} />
-            <div>
-              <Text strong style={{ fontSize: '18px' }}>PYPA</Text>
-              <div>
-                <Text type="secondary" style={{ fontSize: '14px' }}>
-                  {profile?.full_name}
-                </Text>
-              </div>
-            </div>
-          </div>
-          <Button
-            type="text"
-            icon={<LogOut size={16} />}
-            onClick={signOut}
-          >
-            Sign Out
-          </Button>
-        </Header>
         
-        <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
+        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
           <div style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <Title level={2} style={{ margin: 0 }}>

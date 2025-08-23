@@ -246,7 +246,7 @@ const SeasonManagement = () => {
       <Navigation />
       
       <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
+        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
           <div style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div>
