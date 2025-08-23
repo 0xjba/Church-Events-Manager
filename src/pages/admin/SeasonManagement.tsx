@@ -252,127 +252,66 @@ const SeasonManagement = () => {
                     <p>No seasons found. Create your first season to get started.</p>
                   </div>
                 ) : (
-                  <>
-                    {/* Desktop Table */}
-                    <div className="hidden md:block overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Season</TableHead>
-                            <TableHead>Year</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Events</TableHead>
-                            <TableHead>Actions</TableHead>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Season</TableHead>
+                          <TableHead>Year</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Events</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {seasons.map((season) => (
+                          <TableRow key={season.id}>
+                            <TableCell className="font-medium">{season.name}</TableCell>
+                            <TableCell>{season.year}</TableCell>
+                            <TableCell className="max-w-xs truncate">
+                              {season.description || '-'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={season.is_active ? 'default' : 'secondary'}>
+                                {season.is_active ? 'Active' : 'Inactive'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {season.event_count} events
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    console.log('SeasonManagement: Edit button clicked for season:', season);
+                                    handleEdit(season);
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    console.log('SeasonManagement: Delete button clicked for season:', season);
+                                    handleDeleteClick(season);
+                                  }}
+                                  className="text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
                           </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {seasons.map((season) => (
-                            <TableRow key={season.id}>
-                              <TableCell className="font-medium">{season.name}</TableCell>
-                              <TableCell>{season.year}</TableCell>
-                              <TableCell className="max-w-xs truncate">
-                                {season.description || '-'}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={season.is_active ? 'default' : 'secondary'}>
-                                  {season.is_active ? 'Active' : 'Inactive'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline">
-                                  {season.event_count} events
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      console.log('SeasonManagement: Edit button clicked for season:', season);
-                                      handleEdit(season);
-                                    }}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      console.log('SeasonManagement: Delete button clicked for season:', season);
-                                      handleDeleteClick(season);
-                                    }}
-                                    className="text-destructive hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-
-                    {/* Mobile Cards */}
-                    <div className="md:hidden space-y-4">
-                      {seasons.map((season) => (
-                        <Card key={season.id}>
-                          <CardContent className="p-4">
-                            <div className="space-y-3">
-                              <div className="flex items-start justify-between">
-                                <div>
-                                  <h3 className="font-medium text-lg">{season.name}</h3>
-                                  <p className="text-sm text-muted-foreground">{season.year}</p>
-                                </div>
-                                <div className="flex gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      console.log('SeasonManagement: Edit button clicked for season:', season);
-                                      handleEdit(season);
-                                    }}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      console.log('SeasonManagement: Delete button clicked for season:', season);
-                                      handleDeleteClick(season);
-                                    }}
-                                    className="text-destructive hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                              
-                              {season.description && (
-                                <p className="text-sm text-muted-foreground">
-                                  {season.description}
-                                </p>
-                              )}
-                              
-                              <div className="flex items-center justify-between">
-                                <div className="flex gap-2">
-                                  <Badge variant={season.is_active ? 'default' : 'secondary'}>
-                                    {season.is_active ? 'Active' : 'Inactive'}
-                                  </Badge>
-                                  <Badge variant="outline">
-                                    {season.event_count} events
-                                  </Badge>
-                                </div>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>
