@@ -42,13 +42,6 @@ const Auth = () => {
     password: ''
   });
 
-  // Admin/Judge sign up form state
-  const [adminSignUpData, setAdminSignUpData] = useState({
-    username: '',
-    email: '',
-    password: '',
-    fullName: ''
-  });
 
   const handleAdminSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,28 +73,6 @@ const Auth = () => {
     } else {
       toast.success('Signed in successfully!');
       navigate('/participant', { replace: true });
-    }
-    
-    setIsLoading(false);
-  };
-
-  const handleAdminSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-
-    const { error } = await adminSignUp(
-      adminSignUpData.username,
-      adminSignUpData.email,
-      adminSignUpData.password,
-      adminSignUpData.fullName
-    );
-    
-    if (error) {
-      setError(error.message || 'Failed to create account');
-      toast.error(error.message || 'Please try again');
-    } else {
-      toast.success('Account created successfully!');
     }
     
     setIsLoading(false);

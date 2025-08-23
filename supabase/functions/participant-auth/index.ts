@@ -1,7 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0';
-import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 import { create, verify } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
 
 const corsHeaders = {
@@ -14,6 +13,21 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_URL') ?? '',
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 );
+
+// Hash password using crypto API
+async function hashPassword(password: string, salt: string = 'pypa-salt'): Promise<string> {
+  const encoder = new TextEncoder();
+  const passwordData = encoder.encode(password + salt);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', passwordData);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Compare passwords
+async function comparePassword(password: string, hash: string, salt: string = 'pypa-salt'): Promise<boolean> {
+  const hashedInput = await hashPassword(password, salt);
+  return hashedInput === hash;
+}
 
 // JWT secret for participant tokens
 const JWT_SECRET = await crypto.subtle.importKey(
@@ -88,7 +102,7 @@ async function handleLogin(req: Request) {
   }
 
   // Verify password
-  const passwordValid = await bcrypt.compare(password, participant.password_hash);
+  const passwordValid = await comparePassword(password, participant.password_hash);
   if (!passwordValid) {
     console.log('Invalid password for:', username);
     return new Response(
@@ -233,7 +247,7 @@ async function handleCreate(req: Request) {
   }
 
   // Hash password
-  const password_hash = await bcrypt.hash(password);
+  const password_hash = await hashPassword(password);
 
   // Create participant
   const { data: newParticipant, error: createError } = await supabase
@@ -301,7 +315,7 @@ async function handleReset(req: Request) {
 
   // Generate new secure password
   const newPassword = generateSecurePassword();
-  const password_hash = await bcrypt.hash(newPassword);
+  const password_hash = await hashPassword(newPassword);
 
   // Update participant password
   const { error: updateError } = await supabase
