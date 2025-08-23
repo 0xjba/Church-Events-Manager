@@ -212,28 +212,49 @@ export type Database = {
           church: string
           contact: string | null
           created_at: string
+          created_by: string | null
+          email: string
+          full_name: string
           id: string
-          name: string
+          is_active: boolean | null
+          last_login: string | null
+          login_count: number | null
+          password_hash: string | null
           profile_id: string
           updated_at: string
+          username: string | null
         }
         Insert: {
           church: string
           contact?: string | null
           created_at?: string
+          created_by?: string | null
+          email: string
+          full_name: string
           id?: string
-          name: string
+          is_active?: boolean | null
+          last_login?: string | null
+          login_count?: number | null
+          password_hash?: string | null
           profile_id: string
           updated_at?: string
+          username?: string | null
         }
         Update: {
           church?: string
           contact?: string | null
           created_at?: string
+          created_by?: string | null
+          email?: string
+          full_name?: string
           id?: string
-          name?: string
+          is_active?: boolean | null
+          last_login?: string | null
+          login_count?: number | null
+          password_hash?: string | null
           profile_id?: string
           updated_at?: string
+          username?: string | null
         }
         Relationships: [
           {

@@ -10,10 +10,13 @@ const { Title, Text } = Typography;
 
 interface Judge {
   id: string;
-  name: string;
+  full_name: string;
+  username: string;
+  email: string;
   church: string;
   contact: string | null;
   profile_id: string;
+  is_active: boolean;
   created_at: string;
 }
 
@@ -45,28 +48,54 @@ const JudgeManagement = () => {
     }
   };
 
+  const hashPassword = async (password: string) => {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  };
+
   const onSubmit = async (values: any) => {
     try {
       setSubmitting(true);
 
       if (editingJudge) {
         // Update existing judge
+        const updateData: any = {
+          full_name: values.full_name,
+          username: values.username,
+          email: values.email,
+          church: values.church,
+          contact: values.contact || null,
+        };
+
+        // Only update password if provided
+        if (values.password) {
+          updateData.password_hash = await hashPassword(values.password);
+        }
+
         const { error } = await supabase
           .from('judges')
-          .update(values)
+          .update(updateData)
           .eq('id', editingJudge.id);
 
         if (error) throw error;
         message.success('Judge updated successfully');
       } else {
-        // Create the judge record (profile will be created via trigger)
+        // Create new judge record
         const { error: judgeError } = await supabase
           .from('judges')
           .insert({
-            name: values.name,
+            full_name: values.full_name,
+            username: values.username,
+            email: values.email,
             church: values.church,
             contact: values.contact || null,
-            profile_id: crypto.randomUUID() // Temporary, will be updated via trigger
+            password_hash: await hashPassword(values.password),
+            profile_id: crypto.randomUUID(), // Temporary
+            is_active: true
           });
 
         if (judgeError) throw judgeError;
@@ -114,8 +143,18 @@ const JudgeManagement = () => {
   const columns = [
     {
       title: 'Name',
-      dataIndex: 'name',
-      key: 'name',
+      dataIndex: 'full_name',
+      key: 'full_name',
+    },
+    {
+      title: 'Username',
+      dataIndex: 'username',
+      key: 'username',
+    },
+    {
+      title: 'Email',
+      dataIndex: 'email',
+      key: 'email',
     },
     {
       title: 'Church',
@@ -127,6 +166,19 @@ const JudgeManagement = () => {
       dataIndex: 'contact',
       key: 'contact',
       render: (contact: string | null) => contact || 'N/A',
+    },
+    {
+      title: 'Status',
+      dataIndex: 'is_active',
+      key: 'is_active',
+      render: (is_active: boolean) => (
+        <span style={{ 
+          color: is_active ? '#52c41a' : '#f5222d',
+          fontWeight: 'bold'
+        }}>
+          {is_active ? 'Active' : 'Inactive'}
+        </span>
+      ),
     },
     {
       title: 'Actions',
@@ -192,7 +244,7 @@ const JudgeManagement = () => {
               dataSource={judges}
               loading={loading}
               rowKey="id"
-              cardTitle={(record) => record.name}
+              cardTitle={(record) => record.full_name}
               locale={{
                 emptyText: loading ? <Spin /> : 'No judges registered yet'
               }}
@@ -217,10 +269,37 @@ const JudgeManagement = () => {
             >
               <Form.Item
                 label="Judge Name"
-                name="name"
+                name="full_name"
                 rules={[{ required: true, message: 'Name must be at least 2 characters', min: 2 }]}
               >
                 <Input />
+              </Form.Item>
+              
+              <Form.Item
+                label="Username"
+                name="username"
+                rules={[{ required: true, message: 'Username is required' }]}
+              >
+                <Input />
+              </Form.Item>
+              
+              <Form.Item
+                label="Email"
+                name="email"
+                rules={[
+                  { required: true, message: 'Email is required' },
+                  { type: 'email', message: 'Please enter a valid email' }
+                ]}
+              >
+                <Input />
+              </Form.Item>
+              
+              <Form.Item
+                label={editingJudge ? "Password (leave blank to keep current)" : "Password"}
+                name="password"
+                rules={editingJudge ? [] : [{ required: true, message: 'Password is required' }]}
+              >
+                <Input.Password />
               </Form.Item>
               
               <Form.Item

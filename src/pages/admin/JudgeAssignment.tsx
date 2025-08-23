@@ -20,7 +20,7 @@ interface Event {
     assigned_at: string;
     judges: {
       id: string;
-      name: string;
+      full_name: string;
       church: string;
     };
   }>;
@@ -28,7 +28,7 @@ interface Event {
 
 interface Judge {
   id: string;
-  name: string;
+  full_name: string;
   church: string;
 }
 
@@ -65,7 +65,7 @@ const JudgeAssignment = () => {
             assigned_at,
             judges (
               id,
-              name,
+              full_name,
               church
             )
           )
@@ -79,7 +79,7 @@ const JudgeAssignment = () => {
       const { data: judgesData, error: judgesError } = await supabase
         .from('judges')
         .select('*')
-        .order('name');
+        .order('full_name');
 
       if (judgesError) throw judgesError;
       setJudges(judgesData || []);
@@ -217,7 +217,7 @@ const JudgeAssignment = () => {
             eventJudges.map((ej) => (
               <div key={ej.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <Text strong style={{ fontSize: '14px' }}>{ej.judges.name}</Text>
+                  <Text strong style={{ fontSize: '14px' }}>{ej.judges.full_name}</Text>
                   <Text type="secondary" style={{ fontSize: '12px', display: 'block' }}>
                     {ej.judges.church}
                   </Text>
@@ -341,7 +341,7 @@ const JudgeAssignment = () => {
                 >
                   {getAvailableJudges(selectedEventId).map(judge => (
                     <Select.Option key={judge.id} value={judge.id}>
-                      {judge.name} - {judge.church}
+                      {judge.full_name} - {judge.church}
                     </Select.Option>
                   ))}
                 </Select>
