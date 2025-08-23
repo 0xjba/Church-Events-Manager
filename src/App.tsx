@@ -3,8 +3,10 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/hooks/useAuth";
+import { AuthProvider } from '@/hooks/useAuth';
+import { ParticipantAuthProvider } from '@/hooks/useParticipantAuth';
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ParticipantProtectedRoute from "@/components/ParticipantProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -24,9 +26,10 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <ParticipantAuthProvider>
+          <TooltipProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
@@ -96,9 +99,9 @@ const App = () => (
             
             {/* Participant Routes */}
             <Route path="/participant" element={
-              <ProtectedRoute requiredRole="participant">
+              <ParticipantProtectedRoute>
                 <ParticipantDashboard />
-              </ProtectedRoute>
+              </ParticipantProtectedRoute>
             } />
             
             {/* Public Routes */}
@@ -108,8 +111,9 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
+          </TooltipProvider>
+        </ParticipantAuthProvider>
+      </AuthProvider>
   </QueryClientProvider>
 );
 

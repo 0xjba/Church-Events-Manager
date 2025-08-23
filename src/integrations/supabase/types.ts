@@ -252,11 +252,17 @@ export type Database = {
           chest_number: string
           church: string
           created_at: string
+          created_by: string | null
           district: string
           full_name: string
           id: string
-          profile_id: string
+          is_active: boolean | null
+          last_login: string | null
+          login_count: number | null
+          password_hash: string | null
+          profile_id: string | null
           updated_at: string
+          username: string | null
         }
         Insert: {
           age: number
@@ -264,11 +270,17 @@ export type Database = {
           chest_number: string
           church: string
           created_at?: string
+          created_by?: string | null
           district: string
           full_name: string
           id?: string
-          profile_id: string
+          is_active?: boolean | null
+          last_login?: string | null
+          login_count?: number | null
+          password_hash?: string | null
+          profile_id?: string | null
           updated_at?: string
+          username?: string | null
         }
         Update: {
           age?: number
@@ -276,11 +288,17 @@ export type Database = {
           chest_number?: string
           church?: string
           created_at?: string
+          created_by?: string | null
           district?: string
           full_name?: string
           id?: string
-          profile_id?: string
+          is_active?: boolean | null
+          last_login?: string | null
+          login_count?: number | null
+          password_hash?: string | null
+          profile_id?: string | null
           updated_at?: string
+          username?: string | null
         }
         Relationships: [
           {

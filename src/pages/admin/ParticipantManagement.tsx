@@ -22,14 +22,17 @@ const participantSchema = z.object({
   category: z.string().min(1, 'Category is required'),
   church: z.string().min(1, 'Church is required'),
   district: z.string().min(1, 'District is required'),
+  username: z.string().min(3, 'Username must be at least 3 characters'),
+  password: z.string().min(4, 'Password must be at least 4 characters'),
 });
 
 type ParticipantFormData = z.infer<typeof participantSchema>;
 
-interface Participant extends ParticipantFormData {
+interface Participant extends Omit<ParticipantFormData, 'username' | 'password'> {
   id: string;
-  profile_id: string;
+  profile_id: string | null;
   created_at: string;
+  username?: string;
 }
 
 const ParticipantManagement = () => {
@@ -46,7 +49,8 @@ const ParticipantManagement = () => {
       chest_number: '',
       category: '',
       church: '',
-      district: '',
+      username: '',
+      password: '',
     },
   });
 
@@ -72,27 +76,30 @@ const ParticipantManagement = () => {
 
   const onSubmit = async (data: ParticipantFormData) => {
     try {
-      // Create the participant record (profile will be created via trigger)
-      const { error: participantError } = await supabase
-        .from('participants')
-        .insert({
+      // Use the new edge function to create participant with authentication
+      const { data: result, error } = await supabase.functions.invoke('participant-auth/create', {
+        body: {
           full_name: data.full_name,
           age: data.age,
           chest_number: data.chest_number,
           category: data.category,
           church: data.church,
           district: data.district,
-          profile_id: crypto.randomUUID() // Temporary, will be updated via trigger
-        });
+          username: data.username,
+          password: data.password
+        }
+      });
 
-      if (participantError) throw participantError;
+      if (error || result?.error) {
+        throw new Error(result?.error || error?.message || 'Failed to create participant');
+      }
 
-      toast.success('Participant added successfully');
+      toast.success('Participant created successfully with login credentials');
       setIsDialogOpen(false);
       form.reset();
       fetchParticipants();
-    } catch (error) {
-      toast.error('Failed to add participant');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add participant');
     }
   };
 
@@ -253,6 +260,33 @@ const ParticipantManagement = () => {
                           <FormLabel>District</FormLabel>
                           <FormControl>
                             <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="username"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Username</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="Enter username for login" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Password</FormLabel>
+                          <FormControl>
+                            <Input {...field} type="password" placeholder="Enter password for login" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

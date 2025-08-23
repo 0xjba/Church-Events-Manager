@@ -4,7 +4,7 @@ import { Trophy, Users, Calendar, BarChart3, Settings, LogOut, CalendarDays } fr
 import { Link, useLocation } from 'react-router-dom';
 
 const Navigation = () => {
-  const { profile, signOut, isAdmin, isJudge, isParticipant } = useAuth();
+  const { profile, signOut, isAdmin, isJudge } = useAuth();
   const location = useLocation();
 
   const navItems = [
@@ -19,10 +19,6 @@ const Navigation = () => {
     ] : []),
     ...(isJudge ? [
       { href: '/judge', icon: Trophy, label: 'My Events', exact: false },
-    ] : []),
-    ...(isParticipant ? [
-      { href: '/participant', icon: Trophy, label: 'My Events', exact: false },
-      { href: '/leaderboard', icon: BarChart3, label: 'Leaderboard', exact: true },
     ] : []),
   ];
 

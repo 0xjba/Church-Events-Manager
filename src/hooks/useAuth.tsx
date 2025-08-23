@@ -19,11 +19,10 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   signIn: (username: string, password: string) => Promise<{ error?: any }>;
-  signUp: (username: string, email: string, password: string, fullName: string, role?: 'admin' | 'judge' | 'participant') => Promise<{ error?: any }>;
+  signUp: (username: string, email: string, password: string, fullName: string, role?: 'admin' | 'judge') => Promise<{ error?: any }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isJudge: boolean;
-  isParticipant: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -148,7 +147,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const signUp = async (username: string, email: string, password: string, fullName: string, role: 'admin' | 'judge' | 'participant' = 'participant') => {
+  const signUp = async (username: string, email: string, password: string, fullName: string, role: 'admin' | 'judge' = 'admin') => {
     try {
       // Clean up existing state
       cleanupAuthState();
@@ -204,7 +203,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     signOut,
     isAdmin: profile?.role === 'admin',
     isJudge: profile?.role === 'judge',
-    isParticipant: profile?.role === 'participant',
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

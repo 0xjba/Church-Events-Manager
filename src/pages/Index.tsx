@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 
 const Index = () => {
-  const { user, profile, loading, isAdmin, isJudge, isParticipant } = useAuth();
+  const { user, profile, loading, isAdmin, isJudge } = useAuth();
 
   if (loading) {
     return (
@@ -24,10 +24,6 @@ const Index = () => {
   
   if (isJudge) {
     return <Navigate to="/judge" replace />;
-  }
-  
-  if (isParticipant) {
-    return <Navigate to="/participant" replace />;
   }
 
   return <Navigate to="/auth" replace />;
