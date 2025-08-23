@@ -4,7 +4,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
-import { Layout, Card, Button, Input, Select, Table, Modal, Badge, Form, Typography, Space, Spin, message } from 'antd';
+import ResponsiveTable from '@/components/ResponsiveTable';
+import { Layout, Card, Button, Input, Select, Modal, Badge, Form, Typography, Space, Spin, message } from 'antd';
 import { Plus, Edit, Trash2, X } from 'lucide-react';
 
 const { Content } = Layout;
@@ -111,7 +112,14 @@ const EventManagement = () => {
             <Text type="secondary">Create and manage competition events</Text>
           </div>
           <Card>
-            <Table columns={columns} dataSource={filteredEvents} loading={loading} rowKey="id" />
+            <ResponsiveTable
+              columns={columns}
+              dataSource={filteredEvents}
+              loading={loading}
+              rowKey="id"
+              cardTitle={(record) => record.name}
+              cardExtra={(record) => <Badge color="blue" text={record.status} />}
+            />
           </Card>
         </Content>
       </Layout>

@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { ResultsCalculator } from '@/utils/resultsCalculator';
 import Navigation from '@/components/Navigation';
-import { Layout, Card, Button, Badge, Table, Modal, Select, Typography, Space, Spin, message } from 'antd';
+import ResponsiveTable from '@/components/ResponsiveTable';
+import { Layout, Card, Button, Badge, Modal, Select, Typography, Space, Spin, message } from 'antd';
 import { Calculator, Eye, EyeOff, Download, FileText, Trophy, RefreshCw } from 'lucide-react';
 import { ExportUtils } from '@/utils/exportUtils';
 
@@ -59,7 +60,13 @@ const ResultsManagement = () => {
             <Text type="secondary">Calculate and publish event results</Text>
           </div>
           <Card>
-            <Table columns={columns} dataSource={events} loading={loading} rowKey="id" />
+            <ResponsiveTable
+              columns={columns}
+              dataSource={events}
+              loading={loading}
+              rowKey="id"
+              cardTitle={(record) => record.name}
+            />
           </Card>
         </Content>
       </Layout>

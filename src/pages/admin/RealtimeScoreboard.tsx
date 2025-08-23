@@ -3,7 +3,8 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useRealtimeScores } from '@/hooks/useRealtimeScores';
 import Navigation from '@/components/Navigation';
-import { Layout, Card, Badge, Button, Table, Typography, Space, Spin, message } from 'antd';
+import ResponsiveTable from '@/components/ResponsiveTable';
+import { Layout, Card, Badge, Button, Typography, Space, Spin, message } from 'antd';
 import { RefreshCw, Lock, Unlock } from 'lucide-react';
 
 const { Content } = Layout;
@@ -55,7 +56,13 @@ const RealtimeScoreboard = () => {
             <Text type="secondary">{event?.name || 'Loading...'}</Text>
           </div>
           <Card>
-            <Table columns={columns} dataSource={scores} loading={loading} rowKey="id" />
+            <ResponsiveTable
+              columns={columns}
+              dataSource={scores}
+              loading={loading || scoresLoading}
+              rowKey="id"
+              cardTitle={(record) => record.participant_name}
+            />
           </Card>
         </Content>
       </Layout>

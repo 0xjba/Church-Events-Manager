@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
-import { Layout, Card, Button, Select, Table, Modal, Badge, Input, Typography, Space, Spin, message } from 'antd';
+import ResponsiveTable from '@/components/ResponsiveTable';
+import { Layout, Card, Button, Select, Modal, Badge, Input, Typography, Space, Spin, message } from 'antd';
 import { Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 
 const { Content } = Layout;
@@ -286,21 +287,18 @@ const JudgeAssignment = () => {
               </Text>
             </div>
 
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                <Spin size="large" />
-              </div>
-            ) : (
-              <Table
-                columns={columns}
-                dataSource={events}
-                rowKey="id"
-                pagination={{ pageSize: 10 }}
-                locale={{
-                  emptyText: 'No events found'
-                }}
-              />
-            )}
+            <ResponsiveTable
+              columns={columns}
+              dataSource={events}
+              loading={loading}
+              rowKey="id"
+              pagination={{ pageSize: 10 }}
+              cardTitle={(record) => record.name}
+              cardExtra={(record) => <Badge status={getStatusColor(record.status)} text={record.status} />}
+              locale={{
+                emptyText: 'No events found'
+              }}
+            />
           </Card>
 
           {/* Assign Judge Modal */}

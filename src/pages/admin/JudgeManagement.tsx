@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
-import { Layout, Card, Button, Input, Form, Table, Modal, message, Spin, Space, Typography } from 'antd';
+import ResponsiveTable from '@/components/ResponsiveTable';
+import { Layout, Card, Button, Input, Form, Modal, message, Spin, Space, Typography } from 'antd';
 import { Plus, Edit, Trash2 } from 'lucide-react';
 
 const { Content } = Layout;
@@ -186,11 +187,12 @@ const JudgeManagement = () => {
               <Text type="secondary">All registered judges</Text>
             </div>
             
-            <Table
+            <ResponsiveTable
               columns={columns}
               dataSource={judges}
               loading={loading}
               rowKey="id"
+              cardTitle={(record) => record.name}
               locale={{
                 emptyText: loading ? <Spin /> : 'No judges registered yet'
               }}
