@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
-import { Layout, Card, Button, Form, Input, Switch, Table, Modal, Badge, Typography, Space, Spin, message } from 'antd';
-import { Plus, Edit, Trash2, Calendar, Trophy } from 'lucide-react';
+import ResponsiveTable from '@/components/ResponsiveTable';
+import { Layout, Card, Button, Form, Input, Switch, Modal, Badge, Typography, Space, Spin, message } from 'antd';
+import { Plus, Edit, Trash2, Trophy } from 'lucide-react';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -272,10 +273,7 @@ const SeasonManagement = () => {
 
           <Card>
             <div style={{ marginBottom: '16px' }}>
-              <Space align="center">
-                <Calendar size={20} />
-                <Title level={4} style={{ margin: 0 }}>Seasons</Title>
-              </Space>
+              <Title level={4} style={{ margin: 0, marginBottom: '8px' }}>Seasons</Title>
               <Text type="secondary">
                 Manage competition seasons and their associated events
               </Text>
@@ -292,11 +290,17 @@ const SeasonManagement = () => {
                 <Text type="secondary">Create your first season to get started.</Text>
               </div>
             ) : (
-              <Table
+              <ResponsiveTable
                 columns={columns}
                 dataSource={seasons}
                 rowKey="id"
                 pagination={{ pageSize: 10 }}
+                cardTitle={(record) => (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 'medium' }}>{record.name}</span>
+                    <Badge color={record.is_active ? 'green' : 'default'} text={record.is_active ? 'Active' : 'Inactive'} />
+                  </div>
+                )}
               />
             )}
           </Card>
