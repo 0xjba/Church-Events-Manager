@@ -6,15 +6,11 @@ import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { usePWA } from '@/hooks/usePWA';
 import Navigation from '@/components/Navigation';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Slider } from '@/components/ui/slider';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Progress } from '@/components/ui/progress';
+import { Layout, Card, Button, Input, Badge, Slider, Modal, Progress, Typography, Space, message, InputNumber } from 'antd';
 import { Clock, Play, Pause, Save, AlertTriangle, CheckCircle, Wifi, WifiOff, Download } from 'lucide-react';
-import { toast } from 'sonner';
+
+const { Content } = Layout;
+const { Title, Text } = Typography;
 
 interface Event {
   id: string;
@@ -84,7 +80,7 @@ const JudgeScoringInterface = () => {
         setTimer(prev => {
           if (prev <= 1) {
             setIsTimerRunning(false);
-            toast.warning("Time's up!");
+            message.warning("Time's up!");
             return 0;
           }
           return prev - 1;
@@ -107,7 +103,7 @@ const JudgeScoringInterface = () => {
       if (error) throw error;
       setJudgeId(data.id);
     } catch (error) {
-      toast.error('Failed to get judge information');
+      message.error('Failed to get judge information');
       navigate('/judge');
     }
   };
@@ -170,7 +166,7 @@ const JudgeScoringInterface = () => {
         setExistingScores(scoresData);
       }
     } catch (error) {
-      toast.error('Failed to load event data');
+      message.error('Failed to load event data');
       navigate('/judge');
     } finally {
       setLoading(false);
@@ -180,13 +176,13 @@ const JudgeScoringInterface = () => {
   const startTimer = () => {
     if (event?.time_limit && timer > 0) {
       setIsTimerRunning(true);
-      toast.success('Timer started!');
+      message.success('Timer started!');
     }
   };
 
   const pauseTimer = () => {
     setIsTimerRunning(false);
-    toast.info('Timer paused');
+    message.info('Timer paused');
   };
 
   const formatTime = (seconds: number) => {
@@ -280,7 +276,7 @@ const JudgeScoringInterface = () => {
 
         if (error) throw error;
         
-        toast.success('Scores submitted successfully!');
+        message.success('Scores submitted successfully!');
       } else {
         // Save scores offline when offline
         const scoresByParticipant = scores.reduce((acc, score) => {
@@ -296,42 +292,44 @@ const JudgeScoringInterface = () => {
           await saveScoreOffline(eventId, participantId, judgeId, participantScores);
         }
         
-        toast.success('Scores saved offline and will sync when online!');
+        message.success('Scores saved offline and will sync when online!');
       }
       
       setShowSubmitDialog(false);
       fetchEventData(); // Refresh to get updated locked status
     } catch (error) {
-      toast.error('Failed to submit scores');
+      message.error('Failed to submit scores');
     }
   };
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <div className="w-64 hidden md:block">
-          <Navigation />
-        </div>
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">Loading...</div>
-        </div>
-      </div>
+      <Layout style={{ minHeight: '100vh' }}>
+        <Navigation />
+        <Layout style={{ marginLeft: '256px' }}>
+          <Content style={{ padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ textAlign: 'center' }}>Loading...</div>
+          </Content>
+        </Layout>
+      </Layout>
     );
   }
 
   if (!event || participants.length === 0) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <div className="w-64 hidden md:block">
-          <Navigation />
-        </div>
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-muted-foreground mb-4">No participants found for this event</p>
-            <Button onClick={() => navigate('/judge')}>Back to Dashboard</Button>
-          </div>
-        </div>
-      </div>
+      <Layout style={{ minHeight: '100vh' }}>
+        <Navigation />
+        <Layout style={{ marginLeft: '256px' }}>
+          <Content style={{ padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ textAlign: 'center' }}>
+              <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
+                No participants found for this event
+              </Text>
+              <Button onClick={() => navigate('/judge')}>Back to Dashboard</Button>
+            </div>
+          </Content>
+        </Layout>
+      </Layout>
     );
   }
 
@@ -340,61 +338,56 @@ const JudgeScoringInterface = () => {
   const isCurrentLocked = isParticipantLocked(currentParticipant.id);
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <div className="w-64 hidden md:block">
-        <Navigation />
-      </div>
-      
-      <div className="flex-1 pb-16 md:pb-0">
-        <div className="p-4 md:p-6">
+    <Layout style={{ minHeight: '100vh' }}>
+      <Navigation />
+      <Layout style={{ marginLeft: '256px' }}>
+        <Content style={{ padding: '24px' }}>
           {/* Header */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+                <Title level={2} style={{ margin: 0, marginBottom: '4px' }}>
                   {event.name}
-                </h1>
-                <p className="text-muted-foreground">
+                </Title>
+                <Text type="secondary">
                   Scoring Event • {participants.length} Participants
-                </p>
+                </Text>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant={event.status === 'active' ? 'default' : 'secondary'}>
+              <Space>
+                <Badge color={event.status === 'active' ? 'green' : 'default'}>
                   {event.status}
                 </Badge>
                 
                 {/* Network Status */}
-                <div className="flex items-center gap-1">
+                <Space size={4}>
                   {isOnline ? (
-                    <Wifi className="h-4 w-4 text-green-500" />
+                    <Wifi size={16} color="green" />
                   ) : (
-                    <WifiOff className="h-4 w-4 text-red-500" />
+                    <WifiOff size={16} color="red" />
                   )}
-                  <span className="text-xs text-muted-foreground hidden sm:inline">
+                  <Text type="secondary" style={{ fontSize: '12px' }}>
                     {isOnline ? 'Online' : 'Offline'}
-                  </span>
-                </div>
+                  </Text>
+                </Space>
                 
                 {/* Unsynced count */}
                 {unsyncedCount > 0 && (
-                  <Badge variant="outline" className="text-xs">
-                    {unsyncedCount} unsynced
+                  <Badge count={unsyncedCount} style={{ backgroundColor: 'orange' }}>
+                    <Text style={{ fontSize: '12px' }}>unsynced</Text>
                   </Badge>
                 )}
                 
                 {/* PWA Install */}
                 {isInstallable && (
                   <Button
-                    size="sm"
-                    variant="outline"
+                    size="small"
                     onClick={installApp}
-                    className="hidden sm:flex"
+                    icon={<Download size={16} />}
                   >
-                    <Download className="h-4 w-4 mr-1" />
                     Install
                   </Button>
                 )}
-              </div>
+              </Space>
             </div>
           </div>
 
@@ -403,100 +396,103 @@ const JudgeScoringInterface = () => {
 
           {/* Timer */}
           {event.time_limit && (
-            <Card className="mb-6">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <Clock className="h-5 w-5 text-primary" />
-                    <span className="text-2xl font-mono">
+            <Card style={{ marginBottom: '24px' }}>
+              <div style={{ padding: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Space size={12}>
+                    <Clock size={20} color="#1890ff" />
+                    <Text style={{ fontSize: '24px', fontFamily: 'monospace' }}>
                       {formatTime(timer)}
-                    </span>
+                    </Text>
                     {timer <= 60 && timer > 0 && (
-                      <Badge variant="destructive" className="animate-pulse">
-                        <AlertTriangle className="h-3 w-3 mr-1" />
+                      <Badge color="red" style={{ animation: 'pulse 1s infinite' }}>
+                        <AlertTriangle size={12} style={{ marginRight: '4px' }} />
                         Time Running Out!
                       </Badge>
                     )}
-                  </div>
-                  <div className="flex space-x-2">
+                  </Space>
+                  <Space>
                     {!isTimerRunning ? (
                       <Button 
                         onClick={startTimer} 
                         disabled={timer === 0}
-                        size="sm"
+                        size="small"
+                        icon={<Play size={16} />}
                       >
-                        <Play className="h-4 w-4 mr-1" />
                         Start
                       </Button>
                     ) : (
-                      <Button onClick={pauseTimer} variant="outline" size="sm">
-                        <Pause className="h-4 w-4 mr-1" />
+                      <Button 
+                        onClick={pauseTimer} 
+                        size="small"
+                        icon={<Pause size={16} />}
+                      >
                         Pause
                       </Button>
                     )}
-                  </div>
+                  </Space>
                 </div>
-              </CardContent>
+              </div>
             </Card>
           )}
 
           {/* Progress */}
-          <Card className="mb-6">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">
+          <Card style={{ marginBottom: '24px' }}>
+            <div style={{ padding: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <Text strong style={{ fontSize: '14px' }}>
                   Participant {currentParticipantIndex + 1} of {participants.length}
-                </span>
-                <span className="text-sm text-muted-foreground">
+                </Text>
+                <Text type="secondary" style={{ fontSize: '14px' }}>
                   {Math.round(progress)}% Complete
-                </span>
+                </Text>
               </div>
-              <Progress value={progress} className="h-2" />
-            </CardContent>
+              <Progress percent={progress} showInfo={false} />
+            </div>
           </Card>
 
           {/* Current Participant */}
-          <Card className="mb-6">
-            <CardHeader>
-              <div className="flex items-center justify-between">
+          <Card style={{ marginBottom: '24px' }}>
+            <div style={{ padding: '24px 24px 0 24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <CardTitle className="flex items-center space-x-2">
-                    <span>#{currentParticipant.chest_number}</span>
-                    <span>{currentParticipant.full_name}</span>
-                    {isCurrentLocked && (
-                      <Badge variant="secondary">
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Locked
-                      </Badge>
-                    )}
-                  </CardTitle>
-                  <CardDescription>
+                  <Title level={4} style={{ margin: 0, marginBottom: '4px' }}>
+                    <Space>
+                      <span>#{currentParticipant.chest_number}</span>
+                      <span>{currentParticipant.full_name}</span>
+                      {isCurrentLocked && (
+                        <Badge color="default">
+                          <CheckCircle size={12} style={{ marginRight: '4px' }} />
+                          Locked
+                        </Badge>
+                      )}
+                    </Space>
+                  </Title>
+                  <Text type="secondary">
                     {currentParticipant.category} • {currentParticipant.church}
-                  </CardDescription>
+                  </Text>
                 </div>
-                <div className="flex space-x-2">
+                <Space>
                   <Button 
                     onClick={previousParticipant}
                     disabled={currentParticipantIndex === 0}
-                    variant="outline"
-                    size="sm"
+                    size="small"
                   >
                     Previous
                   </Button>
                   <Button 
                     onClick={nextParticipant}
                     disabled={currentParticipantIndex === participants.length - 1}
-                    variant="outline"
-                    size="sm"
+                    size="small"
                   >
                     Next
                   </Button>
-                </div>
+                </Space>
               </div>
-            </CardHeader>
-            <CardContent>
+            </div>
+            <div style={{ padding: '24px' }}>
               {/* Scoring Criteria */}
-              <div className="space-y-6">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 {criteria.map((criterion) => {
                   const currentScore = getScoreForCriteria(currentParticipant.id, criterion.id);
                   const isLocked = existingScores.some(s => 
@@ -506,37 +502,36 @@ const JudgeScoringInterface = () => {
                   );
                   
                   return (
-                    <div key={criterion.id} className="space-y-3">
-                      <div className="flex justify-between items-center">
+                    <div key={criterion.id} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <h4 className="font-medium">{criterion.name}</h4>
-                          <p className="text-sm text-muted-foreground">
+                          <Text strong style={{ display: 'block' }}>{criterion.name}</Text>
+                          <Text type="secondary" style={{ fontSize: '12px' }}>
                             Max: {criterion.max_score} • Weight: {criterion.weight}x
-                          </p>
+                          </Text>
                         </div>
-                        <div className="flex items-center space-x-3">
-                          <Input
-                            type="number"
-                            min="0"
+                        <Space>
+                          <InputNumber
+                            min={0}
                             max={criterion.max_score}
                             value={currentScore}
-                            onChange={(e) => updateScore(
+                            onChange={(value) => updateScore(
                               currentParticipant.id,
                               criterion.id,
-                              parseInt(e.target.value) || 0
+                              value || 0
                             )}
                             disabled={isLocked}
-                            className="w-20 text-center"
+                            style={{ width: '80px' }}
                           />
-                          <span className="text-sm text-muted-foreground">
+                          <Text type="secondary" style={{ fontSize: '12px' }}>
                             /{criterion.max_score}
-                          </span>
-                        </div>
+                          </Text>
+                        </Space>
                       </div>
                       
                       <Slider
-                        value={[currentScore]}
-                        onValueChange={([value]) => updateScore(
+                        value={currentScore}
+                        onChange={(value) => updateScore(
                           currentParticipant.id,
                           criterion.id,
                           value
@@ -545,84 +540,78 @@ const JudgeScoringInterface = () => {
                         min={0}
                         step={1}
                         disabled={isLocked}
-                        className="w-full"
                       />
                     </div>
                   );
                 })}
               </div>
-            </CardContent>
+            </div>
           </Card>
 
           {/* Action Buttons */}
-          <div className="flex justify-between">
-            <Button 
-              onClick={() => navigate('/judge')}
-              variant="outline"
-            >
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Button onClick={() => navigate('/judge')}>
               Back to Dashboard
             </Button>
             
             <Button 
               onClick={() => setShowSubmitDialog(true)}
               disabled={scores.length === 0}
-              className="bg-green-600 hover:bg-green-700"
+              type="primary"
+              icon={<Save size={16} />}
+              style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
             >
-              <Save className="h-4 w-4 mr-2" />
               Submit Scores
             </Button>
           </div>
-        </div>
-      </div>
-
-      <div className="md:hidden">
-        <Navigation />
-      </div>
+        </Content>
+      </Layout>
 
       {/* Submit Confirmation Dialog */}
-      <Dialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Submit Scores</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to submit your scores? Once submitted, they will be locked and cannot be changed unless unlocked by an admin.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <div className="text-sm">
-              <p className="font-medium mb-2">Scores to submit:</p>
-              <ul className="space-y-1 text-muted-foreground">
-                {scores.map(score => {
-                  const participant = participants.find(p => p.id === score.participant_id);
-                  const criterion = criteria.find(c => c.id === score.criteria_id);
-                  return (
-                    <li key={`${score.participant_id}-${score.criteria_id}`}>
+      <Modal
+        title="Submit Scores"
+        open={showSubmitDialog}
+        onCancel={() => setShowSubmitDialog(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setShowSubmitDialog(false)}>
+            Cancel
+          </Button>,
+          <Button 
+            key="submit" 
+            type="primary"
+            onClick={submitScores}
+            style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+          >
+            Confirm Submit
+          </Button>
+        ]}
+      >
+        <div style={{ marginBottom: '16px' }}>
+          <Text>
+            Are you sure you want to submit your scores? Once submitted, they will be locked and cannot be changed unless unlocked by an admin.
+          </Text>
+        </div>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <Text strong style={{ display: 'block', marginBottom: '8px' }}>Scores to submit:</Text>
+            <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {scores.map(score => {
+                const participant = participants.find(p => p.id === score.participant_id);
+                const criterion = criteria.find(c => c.id === score.criteria_id);
+                return (
+                  <li key={`${score.participant_id}-${score.criteria_id}`}>
+                    <Text type="secondary" style={{ fontSize: '14px' }}>
                       {participant?.full_name} - {criterion?.name}: {score.score}/{criterion?.max_score}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-            
-            <div className="flex justify-end space-x-2">
-              <Button 
-                variant="outline" 
-                onClick={() => setShowSubmitDialog(false)}
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={submitScores}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                Confirm Submit
-              </Button>
-            </div>
+                    </Text>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+        </div>
+      </Modal>
+    </Layout>
   );
 };
 

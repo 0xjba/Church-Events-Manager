@@ -13,7 +13,7 @@ const RealtimeScoreboard = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const { scores, refreshScores } = useRealtimeScores(eventId || '');
+  const { scores, loading: scoresLoading, refetch } = useRealtimeScores({ eventId });
 
   useEffect(() => {
     if (eventId) {
