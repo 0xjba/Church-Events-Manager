@@ -85,70 +85,128 @@ async function handleLogin(req: Request) {
     );
   }
 
-  // Find participant by username
-  const { data: participant, error: findError } = await supabase
+  // Try to find participant first
+  const { data: participant, error: participantError } = await supabase
     .from('participants')
     .select('*')
     .eq('username', username)
     .eq('is_active', true)
     .single();
 
-  if (findError || !participant) {
-    console.log('Participant not found:', username);
-    return new Response(
-      JSON.stringify({ error: 'Invalid credentials' }),
-      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
+  if (participant && !participantError) {
+    // Verify password for participant
+    const passwordValid = await comparePassword(password, participant.password_hash);
+    if (!passwordValid) {
+      console.log('Invalid password for participant:', username);
+      return new Response(
+        JSON.stringify({ error: 'Invalid credentials' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-  // Verify password
-  const passwordValid = await comparePassword(password, participant.password_hash);
-  if (!passwordValid) {
-    console.log('Invalid password for:', username);
-    return new Response(
-      JSON.stringify({ error: 'Invalid credentials' }),
-      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
+    // Update login stats for participant
+    await supabase
+      .from('participants')
+      .update({
+        last_login: new Date().toISOString(),
+        login_count: (participant.login_count || 0) + 1
+      })
+      .eq('id', participant.id);
 
-  // Update login stats
-  await supabase
-    .from('participants')
-    .update({
-      last_login: new Date().toISOString(),
-      login_count: (participant.login_count || 0) + 1
-    })
-    .eq('id', participant.id);
-
-  // Generate JWT token
-  const token = await create(
-    { alg: 'HS256', typ: 'JWT' },
-    {
-      sub: participant.id,
-      username: participant.username,
-      role: 'participant',
-      full_name: participant.full_name,
-      category: participant.category,
-      exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60), // 24 hours
-    },
-    JWT_SECRET
-  );
-
-  return new Response(
-    JSON.stringify({
-      token,
-      participant: {
-        id: participant.id,
+    // Generate JWT token for participant
+    const token = await create(
+      { alg: 'HS256', typ: 'JWT' },
+      {
+        sub: participant.id,
         username: participant.username,
+        role: 'participant',
         full_name: participant.full_name,
-        age: participant.age,
-        chest_number: participant.chest_number,
         category: participant.category,
-        church: participant.church,
-        district: participant.district,
-      }
-    }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60), // 24 hours
+      },
+      JWT_SECRET
+    );
+
+    return new Response(
+      JSON.stringify({
+        token,
+        participant: {
+          id: participant.id,
+          username: participant.username,
+          full_name: participant.full_name,
+          age: participant.age,
+          chest_number: participant.chest_number,
+          category: participant.category,
+          church: participant.church,
+          district: participant.district,
+        }
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Try to find judge if participant not found
+  const { data: judge, error: judgeError } = await supabase
+    .from('judges')
+    .select('*')
+    .eq('username', username)
+    .eq('is_active', true)
+    .single();
+
+  if (judge && !judgeError) {
+    // Verify password for judge
+    const passwordValid = await comparePassword(password, judge.password_hash);
+    if (!passwordValid) {
+      console.log('Invalid password for judge:', username);
+      return new Response(
+        JSON.stringify({ error: 'Invalid credentials' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Update login stats for judge
+    await supabase
+      .from('judges')
+      .update({
+        last_login: new Date().toISOString(),
+        login_count: (judge.login_count || 0) + 1
+      })
+      .eq('id', judge.id);
+
+    // Generate JWT token for judge
+    const token = await create(
+      { alg: 'HS256', typ: 'JWT' },
+      {
+        sub: judge.id,
+        username: judge.username,
+        role: 'judge',
+        full_name: judge.full_name,
+        church: judge.church,
+        exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60), // 24 hours
+      },
+      JWT_SECRET
+    );
+
+    return new Response(
+      JSON.stringify({
+        token,
+        judge: {
+          id: judge.id,
+          username: judge.username,
+          full_name: judge.full_name,
+          email: judge.email,
+          church: judge.church,
+        }
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Neither participant nor judge found
+  console.log('User not found:', username);
+  return new Response(
+    JSON.stringify({ error: 'Invalid credentials' }),
+    { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }
 
@@ -167,29 +225,51 @@ async function handleVerify(req: Request) {
   try {
     const payload = await verify(token, JWT_SECRET);
     
-    if (!payload.sub || payload.role !== 'participant') {
+    if (!payload.sub || (payload.role !== 'participant' && payload.role !== 'judge')) {
       throw new Error('Invalid token');
     }
 
-    // Verify participant still exists and is active
-    const { data: participant, error } = await supabase
-      .from('participants')
-      .select('id, username, full_name, age, chest_number, category, church, district, is_active')
-      .eq('id', payload.sub)
-      .eq('is_active', true)
-      .single();
+    if (payload.role === 'participant') {
+      // Verify participant still exists and is active
+      const { data: participant, error } = await supabase
+        .from('participants')
+        .select('id, username, full_name, age, chest_number, category, church, district, is_active')
+        .eq('id', payload.sub)
+        .eq('is_active', true)
+        .single();
 
-    if (error || !participant) {
-      throw new Error('Participant not found or inactive');
+      if (error || !participant) {
+        throw new Error('Participant not found or inactive');
+      }
+
+      return new Response(
+        JSON.stringify({
+          valid: true,
+          participant
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } else if (payload.role === 'judge') {
+      // Verify judge still exists and is active
+      const { data: judge, error } = await supabase
+        .from('judges')
+        .select('id, username, full_name, email, church, is_active')
+        .eq('id', payload.sub)
+        .eq('is_active', true)
+        .single();
+
+      if (error || !judge) {
+        throw new Error('Judge not found or inactive');
+      }
+
+      return new Response(
+        JSON.stringify({
+          valid: true,
+          judge
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
-
-    return new Response(
-      JSON.stringify({
-        valid: true,
-        participant
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
   } catch (error) {
     console.log('Token verification failed:', error.message);
     return new Response(
