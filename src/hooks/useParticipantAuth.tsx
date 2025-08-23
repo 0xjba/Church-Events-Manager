@@ -5,11 +5,13 @@ interface ParticipantData {
   id: string;
   username: string;
   full_name: string;
-  age: number;
-  chest_number: string;
-  category: 'children' | 'teens' | 'youth' | 'adults';
+  age?: number;
+  chest_number?: string;
+  category?: 'children' | 'teens' | 'youth' | 'adults';
   church: string;
-  district: string;
+  district?: string;
+  email?: string;
+  role?: 'participant' | 'judge'; // Add role to distinguish between participant and judge
 }
 
 interface ParticipantAuthContextType {
@@ -56,7 +58,12 @@ export const ParticipantAuthProvider = ({ children }: { children: React.ReactNod
         localStorage.removeItem('participant_token');
         setParticipant(null);
       } else {
-        setParticipant(data.participant);
+        // Handle both participant and judge data
+        if (data.participant) {
+          setParticipant({ ...data.participant, role: 'participant' });
+        } else if (data.judge) {
+          setParticipant({ ...data.judge, role: 'judge' });
+        }
       }
     } catch (error) {
       console.error('Token verification failed:', error);
@@ -77,13 +84,18 @@ export const ParticipantAuthProvider = ({ children }: { children: React.ReactNod
         return { error: data?.error || error };
       }
 
-      // Store token and participant data
+      // Store token and user data (participant or judge)
       localStorage.setItem('participant_token', data.token);
-      setParticipant(data.participant);
+      
+      if (data.participant) {
+        setParticipant({ ...data.participant, role: 'participant' });
+      } else if (data.judge) {
+        setParticipant({ ...data.judge, role: 'judge' });
+      }
       
       return {};
     } catch (error) {
-      console.error('Participant sign in failed:', error);
+      console.error('Auth sign in failed:', error);
       return { error: 'Failed to sign in' };
     }
   };

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useParticipantAuth } from '@/hooks/useParticipantAuth';
 import { Button, Input, Card, Form, Alert, Typography, Row, Col, Spin, message } from 'antd';
-import { Trophy, Users, UserCheck } from 'lucide-react';
+import { Trophy, Users, UserCheck, Gavel } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const { Title, Text } = Typography;
@@ -14,7 +14,7 @@ const Auth = () => {
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [userType, setUserType] = useState<'admin' | 'participant'>('admin');
+  const [userType, setUserType] = useState<'admin' | 'judge' | 'participant'>('admin');
 
   // Redirect authenticated users away from auth page
   useEffect(() => {
@@ -22,7 +22,12 @@ const Auth = () => {
       navigate('/', { replace: true });
     }
     if (participant && !participantLoading) {
-      navigate('/participant', { replace: true });
+      // Check if this is a judge or participant based on the participant object
+      if (participant.role === 'judge') {
+        navigate('/judge', { replace: true });
+      } else {
+        navigate('/participant', { replace: true });
+      }
     }
   }, [adminUser, participant, adminLoading, participantLoading, navigate]);
 
@@ -37,6 +42,23 @@ const Auth = () => {
       message.error(error.message || 'Please check your credentials');
     } else {
       message.success('Signed in successfully!');
+    }
+    
+    setIsLoading(false);
+  };
+
+  const handleJudgeSignIn = async (values: { username: string; password: string }) => {
+    setIsLoading(true);
+    setError('');
+
+    const { error } = await participantSignIn(values.username, values.password);
+    
+    if (error) {
+      setError(error.message || error || 'Failed to sign in');
+      message.error(error.message || error || 'Please check your credentials');
+    } else {
+      message.success('Signed in successfully!');
+      navigate('/judge', { replace: true });
     }
     
     setIsLoading(false);
@@ -85,8 +107,8 @@ const Auth = () => {
             Choose your account type to continue
           </Text>
           
-          <Row gutter={16}>
-            <Col span={12}>
+          <Row gutter={[8, 8]}>
+            <Col span={8}>
               <Card
                 hoverable
                 size="small"
@@ -97,12 +119,28 @@ const Auth = () => {
                 }}
                 onClick={() => setUserType('admin')}
               >
-                <Users size={32} color="#8b5cf6" style={{ marginBottom: '8px' }} />
-                <div style={{ fontWeight: 'medium' }}>Admin/Judge</div>
-                <Text type="secondary" style={{ fontSize: '12px' }}>Staff Members</Text>
+                <Users size={24} color="#8b5cf6" style={{ marginBottom: '4px' }} />
+                <div style={{ fontWeight: 'medium', fontSize: '14px' }}>Admin</div>
+                <Text type="secondary" style={{ fontSize: '11px' }}>System Admin</Text>
               </Card>
             </Col>
-            <Col span={12}>
+            <Col span={8}>
+              <Card
+                hoverable
+                size="small"
+                style={{
+                  textAlign: 'center',
+                  border: userType === 'judge' ? '2px solid #8b5cf6' : '1px solid #d9d9d9',
+                  backgroundColor: userType === 'judge' ? '#f3f0ff' : 'white',
+                }}
+                onClick={() => setUserType('judge')}
+              >
+                <Gavel size={24} color="#8b5cf6" style={{ marginBottom: '4px' }} />
+                <div style={{ fontWeight: 'medium', fontSize: '14px' }}>Judge</div>
+                <Text type="secondary" style={{ fontSize: '11px' }}>Event Judge</Text>
+              </Card>
+            </Col>
+            <Col span={8}>
               <Card
                 hoverable
                 size="small"
@@ -113,9 +151,9 @@ const Auth = () => {
                 }}
                 onClick={() => setUserType('participant')}
               >
-                <UserCheck size={32} color="#8b5cf6" style={{ marginBottom: '8px' }} />
-                <div style={{ fontWeight: 'medium' }}>Participant</div>
-                <Text type="secondary" style={{ fontSize: '12px' }}>Contestants</Text>
+                <UserCheck size={24} color="#8b5cf6" style={{ marginBottom: '4px' }} />
+                <div style={{ fontWeight: 'medium', fontSize: '14px' }}>Participant</div>
+                <Text type="secondary" style={{ fontSize: '11px' }}>Contestant</Text>
               </Card>
             </Col>
           </Row>
@@ -123,12 +161,63 @@ const Auth = () => {
 
         {userType === 'admin' && (
           <Card>
-            <Title level={4} style={{ marginBottom: '8px' }}>Admin/Judge Sign In</Title>
+            <Title level={4} style={{ marginBottom: '8px' }}>Admin Sign In</Title>
             <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
-              Enter your credentials to access PYPA admin panel
+              Enter your admin credentials to access PYPA admin panel
             </Text>
             
             <Form onFinish={handleAdminSignIn} layout="vertical">
+              <Form.Item
+                label="Email"
+                name="username"
+                rules={[{ required: true, message: 'Please enter your email' }]}
+              >
+                <Input placeholder="Enter your email" />
+              </Form.Item>
+              
+              <Form.Item
+                label="Password"
+                name="password"
+                rules={[{ required: true, message: 'Please enter your password' }]}
+              >
+                <Input.Password placeholder="Enter your password" />
+              </Form.Item>
+              
+              {error && (
+                <Alert
+                  message={error}
+                  type="error"
+                  style={{ marginBottom: '16px' }}
+                />
+              )}
+
+              <Form.Item>
+                <Button type="primary" htmlType="submit" loading={isLoading} block>
+                  Sign In as Admin
+                </Button>
+              </Form.Item>
+            </Form>
+
+            <Alert
+              message={
+                <div>
+                  <strong>Need an admin account?</strong> Contact your system administrator to create admin accounts.
+                </div>
+              }
+              type="info"
+              showIcon={false}
+            />
+          </Card>
+        )}
+
+        {userType === 'judge' && (
+          <Card>
+            <Title level={4} style={{ marginBottom: '8px' }}>Judge Sign In</Title>
+            <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
+              Enter your judge credentials to access PYPA judge panel
+            </Text>
+            
+            <Form onFinish={handleJudgeSignIn} layout="vertical">
               <Form.Item
                 label="Username"
                 name="username"
@@ -155,7 +244,7 @@ const Auth = () => {
 
               <Form.Item>
                 <Button type="primary" htmlType="submit" loading={isLoading} block>
-                  Sign In
+                  Sign In as Judge
                 </Button>
               </Form.Item>
             </Form>
@@ -163,7 +252,7 @@ const Auth = () => {
             <Alert
               message={
                 <div>
-                  <strong>Need an admin account?</strong> Contact your system administrator to create admin or judge accounts.
+                  <strong>Don't have judge credentials?</strong> Contact your administrator to create your judge account.
                 </div>
               }
               type="info"
