@@ -165,142 +165,63 @@ const Auth = () => {
         </Card>
 
         {userType === 'admin' && (
-          <Tabs defaultValue="signin" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
-            </TabsList>
+          <Card>
+            <CardHeader>
+              <CardTitle>Admin/Judge Sign In</CardTitle>
+              <CardDescription>
+                Enter your credentials to access PYPA admin panel
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleAdminSignIn} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="admin-signin-username">Username</Label>
+                  <Input
+                    id="admin-signin-username"
+                    type="text"
+                    placeholder="Enter your username"
+                    value={adminSignInData.username}
+                    onChange={(e) => setAdminSignInData({ ...adminSignInData, username: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="admin-signin-password">Password</Label>
+                  <Input
+                    id="admin-signin-password"
+                    type="password"
+                    placeholder="Enter your password"
+                    value={adminSignInData.password}
+                    onChange={(e) => setAdminSignInData({ ...adminSignInData, password: e.target.value })}
+                    required
+                  />
+                </div>
+                
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
 
-            <TabsContent value="signin">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Admin/Judge Sign In</CardTitle>
-                  <CardDescription>
-                    Enter your email credentials to access PYPA
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleAdminSignIn} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="admin-signin-username">Username</Label>
-                      <Input
-                        id="admin-signin-username"
-                        type="text"
-                        placeholder="Enter your username"
-                        value={adminSignInData.username}
-                        onChange={(e) => setAdminSignInData({ ...adminSignInData, username: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="admin-signin-password">Password</Label>
-                      <Input
-                        id="admin-signin-password"
-                        type="password"
-                        placeholder="Enter your password"
-                        value={adminSignInData.password}
-                        onChange={(e) => setAdminSignInData({ ...adminSignInData, password: e.target.value })}
-                        required
-                      />
-                    </div>
-                    
-                    {error && (
-                      <Alert variant="destructive">
-                        <AlertDescription>{error}</AlertDescription>
-                      </Alert>
-                    )}
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Signing In...
+                    </>
+                  ) : (
+                    'Sign In'
+                  )}
+                </Button>
+              </form>
 
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Signing In...
-                        </>
-                      ) : (
-                        'Sign In'
-                      )}
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="signup">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Create Admin Account</CardTitle>
-                  <CardDescription>
-                    Register as a new administrator for PYPA
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleAdminSignUp} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="admin-signup-username">Username</Label>
-                      <Input
-                        id="admin-signup-username"
-                        type="text"
-                        placeholder="Choose a username"
-                        value={adminSignUpData.username}
-                        onChange={(e) => setAdminSignUpData({ ...adminSignUpData, username: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="admin-signup-email">Email Address</Label>
-                      <Input
-                        id="admin-signup-email"
-                        type="email"
-                        placeholder="Enter your email address"
-                        value={adminSignUpData.email}
-                        onChange={(e) => setAdminSignUpData({ ...adminSignUpData, email: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="admin-signup-fullname">Full Name</Label>
-                      <Input
-                        id="admin-signup-fullname"
-                        type="text"
-                        placeholder="Enter your full name"
-                        value={adminSignUpData.fullName}
-                        onChange={(e) => setAdminSignUpData({ ...adminSignUpData, fullName: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="admin-signup-password">Password</Label>
-                      <Input
-                        id="admin-signup-password"
-                        type="password"
-                        placeholder="Create a password"
-                        value={adminSignUpData.password}
-                        onChange={(e) => setAdminSignUpData({ ...adminSignUpData, password: e.target.value })}
-                        required
-                      />
-                    </div>
-                    
-                    {error && (
-                      <Alert variant="destructive">
-                        <AlertDescription>{error}</AlertDescription>
-                      </Alert>
-                    )}
-
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Creating Account...
-                        </>
-                      ) : (
-                        'Create Account'
-                      )}
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+              <div className="mt-4 p-3 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  <strong>Need an admin account?</strong> Contact your system administrator to create admin or judge accounts.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {userType === 'participant' && (
