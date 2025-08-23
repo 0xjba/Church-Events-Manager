@@ -32,48 +32,51 @@ const Navigation = () => {
   }));
 
   return (
-    <Sider 
-      width={256} 
-      theme="light"
-      className="hidden md:block"
-      style={{ 
-        height: '100vh', 
-        position: 'fixed', 
-        left: 0, 
-        top: 0,
-        borderRight: '1px solid #f0f0f0'
-      }}
-    >
-      <div style={{ padding: '16px', borderBottom: '1px solid #f0f0f0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-          <Trophy size={24} style={{ color: '#8b5cf6', marginRight: '8px' }} />
-          <Text strong style={{ fontSize: '18px' }}>PYPA</Text>
+    <>
+      {/* Desktop Sidebar */}
+      <Sider 
+        width={256} 
+        theme="light"
+        className="hidden md:block"
+        style={{ 
+          height: '100vh', 
+          position: 'fixed', 
+          left: 0, 
+          top: 0,
+          borderRight: '1px solid #f0f0f0'
+        }}
+      >
+        <div style={{ padding: '16px', borderBottom: '1px solid #f0f0f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+            <Trophy size={24} style={{ color: '#8b5cf6', marginRight: '8px' }} />
+            <Text strong style={{ fontSize: '18px' }}>PYPA</Text>
+          </div>
+          <Text type="secondary" style={{ fontSize: '14px', display: 'block' }}>
+            {profile?.full_name}
+          </Text>
+          <Text type="secondary" style={{ fontSize: '12px', textTransform: 'capitalize' }}>
+            {profile?.role}
+          </Text>
         </div>
-        <Text type="secondary" style={{ fontSize: '14px', display: 'block' }}>
-          {profile?.full_name}
-        </Text>
-        <Text type="secondary" style={{ fontSize: '12px', textTransform: 'capitalize' }}>
-          {profile?.role}
-        </Text>
-      </div>
 
-      <Menu
-        mode="inline"
-        selectedKeys={[location.pathname]}
-        items={menuItems}
-        style={{ border: 'none' }}
-      />
+        <Menu
+          mode="inline"
+          selectedKeys={[location.pathname]}
+          items={menuItems}
+          style={{ border: 'none' }}
+        />
 
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px', borderTop: '1px solid #f0f0f0' }}>
-        <Button
-          type="text"
-          icon={<LogOut size={16} />}
-          onClick={signOut}
-          style={{ width: '100%', justifyContent: 'flex-start' }}
-        >
-          Sign Out
-        </Button>
-      </div>
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px', borderTop: '1px solid #f0f0f0' }}>
+          <Button
+            type="text"
+            icon={<LogOut size={16} />}
+            onClick={signOut}
+            style={{ width: '100%', justifyContent: 'flex-start' }}
+          >
+            Sign Out
+          </Button>
+        </div>
+      </Sider>
 
       {/* Mobile Navigation (Bottom Bar) */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t z-50">
@@ -102,7 +105,7 @@ const Navigation = () => {
           ))}
         </div>
       </div>
-    </Sider>
+    </>
   );
 };
 

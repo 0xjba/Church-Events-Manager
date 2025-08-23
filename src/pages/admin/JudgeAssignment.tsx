@@ -263,8 +263,8 @@ const JudgeAssignment = () => {
     <Layout style={{ minHeight: '100vh' }}>
       <Navigation />
       
-      <Layout style={{ marginLeft: '256px' }}>
-        <Content style={{ padding: '16px 24px', paddingBottom: '80px' }}>
+      <Layout className="md:ml-64">
+        <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
           <div style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div>

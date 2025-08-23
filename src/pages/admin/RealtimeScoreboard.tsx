@@ -48,8 +48,8 @@ const RealtimeScoreboard = () => {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Navigation />
-      <Layout style={{ marginLeft: '256px' }}>
-        <Content style={{ padding: '16px 24px' }}>
+      <Layout className="md:ml-64">
+        <Content style={{ padding: '16px' }} className="md:px-6">
           <div style={{ marginBottom: '24px' }}>
             <Title level={2}>Realtime Scoreboard</Title>
             <Text type="secondary">{event?.name || 'Loading...'}</Text>

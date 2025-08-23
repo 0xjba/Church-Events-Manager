@@ -104,8 +104,8 @@ const EventManagement = () => {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Navigation />
-      <Layout style={{ marginLeft: '256px' }}>
-        <Content style={{ padding: '16px 24px', paddingBottom: '80px' }}>
+      <Layout className="md:ml-64">
+        <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
           <div style={{ marginBottom: '24px' }}>
             <Title level={2}>Event Management</Title>
             <Text type="secondary">Create and manage competition events</Text>

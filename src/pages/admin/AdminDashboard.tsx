@@ -42,7 +42,7 @@ const AdminDashboard = () => {
     <Layout style={{ minHeight: '100vh' }}>
       <Navigation />
       
-      <Layout style={{ marginLeft: '256px' }}>
+      <Layout className="md:ml-64">
         {/* Mobile header */}
         <Header 
           className="md:hidden" 
@@ -75,7 +75,7 @@ const AdminDashboard = () => {
           </Button>
         </Header>
         
-        <Content style={{ padding: '16px 24px', paddingBottom: '80px' }}>
+        <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
           <div style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <Title level={2} style={{ margin: 0 }}>
