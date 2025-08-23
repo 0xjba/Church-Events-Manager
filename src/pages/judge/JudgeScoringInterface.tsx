@@ -91,21 +91,12 @@ const JudgeScoringInterface = () => {
   }, [isTimerRunning, timer]);
 
   const fetchJudgeId = async () => {
-    if (!profile?.id) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('judges')
-        .select('id')
-        .eq('profile_id', profile.id)
-        .single();
-        
-      if (error) throw error;
-      setJudgeId(data.id);
-    } catch (error) {
-      message.error('Failed to get judge information');
-      navigate('/judge');
-    }
+    // Since judges now use separate authentication like participants,
+    // the judge ID will need to be passed from the login process
+    // For now, we'll need to implement judge authentication through the participant-auth edge function
+    console.log('Judge authentication needs to be implemented through participant-auth system');
+    // Temporary: navigate back since this needs proper authentication
+    navigate('/judge');
   };
 
   const fetchEventData = async () => {

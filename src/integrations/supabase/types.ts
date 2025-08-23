@@ -220,7 +220,6 @@ export type Database = {
           last_login: string | null
           login_count: number | null
           password_hash: string | null
-          profile_id: string
           updated_at: string
           username: string | null
         }
@@ -236,7 +235,6 @@ export type Database = {
           last_login?: string | null
           login_count?: number | null
           password_hash?: string | null
-          profile_id: string
           updated_at?: string
           username?: string | null
         }
@@ -252,19 +250,10 @@ export type Database = {
           last_login?: string | null
           login_count?: number | null
           password_hash?: string | null
-          profile_id?: string
           updated_at?: string
           username?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "judges_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       participants: {
         Row: {

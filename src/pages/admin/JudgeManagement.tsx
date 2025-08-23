@@ -15,7 +15,6 @@ interface Judge {
   email: string;
   church: string;
   contact: string | null;
-  profile_id: string;
   is_active: boolean;
   created_at: string;
 }
@@ -94,7 +93,6 @@ const JudgeManagement = () => {
             church: values.church,
             contact: values.contact || null,
             password_hash: await hashPassword(values.password),
-            profile_id: crypto.randomUUID(), // Temporary
             is_active: true
           });
 
