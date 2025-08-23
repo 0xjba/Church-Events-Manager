@@ -1,12 +1,13 @@
 import { useAuth } from '@/hooks/useAuth';
 import Navigation from '@/components/Navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, Calendar, Trophy, BarChart3 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Users, Calendar, Trophy, BarChart3, LogOut } from 'lucide-react';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 import { NetworkStatus } from '@/components/NetworkStatus';
 
 const AdminDashboard = () => {
-  const { profile } = useAuth();
+  const { profile, signOut } = useAuth();
 
   const stats = [
     {
@@ -46,6 +47,30 @@ const AdminDashboard = () => {
       </div>
       
       <div className="flex-1 pb-16 md:pb-0">
+        {/* Mobile header */}
+        <div className="md:hidden bg-card border-b border-border p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Trophy className="h-6 w-6 text-primary" />
+              <div>
+                <span className="font-bold text-lg">PYPA</span>
+                <p className="text-sm text-muted-foreground">
+                  {profile?.full_name}
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={signOut}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
+        </div>
+        
         <div className="p-4 md:p-6">
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">

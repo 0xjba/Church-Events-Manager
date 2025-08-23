@@ -69,17 +69,6 @@ const Navigation = () => {
               </Link>
             );
           })}
-          
-          {/* Mobile sign out button */}
-          <button
-            onClick={signOut}
-            className="flex flex-col md:hidden items-center justify-center space-y-1 px-2 py-2 flex-1 transition-colors text-muted-foreground hover:text-foreground hover:bg-accent"
-          >
-            <LogOut className="h-5 w-5" />
-            <span className="text-xs font-medium">
-              Sign Out
-            </span>
-          </button>
         </div>
 
         {/* Sign out button */}
