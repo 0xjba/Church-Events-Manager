@@ -158,6 +158,7 @@ export type Database = {
         Row: {
           created_at: string
           event_order: number | null
+          event_type: string
           id: string
           max_participants: number | null
           name: string
@@ -172,6 +173,7 @@ export type Database = {
         Insert: {
           created_at?: string
           event_order?: number | null
+          event_type?: string
           id?: string
           max_participants?: number | null
           name: string
@@ -186,6 +188,7 @@ export type Database = {
         Update: {
           created_at?: string
           event_order?: number | null
+          event_type?: string
           id?: string
           max_participants?: number | null
           name?: string
@@ -203,6 +206,102 @@ export type Database = {
             columns: ["season_id"]
             isOneToOne: false
             referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      groups: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      group_members: {
+        Row: {
+          id: string
+          group_id: string
+          participant_id: string
+          joined_at: string
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          participant_id: string
+          joined_at?: string
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          participant_id?: string
+          joined_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_members_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_groups: {
+        Row: {
+          id: string
+          event_id: string
+          group_id: string
+          registered_at: string
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          group_id: string
+          registered_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          group_id?: string
+          registered_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_groups_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_groups_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
             referencedColumns: ["id"]
           },
         ]
@@ -347,8 +446,9 @@ export type Database = {
           average_score: number
           calculated_at: string
           event_id: string
+          group_id: string | null
           id: string
-          participant_id: string
+          participant_id: string | null
           rank: number | null
           tie_breaker_reason: string | null
           total_score: number
@@ -357,8 +457,9 @@ export type Database = {
           average_score: number
           calculated_at?: string
           event_id: string
+          group_id?: string | null
           id?: string
-          participant_id: string
+          participant_id?: string | null
           rank?: number | null
           tie_breaker_reason?: string | null
           total_score: number
@@ -367,8 +468,9 @@ export type Database = {
           average_score?: number
           calculated_at?: string
           event_id?: string
+          group_id?: string | null
           id?: string
-          participant_id?: string
+          participant_id?: string | null
           rank?: number | null
           tie_breaker_reason?: string | null
           total_score?: number
@@ -379,6 +481,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "results_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
             referencedColumns: ["id"]
           },
           {
@@ -395,10 +504,11 @@ export type Database = {
           created_at: string
           criteria_id: string
           event_id: string
+          group_id: string | null
           id: string
           is_locked: boolean
           judge_id: string
-          participant_id: string
+          participant_id: string | null
           score: number
           unlock_reason: string | null
           updated_at: string
@@ -407,10 +517,11 @@ export type Database = {
           created_at?: string
           criteria_id: string
           event_id: string
+          group_id?: string | null
           id?: string
           is_locked?: boolean
           judge_id: string
-          participant_id: string
+          participant_id?: string | null
           score: number
           unlock_reason?: string | null
           updated_at?: string
@@ -419,10 +530,11 @@ export type Database = {
           created_at?: string
           criteria_id?: string
           event_id?: string
+          group_id?: string | null
           id?: string
           is_locked?: boolean
           judge_id?: string
-          participant_id?: string
+          participant_id?: string | null
           score?: number
           unlock_reason?: string | null
           updated_at?: string
@@ -440,6 +552,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scores_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
             referencedColumns: ["id"]
           },
           {

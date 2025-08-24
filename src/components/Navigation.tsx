@@ -1,26 +1,35 @@
 import { useAuth } from '@/hooks/useAuth';
+import { useParticipantAuth } from '@/hooks/useParticipantAuth';
 import { Button, Menu, Layout, Avatar, Typography } from 'antd';
 import { Trophy, Users, Calendar, BarChart3, Settings, LogOut, CalendarDays } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 const { Sider } = Layout;
 const { Text } = Typography;
 
 const Navigation = () => {
-  const { profile, signOut, isAdmin, isJudge } = useAuth();
+  const { profile, signOut: adminSignOut, isAdmin, isJudge } = useAuth();
+  const { participant, signOut: participantSignOut } = useParticipantAuth();
+  const navigate = useNavigate();
   const location = useLocation();
 
+  // Determine user info and role
+  const currentUser = profile || participant;
+  const currentRole = profile?.role || participant?.role;
+  const isCurrentUserAdmin = currentRole === 'admin';
+  const isCurrentUserJudge = currentRole === 'judge';
+
   const navItems = [
-    ...(isAdmin ? [
+    ...(isCurrentUserAdmin ? [
       { key: '/admin', icon: <Settings size={18} />, label: 'Dashboard', path: '/admin' },
       { key: '/admin/participants', icon: <Users size={18} />, label: 'Participants', path: '/admin/participants' },
       { key: '/admin/judges', icon: <Trophy size={18} />, label: 'Judges', path: '/admin/judges' },
       { key: '/admin/seasons', icon: <CalendarDays size={18} />, label: 'Seasons', path: '/admin/seasons' },
       { key: '/admin/events', icon: <Calendar size={18} />, label: 'Events', path: '/admin/events' },
-      { key: '/admin/assignments', icon: <BarChart3 size={18} />, label: 'Assignments', path: '/admin/assignments' },
+
       { key: '/admin/results', icon: <Trophy size={18} />, label: 'Results', path: '/admin/results' },
     ] : []),
-    ...(isJudge ? [
+    ...(isCurrentUserJudge ? [
       { key: '/judge', icon: <Trophy size={18} />, label: 'My Events', path: '/judge' },
     ] : []),
   ];
@@ -60,10 +69,10 @@ const Navigation = () => {
             <Text strong style={{ fontSize: '18px' }}>PYPA</Text>
           </div>
           <Text type="secondary" style={{ fontSize: '14px', display: 'block' }}>
-            {profile?.full_name}
+            {currentUser?.full_name}
           </Text>
           <Text type="secondary" style={{ fontSize: '12px', textTransform: 'capitalize' }}>
-            {profile?.role}
+            {currentRole}
           </Text>
         </div>
 
@@ -78,7 +87,14 @@ const Navigation = () => {
           <Button
             type="text"
             icon={<LogOut size={16} />}
-            onClick={signOut}
+            onClick={() => {
+              if (profile) {
+                adminSignOut();
+              } else if (participant) {
+                participantSignOut();
+              }
+              navigate('/auth');
+            }}
             style={{ width: '100%', justifyContent: 'flex-start' }}
           >
             Sign Out

@@ -49,8 +49,9 @@ const JudgeManagement = () => {
 
   const hashPassword = async (password: string) => {
     const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hash = await crypto.subtle.digest('SHA-256', data);
+    const salt = 'pypa-salt'; // Use same salt as edge function
+    const passwordData = encoder.encode(password + salt);
+    const hash = await crypto.subtle.digest('SHA-256', passwordData);
     return Array.from(new Uint8Array(hash))
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
@@ -205,7 +206,7 @@ const JudgeManagement = () => {
       <Navigation />
       
       <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
+        <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
           <div style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div>

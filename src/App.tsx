@@ -6,14 +6,16 @@ import { AuthProvider } from '@/hooks/useAuth';
 import { ParticipantAuthProvider } from '@/hooks/useParticipantAuth';
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ParticipantProtectedRoute from "@/components/ParticipantProtectedRoute";
+import JudgeProtectedRoute from "@/components/JudgeProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import ParticipantManagement from "./pages/admin/ParticipantManagement";
 import JudgeManagement from "./pages/admin/JudgeManagement";
 import EventManagement from "./pages/admin/EventManagement";
+import EventDetails from "./pages/admin/EventDetails";
 import SeasonManagement from "./pages/admin/SeasonManagement";
-import JudgeAssignment from "./pages/admin/JudgeAssignment";
+
 import RealtimeScoreboard from "./pages/admin/RealtimeScoreboard";
 import ResultsManagement from "./pages/admin/ResultsManagement";
 import JudgeScoringInterface from "./pages/judge/JudgeScoringInterface";
@@ -68,11 +70,12 @@ const App = () => (
                 <EventManagement />
               </ProtectedRoute>
             } />
-            <Route path="/admin/assignments" element={
+            <Route path="/admin/events/:eventId" element={
               <ProtectedRoute requiredRole="admin">
-                <JudgeAssignment />
+                <EventDetails />
               </ProtectedRoute>
             } />
+
             <Route 
               path="/admin/scoreboard/:eventId" 
               element={
@@ -92,14 +95,14 @@ const App = () => (
             
             {/* Judge Routes */}
             <Route path="/judge" element={
-              <ProtectedRoute requiredRole="judge">
+              <JudgeProtectedRoute>
                 <JudgeDashboard />
-              </ProtectedRoute>
+              </JudgeProtectedRoute>
             } />
             <Route path="/judge/score/:eventId" element={
-              <ProtectedRoute requiredRole="judge">
+              <JudgeProtectedRoute>
                 <JudgeScoringInterface />
-              </ProtectedRoute>
+              </JudgeProtectedRoute>
             } />
             
             {/* Participant Routes */}

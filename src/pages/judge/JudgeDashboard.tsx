@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useParticipantAuth } from '@/hooks/useParticipantAuth';
 import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
 import { Layout, Card, Button, Badge, Typography, Space, Progress, Spin, message } from 'antd';
@@ -22,28 +22,27 @@ interface AssignedEvent {
 }
 
 const JudgeDashboard = () => {
-  const { profile, isAdmin } = useAuth();
+  const { participant } = useParticipantAuth();
   const [assignedEvents, setAssignedEvents] = useState<AssignedEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [judgeId, setJudgeId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchJudgeData();
-  }, [profile]);
+  }, [participant]);
 
   const fetchJudgeData = async () => {
-    if (!profile?.id) return;
+    console.log('fetchJudgeData called with participant:', participant);
+    if (!participant?.id) {
+      console.log('No participant ID, returning early');
+      setLoading(false);
+      return;
+    }
 
     try {
-      // First get the judge ID
-      const { data: judgeData, error: judgeError } = await supabase
-        .from('judges')
-        .select('id')
-        .eq('profile_id', profile.id)
-        .single();
-
-      if (judgeError) throw judgeError;
-      setJudgeId(judgeData.id);
+      console.log('Fetching data for judge ID:', participant.id);
+      // Use the judge ID from the authenticated participant data
+      setJudgeId(participant.id);
 
       // Get assigned events with participant count and scoring progress
       const { data: eventsData, error: eventsError } = await supabase
@@ -58,7 +57,7 @@ const JudgeDashboard = () => {
             event_order
           )
         `)
-        .eq('judge_id', judgeData.id);
+        .eq('judge_id', participant.id);
 
       if (eventsError) throw eventsError;
 
@@ -84,7 +83,7 @@ const JudgeDashboard = () => {
             .from('scores')
             .select('*', { count: 'exact', head: true })
             .eq('event_id', event.id)
-            .eq('judge_id', judgeData.id);
+            .eq('judge_id', participant.id);
 
           return {
             ...event,
@@ -141,18 +140,35 @@ const JudgeDashboard = () => {
       <Navigation />
       
       <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
+        <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
           <div style={{ marginBottom: '24px' }}>
             <Title level={2} style={{ margin: 0 }}>
               Judge Dashboard
             </Title>
             <Text type="secondary">
-              Welcome back, {profile?.full_name}
+              Welcome back, {participant?.full_name || 'Judge'}
             </Text>
           </div>
 
+          {loading && (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <Spin size="large" />
+              <div style={{ marginTop: '16px' }}>
+                <Text>Loading assigned events...</Text>
+              </div>
+            </div>
+          )}
+
+          {!loading && !participant && (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <Text type="danger">Not authenticated. Please sign in again.</Text>
+            </div>
+          )}
+
           {/* Summary Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+          {!loading && participant && (
+            <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px', marginBottom: '24px' }}>
             <Card>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <Text strong style={{ fontSize: '14px' }}>
@@ -297,11 +313,7 @@ const JudgeDashboard = () => {
                                 {progress > 0 ? 'Continue Scoring' : 'Start Scoring'}
                               </Button>
                             </Link>
-                            {isAdmin && (
-                              <Link to={`/admin/scoreboard/${event.id}`}>
-                                <Button>View Scoreboard</Button>
-                              </Link>
-                            )}
+                            {/* Admin only feature - removed for judges */}
                           </Space>
                         ) : (
                           <Button disabled>
@@ -315,6 +327,8 @@ const JudgeDashboard = () => {
               </div>
             )}
           </Card>
+            </>
+          )}
         </Content>
       </Layout>
     </Layout>

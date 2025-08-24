@@ -2,7 +2,8 @@ import { supabase } from '@/integrations/supabase/client';
 
 export interface ScoreData {
   id: string;
-  participant_id: string;
+  participant_id?: string;
+  group_id?: string;
   judge_id: string;
   criteria_id: string;
   score: number;
@@ -25,9 +26,24 @@ export interface ParticipantData {
   district: string;
 }
 
+export interface GroupData {
+  id: string;
+  name: string;
+  description: string | null;
+  members?: Array<{
+    participant: {
+      full_name: string;
+      chest_number: string;
+      church: string;
+    };
+  }>;
+}
+
 export interface ResultData {
-  participant_id: string;
-  participant: ParticipantData;
+  participant_id?: string;
+  group_id?: string;
+  participant?: ParticipantData;
+  group?: GroupData;
   criteria_scores: { [criteriaId: string]: number }; // Average score per criteria
   weighted_scores: { [criteriaId: string]: number }; // Weighted score per criteria
   total_score: number;
@@ -48,19 +64,32 @@ export class ResultsCalculator {
   static async calculateEventResults(eventId: string): Promise<EventResults> {
     try {
       // Fetch all data needed for calculation
-      const [scoresData, criteriaData, participantsData] = await Promise.all([
+      const [scoresData, criteriaData, eventData] = await Promise.all([
         this.getEventScores(eventId),
         this.getEventCriteria(eventId),
-        this.getEventParticipants(eventId)
+        this.getEventData(eventId)
       ]);
 
-      // Calculate results for each participant
-      const results: ResultData[] = [];
+      let results: ResultData[] = [];
 
-      for (const participant of participantsData) {
-        const participantScores = scoresData.filter(s => s.participant_id === participant.id);
-        const result = this.calculateParticipantResult(participant, participantScores, criteriaData);
-        results.push(result);
+      if (eventData.event_type === 'individual') {
+        // Individual event - calculate results for each participant
+        const participantsData = await this.getEventParticipants(eventId);
+        
+        for (const participant of participantsData) {
+          const participantScores = scoresData.filter(s => s.participant_id === participant.id);
+          const result = this.calculateParticipantResult(participant, participantScores, criteriaData);
+          results.push(result);
+        }
+      } else {
+        // Group event - calculate results for each group
+        const groupsData = await this.getEventGroups(eventId);
+        
+        for (const group of groupsData) {
+          const groupScores = scoresData.filter(s => s.group_id === group.id);
+          const result = this.calculateGroupResult(group, groupScores, criteriaData);
+          results.push(result);
+        }
       }
 
       // Sort by total score (descending) and handle ties
@@ -72,7 +101,7 @@ export class ResultsCalculator {
       return {
         event_id: eventId,
         results,
-        total_participants: participantsData.length,
+        total_participants: results.length,
         criteria: criteriaData,
         last_calculated: new Date()
       };
@@ -103,6 +132,17 @@ export class ResultsCalculator {
     return data || [];
   }
 
+  private static async getEventData(eventId: string): Promise<{ event_type: string }> {
+    const { data, error } = await supabase
+      .from('events')
+      .select('event_type')
+      .eq('id', eventId)
+      .single();
+
+    if (error) throw error;
+    return data || { event_type: 'individual' };
+  }
+
   private static async getEventParticipants(eventId: string): Promise<ParticipantData[]> {
     const { data, error } = await supabase
       .from('event_participants')
@@ -120,6 +160,29 @@ export class ResultsCalculator {
 
     if (error) throw error;
     return data?.map(ep => ep.participants).filter(Boolean) || [];
+  }
+
+  private static async getEventGroups(eventId: string): Promise<GroupData[]> {
+    const { data, error } = await supabase
+      .from('event_groups')
+      .select(`
+        group:groups (
+          id,
+          name,
+          description,
+          members:group_members(
+            participant:participants(
+              full_name,
+              chest_number,
+              church
+            )
+          )
+        )
+      `)
+      .eq('event_id', eventId);
+
+    if (error) throw error;
+    return data?.map(eg => eg.group).filter(Boolean) || [];
   }
 
   private static calculateParticipantResult(
@@ -161,6 +224,45 @@ export class ResultsCalculator {
     };
   }
 
+  private static calculateGroupResult(
+    group: GroupData,
+    scores: ScoreData[],
+    criteria: CriteriaData[]
+  ): ResultData {
+    const criteria_scores: { [criteriaId: string]: number } = {};
+    const weighted_scores: { [criteriaId: string]: number } = {};
+
+    // Calculate average score for each criteria across all judges
+    for (const criterion of criteria) {
+      const criteriaScores = scores.filter(s => s.criteria_id === criterion.id);
+      
+      if (criteriaScores.length > 0) {
+        const averageScore = criteriaScores.reduce((sum, s) => sum + s.score, 0) / criteriaScores.length;
+        criteria_scores[criterion.id] = averageScore;
+        weighted_scores[criterion.id] = averageScore * criterion.weight;
+      } else {
+        criteria_scores[criterion.id] = 0;
+        weighted_scores[criterion.id] = 0;
+      }
+    }
+
+    // Calculate total weighted score
+    const total_score = Object.values(weighted_scores).reduce((sum, score) => sum + score, 0);
+    
+    // Calculate average score (unweighted)
+    const average_score = Object.values(criteria_scores).reduce((sum, score) => sum + score, 0) / criteria.length;
+
+    return {
+      group_id: group.id,
+      group,
+      criteria_scores,
+      weighted_scores,
+      total_score: Math.round(total_score * 100) / 100, // Round to 2 decimal places
+      average_score: Math.round(average_score * 100) / 100,
+      rank: 0 // Will be assigned later
+    };
+  }
+
   private static assignRanks(results: ResultData[]): void {
     let currentRank = 1;
     
@@ -189,7 +291,8 @@ export class ResultsCalculator {
       // Insert new results
       const resultsToInsert = eventResults.results.map(result => ({
         event_id: eventResults.event_id,
-        participant_id: result.participant_id,
+        participant_id: result.participant_id || null,
+        group_id: result.group_id || null,
         total_score: result.total_score,
         average_score: result.average_score,
         rank: result.rank,

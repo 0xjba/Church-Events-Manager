@@ -342,8 +342,8 @@ async function handleCreate(req: Request) {
       username,
       password_hash,
       is_active: true,
-      created_by: user.id,
-      profile_id: null // No longer using profiles for participants
+      created_by: user.id
+      // Note: profile_id column was removed from participants table
     })
     .select()
     .single();
