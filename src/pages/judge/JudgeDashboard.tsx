@@ -140,11 +140,23 @@ const JudgeDashboard = () => {
       <Navigation />
       
       <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
+        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
           <div style={{ marginBottom: '24px' }}>
-            <Title level={2} style={{ margin: 0 }}>
-              Judge Dashboard
-            </Title>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+              <img 
+                src="/pypa-logo.png" 
+                alt="PYPA Logo" 
+                style={{ 
+                  width: 32, 
+                  height: 32, 
+                  borderRadius: '8px',
+                  marginRight: '12px'
+                }} 
+              />
+              <Title level={2} style={{ margin: 0 }}>
+                Judge Dashboard
+              </Title>
+            </div>
             <Text type="secondary">
               Welcome back, {participant?.full_name || 'Judge'}
             </Text>
@@ -174,7 +186,7 @@ const JudgeDashboard = () => {
                 <Text strong style={{ fontSize: '14px' }}>
                   Assigned Events
                 </Text>
-                <Calendar size={16} color="#8c8c8c" />
+                <Calendar size={16} color="#6b7280" />
               </div>
               <div>
                 <Title level={2} style={{ margin: 0 }}>{assignedEvents.length}</Title>
@@ -189,7 +201,7 @@ const JudgeDashboard = () => {
                 <Text strong style={{ fontSize: '14px' }}>
                   Active Events
                 </Text>
-                <Play size={16} color="#8c8c8c" />
+                <Play size={16} color="#6b7280" />
               </div>
               <div>
                 <Title level={2} style={{ margin: 0 }}>
@@ -206,7 +218,7 @@ const JudgeDashboard = () => {
                 <Text strong style={{ fontSize: '14px' }}>
                   Completed
                 </Text>
-                <Trophy size={16} color="#8c8c8c" />
+                <Trophy size={16} color="#6b7280" />
               </div>
               <div>
                 <Title level={2} style={{ margin: 0 }}>
@@ -296,7 +308,7 @@ const JudgeDashboard = () => {
                               ✓ Scoring Complete
                             </Text>
                           ) : event.status === 'active' ? (
-                            <Text style={{ color: '#fa8c16' }} strong>
+                            <Text style={{ color: '#8b5cf6' }} strong>
                               Ready to Score
                             </Text>
                           ) : (

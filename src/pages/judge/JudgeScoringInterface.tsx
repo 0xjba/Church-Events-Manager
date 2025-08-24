@@ -552,7 +552,7 @@ const JudgeScoringInterface = () => {
       <Layout style={{ minHeight: '100vh' }}>
         <Navigation />
         <Layout className="md:ml-64">
-          <Content style={{ padding: '12px', paddingBottom: '80px' }} className="md:px-4">
+          <Content style={{ padding: '12px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-4 md:pt-4">
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '24px', marginBottom: '16px' }}>Loading...</div>
@@ -570,7 +570,7 @@ const JudgeScoringInterface = () => {
       <Layout style={{ minHeight: '100vh' }}>
         <Navigation />
         <Layout className="md:ml-64">
-          <Content style={{ padding: '12px', paddingBottom: '80px' }} className="md:px-4">
+          <Content style={{ padding: '12px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-4 md:pt-4">
             <div style={{ textAlign: 'center' }}>
               <Title level={2}>Event Not Found</Title>
               <Text>This event could not be loaded.</Text>
@@ -591,7 +591,7 @@ const JudgeScoringInterface = () => {
       <Layout style={{ minHeight: '100vh' }}>
         <Navigation />
         <Layout className="md:ml-64">
-          <Content style={{ padding: '12px', paddingBottom: '80px' }} className="md:px-4">
+          <Content style={{ padding: '12px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-4 md:pt-4">
             <div style={{ textAlign: 'center' }}>
               <Title level={2}>No Participants</Title>
               <Text>This individual event has no participants assigned.</Text>
@@ -611,7 +611,7 @@ const JudgeScoringInterface = () => {
       <Layout style={{ minHeight: '100vh' }}>
         <Navigation />
         <Layout className="md:ml-64">
-          <Content style={{ padding: '12px', paddingBottom: '80px' }} className="md:px-4">
+          <Content style={{ padding: '12px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-4 md:pt-4">
             <div style={{ textAlign: 'center' }}>
               <Title level={2}>No Groups</Title>
               <Text>This group event has no groups assigned.</Text>
@@ -630,7 +630,7 @@ const JudgeScoringInterface = () => {
     <Layout style={{ minHeight: '100vh' }}>
       <Navigation />
       <Layout className="md:ml-64">
-        <Content style={{ padding: '12px', paddingBottom: '80px' }} className="md:px-4">
+        <Content style={{ padding: '12px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-4 md:pt-4">
           {/* Header */}
           <div style={{ marginBottom: '24px' }}>
             <div style={{ 

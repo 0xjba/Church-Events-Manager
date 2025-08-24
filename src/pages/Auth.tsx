@@ -94,7 +94,15 @@ const Auth = () => {
       <div style={{ width: '100%', maxWidth: '400px' }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
-            <Trophy size={48} color="#8b5cf6" />
+            <img 
+              src="/pypa-logo.png" 
+              alt="PYPA Logo" 
+              style={{ 
+                width: 64, 
+                height: 64, 
+                borderRadius: '12px'
+              }} 
+            />
           </div>
           <Title level={2} style={{ margin: 0 }}>PYPA</Title>
           <Text type="secondary">Devotional & Cultural Competitions</Text>
@@ -115,7 +123,7 @@ const Auth = () => {
                 style={{
                   textAlign: 'center',
                   border: userType === 'admin' ? '2px solid #8b5cf6' : '1px solid #d9d9d9',
-                  backgroundColor: userType === 'admin' ? '#f3f0ff' : 'white',
+                  backgroundColor: userType === 'admin' ? '#f8fafc' : 'white',
                 }}
                 onClick={() => setUserType('admin')}
               >
@@ -131,7 +139,7 @@ const Auth = () => {
                 style={{
                   textAlign: 'center',
                   border: userType === 'judge' ? '2px solid #8b5cf6' : '1px solid #d9d9d9',
-                  backgroundColor: userType === 'judge' ? '#f3f0ff' : 'white',
+                  backgroundColor: userType === 'judge' ? '#f8fafc' : 'white',
                 }}
                 onClick={() => setUserType('judge')}
               >
@@ -147,7 +155,7 @@ const Auth = () => {
                 style={{
                   textAlign: 'center',
                   border: userType === 'participant' ? '2px solid #8b5cf6' : '1px solid #d9d9d9',
-                  backgroundColor: userType === 'participant' ? '#f3f0ff' : 'white',
+                  backgroundColor: userType === 'participant' ? '#f8fafc' : 'white',
                 }}
                 onClick={() => setUserType('participant')}
               >

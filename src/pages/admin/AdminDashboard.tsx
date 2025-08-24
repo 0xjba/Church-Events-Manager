@@ -22,13 +22,13 @@ const AdminDashboard = () => {
       title: 'Total Participants',
       value: stats.totalParticipants,
       description: 'Registered participants',
-      icon: <Users size={24} color="#1890ff" />,
+      icon: <Users size={24} color="#8b5cf6" />,
     },
     {
       title: 'Active Events',
       value: stats.activeEvents,
       description: 'Events in progress',
-      icon: <Calendar size={24} color="#52c41a" />,
+      icon: <Calendar size={24} color="#8b5cf6" />,
     },
     {
       title: 'Judges',
@@ -40,7 +40,7 @@ const AdminDashboard = () => {
       title: 'Completed Events',
       value: stats.completedEvents,
       description: 'Events finished',
-      icon: <BarChart3 size={24} color="#fa8c16" />,
+      icon: <BarChart3 size={24} color="#8b5cf6" />,
     }
   ];
 
@@ -50,7 +50,7 @@ const AdminDashboard = () => {
       
       <Layout className="md:ml-64">
         
-        <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
+        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
           <div style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <Title level={2} style={{ margin: 0 }}>
@@ -143,7 +143,7 @@ const AdminDashboard = () => {
                   <Statistic
                     title="Total Events"
                     value={loading ? '-' : stats.totalEvents}
-                    prefix={<Calendar size={24} color="#722ed1" />}
+                    prefix={<Calendar size={24} color="#8b5cf6" />}
                     valueStyle={{ color: loading ? '#d9d9d9' : undefined }}
                   />
                   <Text type="secondary" style={{ fontSize: '12px' }}>
@@ -169,15 +169,15 @@ const AdminDashboard = () => {
                         const getIcon = () => {
                           switch (activity.type) {
                             case 'event':
-                              return <Calendar size={16} color="#52c41a" />;
+                              return <Calendar size={16} color="#8b5cf6" />;
                             case 'participant':
-                              return <User size={16} color="#1890ff" />;
+                              return <User size={16} color="#8b5cf6" />;
                             case 'judge':
                               return <Award size={16} color="#8b5cf6" />;
                             case 'score':
-                              return <Target size={16} color="#fa8c16" />;
+                              return <Target size={16} color="#8b5cf6" />;
                             default:
-                              return <Calendar size={16} />;
+                              return <Calendar size={16} color="#8b5cf6" />;
                           }
                         };
 
@@ -185,13 +185,13 @@ const AdminDashboard = () => {
                           switch (activity.action) {
                             case 'created':
                             case 'registered':
-                              return '#52c41a';
+                              return '#8b5cf6';
                             case 'completed':
-                              return '#1890ff';
+                              return '#6b7280';
                             case 'submitted':
-                              return '#fa8c16';
+                              return '#8b5cf6';
                             default:
-                              return '#666';
+                              return '#6b7280';
                           }
                         };
 
@@ -220,7 +220,7 @@ const AdminDashboard = () => {
                       }}
                     />
                   ) : (
-                    <div style={{ textAlign: 'center', padding: '32px 0', color: '#999' }}>
+                    <div style={{ textAlign: 'center', padding: '32px 0', color: '#6b7280' }}>
                       No recent activity
                     </div>
                   )}

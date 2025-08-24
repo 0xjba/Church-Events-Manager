@@ -246,7 +246,7 @@ const SeasonManagement = () => {
       <Navigation />
       
       <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
+        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:pt-4">
           <div style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div>
@@ -265,8 +265,9 @@ const SeasonManagement = () => {
                   console.log('SeasonManagement: Create season button clicked');
                   setIsModalOpen(true);
                 }}
+                className="md:inline-flex hidden:flex"
               >
-                Create Season
+                <span className="hidden md:inline">Create Season</span>
               </Button>
             </div>
           </div>
@@ -285,7 +286,7 @@ const SeasonManagement = () => {
               </div>
             ) : seasons.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                <Trophy size={48} style={{ color: '#bfbfbf', marginBottom: '16px' }} />
+                <Trophy size={48} style={{ color: '#6b7280', marginBottom: '16px' }} />
                 <Title level={4} style={{ marginBottom: '8px' }}>No seasons found</Title>
                 <Text type="secondary">Create your first season to get started.</Text>
               </div>

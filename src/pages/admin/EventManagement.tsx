@@ -337,7 +337,7 @@ const EventManagement = () => {
     <Layout style={{ minHeight: '100vh' }}>
       <Navigation />
       <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
+        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
           <div style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <Title level={2} style={{ margin: 0 }}>Event Management</Title>
@@ -345,8 +345,9 @@ const EventManagement = () => {
                 type="primary" 
                 icon={<Plus size={16} />} 
                 onClick={() => openModal()}
+                className="md:inline-flex hidden:flex"
               >
-                Add Event
+                <span className="hidden md:inline">Add Event</span>
               </Button>
             </div>
             <Text type="secondary">Create and manage competition events</Text>

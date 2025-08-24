@@ -377,7 +377,7 @@ const ParticipantManagement = () => {
       <Navigation />
       
       <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
+        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
           <div style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div>
@@ -397,8 +397,9 @@ const ParticipantManagement = () => {
                   form.resetFields();
                   setIsModalOpen(true);
                 }}
+                className="md:inline-flex hidden:flex"
               >
-                Add Participant
+                <span className="hidden md:inline">Add Participant</span>
               </Button>
             </div>
           </div>
@@ -433,8 +434,9 @@ const ParticipantManagement = () => {
                   type="primary"
                   icon={<Users size={16} />}
                   onClick={() => openGroupModal()}
+                  className="md:inline-flex hidden:flex"
                 >
-                  Add Group
+                  <span className="hidden md:inline">Add Group</span>
                 </Button>
               </div>
             </div>
@@ -460,7 +462,7 @@ const ParticipantManagement = () => {
                     <div>
                       {members?.length || 0} participants
                       {members && members.length > 0 && (
-                        <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                        <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
                           {members.slice(0, 3).map(m => m.participant.full_name).join(', ')}
                           {members.length > 3 && ` +${members.length - 3} more`}
                         </div>
@@ -494,22 +496,7 @@ const ParticipantManagement = () => {
               rowKey="id"
               cardTitle={(record) => record.name}
               cardExtra={(record) => (
-                <Space>
-                  <Text type="secondary">{record.members?.length || 0} members</Text>
-                  <Button 
-                    size="small" 
-                    icon={<Edit size={14} />} 
-                    onClick={() => openGroupModal(record)}
-                    title="Edit Group"
-                  />
-                  <Button 
-                    size="small" 
-                    danger 
-                    icon={<Trash2 size={14} />} 
-                    onClick={() => deleteGroup(record.id)}
-                    title="Delete Group"
-                  />
-                </Space>
+                <Text type="secondary">{record.members?.length || 0} members</Text>
               )}
               locale={{
                 emptyText: 'No groups created yet'
@@ -671,7 +658,7 @@ const ParticipantManagement = () => {
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span>{participant.full_name}</span>
-                          <span style={{ fontSize: '12px', color: '#666' }}>
+                          <span style={{ fontSize: '12px', color: '#6b7280' }}>
                             #{participant.chest_number} • {participant.church}
                           </span>
                         </div>

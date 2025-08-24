@@ -620,7 +620,7 @@ const EventDetails = () => {
       <Layout style={{ minHeight: '100vh' }}>
         <Navigation />
         <Layout className="md:ml-64">
-          <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
+          <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
               <Spin size="large" />
             </div>
@@ -635,7 +635,7 @@ const EventDetails = () => {
       <Layout style={{ minHeight: '100vh' }}>
         <Navigation />
         <Layout className="md:ml-64">
-          <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
+          <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
               <Text>Event not found or failed to load</Text>
             </div>
@@ -649,7 +649,7 @@ const EventDetails = () => {
     <Layout style={{ minHeight: '100vh' }}>
       <Navigation />
       <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px' }} className="md:px-6">
+        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
           {/* Header */}
           <div style={{ marginBottom: '24px' }}>
             <Button 
@@ -748,8 +748,9 @@ const EventDetails = () => {
                     icon={<Plus size={16} />}
                     onClick={() => setIsParticipantModalOpen(true)}
                     size="small"
+                    className="md:inline-flex hidden:flex"
                   >
-                    Add
+                    <span className="hidden md:inline">Add</span>
                   </Button>
                 </div>
               }
@@ -782,8 +783,9 @@ const EventDetails = () => {
                     icon={<Plus size={16} />}
                     onClick={() => setIsGroupModalOpen(true)}
                     size="small"
+                    className="md:inline-flex hidden:flex"
                   >
-                    Add
+                    <span className="hidden md:inline">Add</span>
                   </Button>
                 </div>
               }
@@ -815,8 +817,9 @@ const EventDetails = () => {
                   icon={<Plus size={16} />}
                   onClick={() => setIsJudgeModalOpen(true)}
                   size="small"
+                  className="md:inline-flex hidden:flex"
                 >
-                  Add
+                  <span className="hidden md:inline">Add</span>
                 </Button>
               </div>
             }

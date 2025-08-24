@@ -1,7 +1,7 @@
 {
-  "name": "Devotional Events Pro",
-  "short_name": "DevEvents",
-  "description": "Professional devotional events management platform",
+  "name": "PYPA Devotional Events",
+  "short_name": "PYPA",
+  "description": "Professional PYPA devotional events management platform",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f0f23",

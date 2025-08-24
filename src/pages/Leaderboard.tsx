@@ -159,11 +159,11 @@ const Leaderboard = () => {
   const getRankIcon = (rank: number) => {
     switch (rank) {
       case 1:
-        return <Trophy size={20} style={{ color: '#fadb14' }} />;
+        return <Trophy size={20} style={{ color: '#8b5cf6' }} />;
       case 2:
-        return <Medal size={20} style={{ color: '#bfbfbf' }} />;
+        return <Medal size={20} style={{ color: '#6b7280' }} />;
       case 3:
-        return <Award size={20} style={{ color: '#d48806' }} />;
+        return <Award size={20} style={{ color: '#6b7280' }} />;
       default:
         return <span style={{ fontWeight: 'bold' }}>#{rank}</span>;
     }
@@ -324,13 +324,25 @@ const Leaderboard = () => {
         <Content style={{ padding: '16px 24px', paddingBottom: '80px' }}>
           <div style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-              <div>
-                <Title level={2} style={{ margin: 0 }}>
-                  Leaderboard
-                </Title>
-                <Text type="secondary">
-                  Competition results and rankings
-                </Text>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <img 
+                  src="/pypa-logo.png" 
+                  alt="PYPA Logo" 
+                  style={{ 
+                    width: 32, 
+                    height: 32, 
+                    borderRadius: '8px',
+                    marginRight: '12px'
+                  }} 
+                />
+                <div>
+                  <Title level={2} style={{ margin: 0 }}>
+                    Leaderboard
+                  </Title>
+                  <Text type="secondary">
+                    Competition results and rankings
+                  </Text>
+                </div>
               </div>
               
               <Button 
@@ -394,7 +406,7 @@ const Leaderboard = () => {
             <Card>
               <div style={{ marginBottom: '16px' }}>
                 <Space align="center">
-                  <Trophy size={24} style={{ color: '#fadb14' }} />
+                  <Trophy size={24} style={{ color: '#8b5cf6' }} />
                   <Title level={3} style={{ margin: 0 }}>Championship Standings</Title>
                   {selectedCategory !== 'all' && (
                     <Badge color="blue" text={selectedCategory} />
@@ -451,13 +463,23 @@ const Leaderboard = () => {
 
           {events.length === 0 && (
             <Card>
-              <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                <Trophy size={48} style={{ color: '#bfbfbf', marginBottom: '16px' }} />
-                <Title level={4} style={{ marginBottom: '8px' }}>No Published Results</Title>
-                <Text type="secondary">
-                  Results will appear here once events are completed and published by administrators.
-                </Text>
-              </div>
+                          <div style={{ textAlign: 'center', padding: '32px 0' }}>
+              <img 
+                src="/pypa-logo.png" 
+                alt="PYPA Logo" 
+                style={{ 
+                  width: 48, 
+                  height: 48, 
+                  borderRadius: '12px',
+                  marginBottom: '16px',
+                  opacity: 0.3
+                }} 
+              />
+              <Title level={4} style={{ marginBottom: '8px' }}>No Published Results</Title>
+              <Text type="secondary">
+                Results will appear here once events are completed and published by administrators.
+              </Text>
+            </div>
             </Card>
           )}
         </Content>

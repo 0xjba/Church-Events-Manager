@@ -365,7 +365,7 @@ const ResultsManagement = () => {
     <Layout style={{ minHeight: '100vh' }}>
       <Navigation />
       <Layout className="md:ml-64">
-        <Content style={{ padding: '16px' }} className="md:px-6">
+        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
           <div style={{ marginBottom: '24px' }}>
             <Title level={2}>Results Management</Title>
             <Text type="secondary">Calculate and publish event results</Text>
@@ -409,7 +409,7 @@ const ResultsManagement = () => {
                         border: '1px solid #e5e7eb',
                         borderRadius: '12px',
                         marginBottom: '16px',
-                        backgroundColor: index < 3 ? '#fef3c7' : '#f9fafb',
+                        backgroundColor: index < 3 ? '#f8fafc' : '#f9fafb',
                         overflow: 'hidden'
                       }}
                     >
@@ -419,7 +419,7 @@ const ResultsManagement = () => {
                         justifyContent: 'space-between',
                         alignItems: 'center',
                         padding: '16px',
-                        backgroundColor: index < 3 ? '#fbbf24' : '#6b7280',
+                        backgroundColor: index < 3 ? '#8b5cf6' : '#6b7280',
                         color: 'white'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -428,7 +428,7 @@ const ResultsManagement = () => {
                             height: '36px',
                             borderRadius: '50%',
                             backgroundColor: 'white',
-                            color: index < 3 ? '#fbbf24' : '#6b7280',
+                            color: index < 3 ? '#8b5cf6' : '#6b7280',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -488,7 +488,7 @@ const ResultsManagement = () => {
                                     {criteria.name}
                                   </Text>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Text style={{ fontSize: '14px', color: '#059669', fontWeight: 600 }}>
+                                    <Text style={{ fontSize: '14px', color: '#8b5cf6', fontWeight: 600 }}>
                                       Avg: {criteria.averageScore.toFixed(1)}
                                     </Text>
                                     <Text style={{ fontSize: '12px', color: '#6b7280' }}>
