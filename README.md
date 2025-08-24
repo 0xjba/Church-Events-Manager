@@ -50,6 +50,24 @@ npm run dev
 - Click on "New codespace" to launch a new Codespace environment.
 - Edit files directly within the Codespace and commit and push your changes once you're done.
 
+## Environment Setup
+
+Before running this project, you need to set up environment variables. Copy the `.env.example` file to `.env.local` and fill in your actual values:
+
+```sh
+cp .env.example .env.local
+```
+
+Then edit `.env.local` with your actual Supabase credentials:
+
+- `VITE_SUPABASE_URL`: Your Supabase project URL
+- `VITE_SUPABASE_ANON_KEY`: Your Supabase anonymous/public key
+- `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase service role key (for Edge Functions)
+- `SUPABASE_JWT_SECRET`: Your JWT secret for participant authentication
+- `PASSWORD_SALT`: Custom salt for password hashing (optional, has default)
+
+**Important**: Never commit your `.env.local` file to version control. It's already added to `.gitignore`.
+
 ## What technologies are used for this project?
 
 This project is built with:
@@ -59,6 +77,7 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- Supabase (Backend as a Service)
 
 ## How can I deploy this project?
 

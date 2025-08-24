@@ -15,16 +15,17 @@ const supabase = createClient(
 );
 
 // Hash password using crypto API
-async function hashPassword(password: string, salt: string = 'pypa-salt'): Promise<string> {
+async function hashPassword(password: string, salt?: string): Promise<string> {
+  const saltToUse = salt || Deno.env.get('PASSWORD_SALT') || 'pypa-salt';
   const encoder = new TextEncoder();
-  const passwordData = encoder.encode(password + salt);
+  const passwordData = encoder.encode(password + saltToUse);
   const hashBuffer = await crypto.subtle.digest('SHA-256', passwordData);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // Compare passwords
-async function comparePassword(password: string, hash: string, salt: string = 'pypa-salt'): Promise<boolean> {
+async function comparePassword(password: string, hash: string, salt?: string): Promise<boolean> {
   const hashedInput = await hashPassword(password, salt);
   return hashedInput === hash;
 }
@@ -32,11 +33,15 @@ async function comparePassword(password: string, hash: string, salt: string = 'p
 // JWT secret for participant tokens
 const JWT_SECRET = await crypto.subtle.importKey(
   'raw',
-  new TextEncoder().encode(Deno.env.get('SUPABASE_JWT_SECRET') || 'fallback-secret-key'),
+  new TextEncoder().encode(Deno.env.get('SUPABASE_JWT_SECRET')),
   { name: 'HMAC', hash: 'SHA-256' },
   false,
   ['sign', 'verify']
 );
+
+if (!Deno.env.get('SUPABASE_JWT_SECRET')) {
+  throw new Error('SUPABASE_JWT_SECRET environment variable is required');
+}
 
 serve(async (req) => {
   // Handle CORS preflight requests
