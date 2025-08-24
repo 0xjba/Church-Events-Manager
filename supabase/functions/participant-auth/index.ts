@@ -33,14 +33,14 @@ async function comparePassword(password: string, hash: string, salt?: string): P
 // JWT secret for participant tokens
 const JWT_SECRET = await crypto.subtle.importKey(
   'raw',
-  new TextEncoder().encode(Deno.env.get('SUPABASE_JWT_SECRET')),
+  new TextEncoder().encode(Deno.env.get('JWT_SECRET')),
   { name: 'HMAC', hash: 'SHA-256' },
   false,
   ['sign', 'verify']
 );
 
-if (!Deno.env.get('SUPABASE_JWT_SECRET')) {
-  throw new Error('SUPABASE_JWT_SECRET environment variable is required');
+if (!Deno.env.get('JWT_SECRET')) {
+  throw new Error('JWT_SECRET environment variable is required');
 }
 
 serve(async (req) => {

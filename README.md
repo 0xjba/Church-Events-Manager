@@ -61,9 +61,9 @@ cp .env.example .env.local
 Then edit `.env.local` with your actual Supabase credentials:
 
 - `VITE_SUPABASE_URL`: Your Supabase project URL
-- `VITE_SUPABASE_ANON_KEY`: Your Supabase anonymous/public key
+- `VITE_SUPABASE_PUBLISHABLE_KEY`: Your Supabase publishable key
 - `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase service role key (for Edge Functions)
-- `SUPABASE_JWT_SECRET`: Your JWT secret for participant authentication
+- `JWT_SECRET`: Your JWT secret for participant authentication
 - `PASSWORD_SALT`: Custom salt for password hashing (optional, has default)
 
 **Important**: Never commit your `.env.local` file to version control. It's already added to `.gitignore`.
