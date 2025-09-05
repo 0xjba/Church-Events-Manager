@@ -1,92 +1,122 @@
-# Welcome to your Lovable project
+# PYPA Devotional Events Pro
 
-## Project info
+Professional devotional events management platform with real-time scoring and results.
 
-**URL**: https://lovable.dev/projects/1b3be33e-6d8e-4620-a4f1-b4e89228a642
+## 🚀 Quick Start
 
-## How can I edit this code?
+### Prerequisites
+- Node.js 18.19.0 or higher
+- npm 8.0.0 or higher
 
-There are several ways of editing your application.
+### Installation
+```bash
+# Clone the repository
+git clone <your-repo-url>
+cd devotional-events-pro
 
-**Use Lovable**
+# Install dependencies
+npm install
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/1b3be33e-6d8e-4620-a4f1-b4e89228a642) and start prompting.
+# Set up environment variables
+cp env.example .env
+# Edit .env with your actual Supabase credentials
+```
 
-Changes made via Lovable will be committed automatically to this repo.
+### Environment Variables
 
-**Use your preferred IDE**
+Create a `.env` file in the root directory with the following variables:
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+```bash
+# Supabase Configuration
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key-here
+```
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+**⚠️ Security Note**: Never commit your `.env` file to version control. It's already added to `.gitignore`.
 
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+### Development
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## Environment Setup
-
-Before running this project, you need to set up environment variables. Copy the `.env.example` file to `.env.local` and fill in your actual values:
-
-```sh
-cp .env.example .env.local
+### Build
+```bash
+npm run build
 ```
 
-Then edit `.env.local` with your actual Supabase credentials:
+## 🔒 Security
 
-- `VITE_SUPABASE_URL`: Your Supabase project URL
-- `VITE_SUPABASE_PUBLISHABLE_KEY`: Your Supabase publishable key
-- `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase service role key (for Edge Functions)
-- `JWT_SECRET`: Your JWT secret for participant authentication
-- `PASSWORD_SALT`: Custom salt for password hashing (optional, has default)
+This application uses environment variables for sensitive configuration. Ensure:
 
-**Important**: Never commit your `.env.local` file to version control. It's already added to `.gitignore`.
+1. **Never commit `.env` files** to version control
+2. **Rotate Supabase keys** if they've been exposed
+3. **Use environment variables** in production deployments
+4. **Keep secrets secure** and local only
 
-## What technologies are used for this project?
+## 🚀 Deployment
 
-This project is built with:
+### Netlify
+1. Connect your repository to Netlify
+2. Set environment variables in Netlify dashboard:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+3. Deploy automatically on push to main branch
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-- Supabase (Backend as a Service)
+### Manual Deployment
+```bash
+npm run build
+# Deploy the `dist` folder to your hosting provider
+```
 
-## How can I deploy this project?
+## 🏗️ Architecture
 
-Simply open [Lovable](https://lovable.dev/projects/1b3be33e-6d8e-4620-a4f1-b4e89228a642) and click on Share -> Publish.
+- **Frontend**: React + TypeScript + Vite
+- **UI Library**: Ant Design
+- **Styling**: Tailwind CSS
+- **Backend**: Supabase (PostgreSQL + Auth + Real-time)
+- **State Management**: React Query + Context API
 
-## Can I connect a custom domain to my Lovable project?
+## 📱 Features
 
-Yes, you can!
+- **Admin Dashboard**: Event management, participant registration, judge assignment
+- **Judge Interface**: Real-time scoring with timer and criteria management
+- **Participant Portal**: Event registration and result viewing
+- **Real-time Updates**: Live scoreboard and activity tracking
+- **PWA Support**: Progressive Web App capabilities
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## 🔧 Development
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+### Project Structure
+```
+src/
+├── components/     # Reusable UI components
+├── hooks/         # Custom React hooks
+├── integrations/  # External service integrations
+├── pages/         # Application pages
+├── utils/         # Utility functions
+└── types/         # TypeScript type definitions
+```
+
+### Key Technologies
+- **React 18** with modern hooks
+- **TypeScript** for type safety
+- **Vite** for fast development and building
+- **Supabase** for backend services
+- **Ant Design** for UI components
+- **Tailwind CSS** for styling
+
+## 📄 License
+
+This project is proprietary software. All rights reserved.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## 🆘 Support
+
+For support and questions, please contact the development team.

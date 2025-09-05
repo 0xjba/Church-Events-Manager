@@ -31,3 +31,10 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+
+.env
+
+# Supabase temporary files
+supabase/.temp/
+supabase/.branches/
+supabase/.config/

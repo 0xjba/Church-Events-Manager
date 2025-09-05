@@ -19,6 +19,12 @@ interface AssignedEvent {
   participants_count: number;
   my_scores_count: number;
   total_criteria: number;
+  season_id: string;
+  seasons?: {
+    id: string;
+    name: string;
+    is_active: boolean;
+  };
 }
 
 const JudgeDashboard = () => {
@@ -30,6 +36,41 @@ const JudgeDashboard = () => {
   useEffect(() => {
     fetchJudgeData();
   }, [participant]);
+
+  // Set up real-time subscriptions for event updates
+  useEffect(() => {
+    if (!participant?.id) return;
+
+    // Subscribe to event_judges changes for this judge
+    const eventJudgesSubscription = supabase
+      .channel('event_judges_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'event_judges',
+        filter: `judge_id=eq.${participant.id}`
+      }, () => {
+        fetchJudgeData();
+      })
+      .subscribe();
+
+    // Subscribe to events table changes
+    const eventsSubscription = supabase
+      .channel('events_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'events'
+      }, () => {
+        fetchJudgeData();
+      })
+      .subscribe();
+
+    return () => {
+      eventJudgesSubscription.unsubscribe();
+      eventsSubscription.unsubscribe();
+    };
+  }, [participant?.id]);
 
   const fetchJudgeData = async () => {
     console.log('fetchJudgeData called with participant:', participant);
@@ -54,7 +95,13 @@ const JudgeDashboard = () => {
             type,
             status,
             time_limit,
-            event_order
+            event_order,
+            season_id,
+            seasons (
+              id,
+              name,
+              is_active
+            )
           )
         `)
         .eq('judge_id', participant.id);
@@ -253,9 +300,17 @@ const JudgeDashboard = () => {
                 {assignedEvents.map((event) => {
                   const progress = getScoringProgress(event);
                   const isComplete = isEventComplete(event);
+                  const isInactive = event.seasons && !event.seasons.is_active;
                   
                   return (
-                    <Card key={event.id} size="small">
+                    <Card 
+                      key={event.id} 
+                      size="small"
+                      style={{ 
+                        opacity: isInactive ? 0.6 : 1,
+                        backgroundColor: isInactive ? '#f5f5f5' : 'inherit'
+                      }}
+                    >
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
                         <div style={{ flex: 1 }}>
                           <Title level={5} style={{ margin: 0, marginBottom: '4px' }}>{event.name}</Title>
@@ -318,7 +373,7 @@ const JudgeDashboard = () => {
                           )}
                         </div>
                         
-                        {event.status === 'active' ? (
+                        {event.status === 'active' && !isInactive ? (
                           <Space>
                             <Link to={`/judge/score/${event.id}`}>
                               <Button type="primary">
@@ -329,7 +384,7 @@ const JudgeDashboard = () => {
                           </Space>
                         ) : (
                           <Button disabled>
-                            {event.status === 'completed' ? 'View Details' : 'Not Available'}
+                            {isInactive ? 'Season Inactive' : event.status === 'completed' ? 'View Details' : 'Not Available'}
                           </Button>
                         )}
                       </div>

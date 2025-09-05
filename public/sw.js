@@ -44,7 +44,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Skip Supabase API calls for offline handling
+  // Skip Supabase API calls - always fetch from network
   if (event.request.url.includes('supabase.co')) {
     return;
   }
@@ -62,13 +62,6 @@ self.addEventListener('fetch', (event) => {
         }
       })
   );
-});
-
-// Background sync for offline scores
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-scores') {
-    event.waitUntil(syncOfflineScores());
-  }
 });
 
 // Notification handling
@@ -118,55 +111,3 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification('Devotional Events', options)
   );
 });
-
-// Sync offline scores function
-async function syncOfflineScores() {
-  try {
-    const db = await openDB();
-    const tx = db.transaction(['offline_scores'], 'readonly');
-    const store = tx.objectStore('offline_scores');
-    const scores = await store.getAll();
-    
-    for (const score of scores) {
-      try {
-        // Attempt to sync with server
-        const response = await fetch('/api/scores', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(score.data)
-        });
-        
-        if (response.ok) {
-          // Remove from offline storage on successful sync
-          const deleteTx = db.transaction(['offline_scores'], 'readwrite');
-          const deleteStore = deleteTx.objectStore('offline_scores');
-          await deleteStore.delete(score.id);
-        }
-      } catch (error) {
-        console.error('Failed to sync score:', error);
-      }
-    }
-  } catch (error) {
-    console.error('Sync failed:', error);
-  }
-}
-
-// IndexedDB helper
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open('DevotionalEventsDB', 1);
-    
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains('offline_scores')) {
-        const store = db.createObjectStore('offline_scores', { keyPath: 'id', autoIncrement: true });
-        store.createIndex('timestamp', 'timestamp', { unique: false });
-      }
-    };
-  });
-}

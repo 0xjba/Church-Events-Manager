@@ -135,6 +135,15 @@ const EventManagement = () => {
         return;
       }
 
+      // Check if season is active for new events
+      if (!editingEvent) {
+        const selectedSeason = seasons.find(s => s.id === values.season_id);
+        if (selectedSeason && !selectedSeason.is_active) {
+          message.error('Cannot create events in inactive seasons');
+          return;
+        }
+      }
+
       if (editingEvent) {
         // Update existing event
         const { error: eventError } = await supabase
@@ -277,7 +286,23 @@ const EventManagement = () => {
   };
 
   const columns = [
-    { title: 'Event', dataIndex: 'name', key: 'name' },
+    { 
+      title: 'Event', 
+      dataIndex: 'name', 
+      key: 'name',
+      render: (name: string, record: Event) => {
+        const season = seasons.find(s => s.id === record.season_id);
+        const isInactive = season && !season.is_active;
+        return (
+          <span style={{ 
+            color: isInactive ? '#999' : 'inherit',
+            opacity: isInactive ? 0.6 : 1
+          }}>
+            {name}
+          </span>
+        );
+      }
+    },
     { title: 'Type', dataIndex: 'type', key: 'type', render: (type: string) => <span style={{ textTransform: 'capitalize' }}>{type}</span> },
     { title: 'Category', dataIndex: 'event_type', key: 'event_type', render: (event_type: string) => (
       <Badge 
@@ -285,51 +310,87 @@ const EventManagement = () => {
         text={event_type === 'individual' ? 'Individual' : 'Group'} 
       />
     ) },
-    { title: 'Season', dataIndex: ['season', 'name'], key: 'season' },
+    { 
+      title: 'Season', 
+      dataIndex: ['season', 'name'], 
+      key: 'season',
+      render: (seasonName: string, record: Event) => {
+        const season = seasons.find(s => s.id === record.season_id);
+        const isInactive = season && !season.is_active;
+        return (
+          <span style={{ 
+            color: isInactive ? '#999' : 'inherit',
+            opacity: isInactive ? 0.6 : 1
+          }}>
+            {seasonName} {isInactive ? '(Inactive)' : ''}
+          </span>
+        );
+      }
+    },
     { 
       title: 'Status', 
       dataIndex: 'status', 
       key: 'status', 
-      render: (status: string, record: Event) => (
-        <Select
-          value={status}
-          onChange={(value) => updateEventStatus(record.id, value)}
-          style={{ width: 120 }}
-        >
-          <Select.Option value="upcoming">Upcoming</Select.Option>
-          <Select.Option value="active">Active</Select.Option>
-          <Select.Option value="completed">Completed</Select.Option>
-        </Select>
-      )
+      render: (status: string, record: Event) => {
+        const season = seasons.find(s => s.id === record.season_id);
+        const isInactive = season && !season.is_active;
+        return (
+          <Select
+            value={status}
+            onChange={(value) => updateEventStatus(record.id, value)}
+            style={{ width: 120, opacity: isInactive ? 0.6 : 1 }}
+            disabled={isInactive}
+          >
+            <Select.Option value="upcoming">Upcoming</Select.Option>
+            <Select.Option value="active">Active</Select.Option>
+            <Select.Option value="completed">Completed</Select.Option>
+          </Select>
+        );
+      }
     },
     {
       title: 'Actions',
       key: 'actions',
-      render: (_: any, record: Event) => (
-        <Space>
-          <Button 
-            type="text" 
-            icon={<Eye size={16} />} 
-            onClick={() => navigate(`/admin/events/${record.id}`)}
-            title="View Details"
-          />
-          <Button 
-            type="text" 
-            icon={<Edit size={16} />} 
-            onClick={() => openModal(record)}
-            title="Edit Event"
-          />
-          <Popconfirm
-            title="Delete Event"
-            description="Are you sure you want to delete this event? This action cannot be undone."
-            onConfirm={() => deleteEvent(record.id)}
-            okText="Yes"
-            cancelText="No"
-          >
-            <Button type="text" danger icon={<Trash2 size={16} />} />
-          </Popconfirm>
-        </Space>
-      ),
+      render: (_: any, record: Event) => {
+        const season = seasons.find(s => s.id === record.season_id);
+        const isInactive = season && !season.is_active;
+        return (
+          <Space>
+            <Button 
+              type="text" 
+              icon={<Eye size={16} />} 
+              onClick={() => navigate(`/admin/events/${record.id}`)}
+              title="View Details"
+              disabled={isInactive}
+              style={{ opacity: isInactive ? 0.6 : 1 }}
+            />
+            <Button 
+              type="text" 
+              icon={<Edit size={16} />} 
+              onClick={() => openModal(record)}
+              title="Edit Event"
+              disabled={isInactive}
+              style={{ opacity: isInactive ? 0.6 : 1 }}
+            />
+            <Popconfirm
+              title="Delete Event"
+              description="Are you sure you want to delete this event? This action cannot be undone."
+              onConfirm={() => deleteEvent(record.id)}
+              okText="Yes"
+              cancelText="No"
+              disabled={isInactive}
+            >
+              <Button 
+                type="text" 
+                danger 
+                icon={<Trash2 size={16} />} 
+                disabled={isInactive}
+                style={{ opacity: isInactive ? 0.6 : 1 }}
+              />
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -444,8 +505,12 @@ const EventManagement = () => {
             >
               <Select placeholder="Select season">
                 {seasons.map(season => (
-                  <Select.Option key={season.id} value={season.id}>
-                    {season.name} ({season.year})
+                  <Select.Option 
+                    key={season.id} 
+                    value={season.id}
+                    disabled={!season.is_active && !editingEvent}
+                  >
+                    {season.name} ({season.year}) {!season.is_active ? '(Inactive)' : ''}
                   </Select.Option>
                 ))}
               </Select>

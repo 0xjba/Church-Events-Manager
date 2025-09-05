@@ -6,7 +6,7 @@ import Navigation from '@/components/Navigation';
 import { Layout, Card, Statistic, Row, Col, Typography, Button, Spin, Alert, List, Avatar, Tag } from 'antd';
 import { Users, Calendar, Trophy, BarChart3, LogOut, RefreshCw, User, Award, Target, Clock } from 'lucide-react';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
-import { NetworkStatus } from '@/components/NetworkStatus';
+
 
 const { Content, Header } = Layout;
 const { Title, Text } = Typography;
@@ -77,7 +77,7 @@ const AdminDashboard = () => {
                 >
                   Refresh
                 </Button>
-                <NetworkStatus />
+
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>

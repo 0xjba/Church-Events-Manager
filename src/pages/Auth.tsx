@@ -105,7 +105,7 @@ const Auth = () => {
             />
           </div>
           <Title level={2} style={{ margin: 0 }}>PYPA</Title>
-          <Text type="secondary">Devotional & Cultural Competitions</Text>
+                          <Text type="secondary">Pentecostal Youth People's Association</Text>
         </div>
 
         {/* User Type Selection */}
@@ -127,7 +127,9 @@ const Auth = () => {
                 }}
                 onClick={() => setUserType('admin')}
               >
-                <Users size={24} color="#8b5cf6" style={{ marginBottom: '4px' }} />
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
+                  <Users size={24} color="#8b5cf6" />
+                </div>
                 <div style={{ fontWeight: 'medium', fontSize: '14px' }}>Admin</div>
                 <Text type="secondary" style={{ fontSize: '11px' }}>System Admin</Text>
               </Card>
@@ -143,7 +145,9 @@ const Auth = () => {
                 }}
                 onClick={() => setUserType('judge')}
               >
-                <Gavel size={24} color="#8b5cf6" style={{ marginBottom: '4px' }} />
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
+                  <Gavel size={24} color="#8b5cf6" />
+                </div>
                 <div style={{ fontWeight: 'medium', fontSize: '14px' }}>Judge</div>
                 <Text type="secondary" style={{ fontSize: '11px' }}>Event Judge</Text>
               </Card>
@@ -159,7 +163,9 @@ const Auth = () => {
                 }}
                 onClick={() => setUserType('participant')}
               >
-                <UserCheck size={24} color="#8b5cf6" style={{ marginBottom: '4px' }} />
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
+                  <UserCheck size={24} color="#8b5cf6" />
+                </div>
                 <div style={{ fontWeight: 'medium', fontSize: '14px' }}>Participant</div>
                 <Text type="secondary" style={{ fontSize: '11px' }}>Contestant</Text>
               </Card>

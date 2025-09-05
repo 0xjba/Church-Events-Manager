@@ -356,29 +356,31 @@ const SeasonManagement = () => {
                 <TextArea rows={3} placeholder="Season description..." />
               </Form.Item>
 
-              <Form.Item
-                name="is_active"
-                valuePropName="checked"
-              >
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center',
-                  padding: '16px',
-                  border: '1px solid #d9d9d9',
-                  borderRadius: '6px'
-                }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                padding: '16px',
+                border: '1px solid #d9d9d9',
+                borderRadius: '6px',
+                marginBottom: '24px'
+              }}>
+                <div>
+                  <Text strong>Set as Active Season</Text>
                   <div>
-                    <Text strong>Set as Active Season</Text>
-                    <div>
-                      <Text type="secondary" style={{ fontSize: '12px' }}>
-                        Only one season can be active at a time
-                      </Text>
-                    </div>
+                    <Text type="secondary" style={{ fontSize: '12px' }}>
+                      Only one season can be active at a time
+                    </Text>
                   </div>
-                  <Switch />
                 </div>
-              </Form.Item>
+                <Form.Item
+                  name="is_active"
+                  valuePropName="checked"
+                  style={{ margin: 0 }}
+                >
+                  <Switch />
+                </Form.Item>
+              </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
                 <Button onClick={handleCloseModal}>

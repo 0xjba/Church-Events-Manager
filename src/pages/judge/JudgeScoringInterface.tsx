@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useParticipantAuth } from '@/hooks/useParticipantAuth';
-import { useOfflineSync } from '@/hooks/useOfflineSync';
+import { scoreSubmissionService } from '@/utils/scoreSubmission';
 import { usePWA } from '@/hooks/usePWA';
 import Navigation from '@/components/Navigation';
-import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
+
 import { Layout, Card, Button, Input, Badge, Modal, Progress, Typography, Space, message, InputNumber, Row, Col, Divider } from 'antd';
 import { Clock, Play, Pause, Save, AlertTriangle, CheckCircle, Wifi, WifiOff, Download, Timer, User, Users, Target, Search as SearchIcon, X } from 'lucide-react';
 import React from 'react'; // Added missing import for React
@@ -71,7 +71,8 @@ const JudgeScoringInterface = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const { participant } = useParticipantAuth();
-  const { isOnline, syncStatus, unsyncedCount, saveScoreOffline } = useOfflineSync();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingScoresCount, setPendingScoresCount] = useState(0);
   const { isInstallable, installApp } = usePWA();
   
   const [event, setEvent] = useState<Event | null>(null);
@@ -99,6 +100,35 @@ const JudgeScoringInterface = () => {
       navigate('/judge');
     }
   }, [participant]);
+
+  // Monitor network status and pending scores
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      message.success('Back Online - Pending scores will be submitted');
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      message.info('Offline - Scores will be cached until connection is restored');
+    };
+
+    const updatePendingCount = () => {
+      setPendingScoresCount(scoreSubmissionService.getPendingCount());
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Check pending scores periodically
+    const interval = setInterval(updatePendingCount, 1000);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     if (judgeId && eventId) {
@@ -430,33 +460,18 @@ const JudgeScoringInterface = () => {
         return;
       }
 
-
-
-      // Prepare scores for submission
-      const scoresToSubmit = participantScores.map(score => ({
-        event_id: eventId,
-        participant_id: participantId,
-        criteria_id: score.criteria_id,
-        judge_id: judgeId,
-        score: score.score,
-        is_locked: true
-      }));
-
-
-
-      // Insert scores one by one (same approach as group scoring)
-      for (const scoreData of scoresToSubmit) {
-        const { error: insertError } = await supabase
-          .from('scores')
-          .insert(scoreData);
-        
-        if (insertError) {
-          console.error('Error inserting score:', scoreData, insertError);
-          throw new Error(`Failed to insert score: ${insertError.message}`);
-        }
+      // Submit scores using the network-aware service
+      for (const score of participantScores) {
+        await scoreSubmissionService.submitScore({
+          eventId,
+          participantId,
+          criteriaId: score.criteria_id,
+          judgeId,
+          score: score.score
+        });
       }
       
-      message.success('Scores submitted successfully!');
+      message.success(isOnline ? 'Scores submitted successfully!' : 'Scores cached offline - will submit when online');
       
       // Clear local scores for this participant
       setScores(prev => prev.filter(s => s.participant_id !== participantId));
@@ -499,33 +514,18 @@ const JudgeScoringInterface = () => {
         return;
       }
 
-
-
-      // Prepare scores for submission
-      const scoresToSubmit = groupScores.map(score => ({
-        event_id: eventId,
-        group_id: groupId,
-        criteria_id: score.criteria_id,
-        judge_id: judgeId,
-        score: score.score,
-        is_locked: true
-      }));
-
-
-
-      // Insert scores one by one
-      for (const scoreData of scoresToSubmit) {
-        const { error: insertError } = await supabase
-          .from('scores')
-          .insert(scoreData);
-        
-        if (insertError) {
-          console.error('Error inserting score:', scoreData, insertError);
-          throw new Error(`Failed to insert score: ${insertError.message}`);
-        }
+      // Submit scores using the network-aware service
+      for (const score of groupScores) {
+        await scoreSubmissionService.submitScore({
+          eventId,
+          groupId,
+          criteriaId: score.criteria_id,
+          judgeId,
+          score: score.score
+        });
       }
       
-      message.success('Group scores submitted successfully!');
+      message.success(isOnline ? 'Group scores submitted successfully!' : 'Group scores cached offline - will submit when online');
       
       // Clear local scores for this group
       setScores(prev => prev.filter(s => s.group_id !== groupId));
@@ -679,26 +679,52 @@ const JudgeScoringInterface = () => {
             </div>
           </div>
 
-          {/* PWA Install Only */}
-          {isInstallable && (
-            <div style={{ marginBottom: '24px' }}>
+          {/* Network Status and PWA Install */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            marginBottom: '24px',
+            padding: '12px 16px',
+            backgroundColor: isOnline ? '#f0fdf4' : '#fef3c7',
+            borderRadius: '8px',
+            border: `1px solid ${isOnline ? '#bbf7d0' : '#fbbf24'}`
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {isOnline ? (
+                <Wifi size={16} color="#16a34a" />
+              ) : (
+                <WifiOff size={16} color="#d97706" />
+              )}
+              <Text style={{ 
+                fontSize: '14px', 
+                fontWeight: 500,
+                color: isOnline ? '#16a34a' : '#d97706'
+              }}>
+                {isOnline ? 'Online' : 'Offline'}
+              </Text>
+              {pendingScoresCount > 0 && (
+                <Badge count={pendingScoresCount} color="orange" />
+              )}
+            </div>
+            
+            {isInstallable && (
               <Button 
                 size="small" 
                 icon={<Download size={16} />} 
                 onClick={installApp}
                 style={{ 
-                  borderRadius: '8px',
-                  height: '36px',
-                  fontSize: '13px'
+                  borderRadius: '6px',
+                  height: '32px',
+                  fontSize: '12px'
                 }}
               >
                 Install App
               </Button>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* PWA Install Prompt */}
-          <PWAInstallPrompt />
+
 
           {/* Overall Progress */}
           <div style={{ 
