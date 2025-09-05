@@ -51,6 +51,14 @@ const ParticipantManagement = () => {
   const [submittingGroup, setSubmittingGroup] = useState(false);
   const [groupForm] = Form.useForm();
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
+  
+  // Batch selection state
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [batchDeleting, setBatchDeleting] = useState(false);
+  
+  // Group batch selection state
+  const [selectedGroupKeys, setSelectedGroupKeys] = useState<React.Key[]>([]);
+  const [batchDeletingGroups, setBatchDeletingGroups] = useState(false);
 
   useEffect(() => {
     fetchParticipants();
@@ -185,6 +193,49 @@ const ParticipantManagement = () => {
     });
   };
 
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('Please select participants to delete');
+      return;
+    }
+
+    Modal.confirm({
+      title: `Delete ${selectedRowKeys.length} participant(s)?`,
+      content: 'This action cannot be undone.',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          setBatchDeleting(true);
+          
+          // Delete each selected participant
+          for (const participantId of selectedRowKeys) {
+            const { error } = await supabase
+              .from('participants')
+              .delete()
+              .eq('id', participantId);
+            
+            if (error) throw error;
+          }
+
+          message.success(`Successfully deleted ${selectedRowKeys.length} participant(s)`);
+          setSelectedRowKeys([]);
+          fetchParticipants();
+        } catch (error: any) {
+          message.error(error.message || 'Failed to delete participants');
+        } finally {
+          setBatchDeleting(false);
+        }
+      }
+    });
+  };
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (selectedRowKeys: React.Key[]) => {
+      setSelectedRowKeys(selectedRowKeys);
+    },
+  };
+
   // Group management functions
   const openGroupModal = (group?: Group) => {
     if (group) {
@@ -316,6 +367,49 @@ const ParticipantManagement = () => {
     });
   };
 
+  const handleBatchDeleteGroups = async () => {
+    if (selectedGroupKeys.length === 0) {
+      message.warning('Please select groups to delete');
+      return;
+    }
+
+    Modal.confirm({
+      title: `Delete ${selectedGroupKeys.length} group(s)?`,
+      content: 'This action cannot be undone.',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          setBatchDeletingGroups(true);
+          
+          // Delete each selected group
+          for (const groupId of selectedGroupKeys) {
+            const { error } = await supabase
+              .from('groups')
+              .delete()
+              .eq('id', groupId);
+            
+            if (error) throw error;
+          }
+
+          message.success(`Successfully deleted ${selectedGroupKeys.length} group(s)`);
+          setSelectedGroupKeys([]);
+          fetchGroups();
+        } catch (error: any) {
+          message.error(error.message || 'Failed to delete groups');
+        } finally {
+          setBatchDeletingGroups(false);
+        }
+      }
+    });
+  };
+
+  const groupRowSelection = {
+    selectedRowKeys: selectedGroupKeys,
+    onChange: (selectedRowKeys: React.Key[]) => {
+      setSelectedGroupKeys(selectedRowKeys);
+    },
+  };
+
   const columns = [
     {
       title: 'Chest #',
@@ -329,10 +423,10 @@ const ParticipantManagement = () => {
       key: 'full_name',
     },
     {
-      title: 'Age',
-      dataIndex: 'age',
-      key: 'age',
-      width: 80,
+      title: 'Age Category',
+      dataIndex: 'age_category',
+      key: 'age_category',
+      width: 120,
     },
     {
       title: 'Category',
@@ -389,18 +483,31 @@ const ParticipantManagement = () => {
                 </Text>
               </div>
               
-              <Button
-                type="primary"
-                icon={<Plus size={16} />}
-                onClick={() => {
-                  setEditingParticipant(null);
-                  form.resetFields();
-                  setIsModalOpen(true);
-                }}
-                className="md:inline-flex hidden:flex"
-              >
-                <span className="hidden md:inline">Add Participant</span>
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="primary"
+                  icon={<Plus size={16} />}
+                  onClick={() => {
+                    setEditingParticipant(null);
+                    form.resetFields();
+                    setIsModalOpen(true);
+                  }}
+                  className="md:inline-flex hidden:flex"
+                >
+                  <span className="hidden md:inline">Add Participant</span>
+                </Button>
+                {selectedRowKeys.length > 0 && (
+                  <Button 
+                    danger 
+                    icon={<Trash2 size={16} />}
+                    loading={batchDeleting}
+                    onClick={handleBatchDelete}
+                    className="md:inline-flex hidden:flex"
+                  >
+                    <span className="hidden md:inline">Delete Selected ({selectedRowKeys.length})</span>
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -415,6 +522,7 @@ const ParticipantManagement = () => {
               dataSource={participants}
               loading={loading}
               rowKey="id"
+              rowSelection={rowSelection}
               cardTitle={(record) => `${record.chest_number} - ${record.full_name}`}
               locale={{
                 emptyText: loading ? <Spin /> : 'No participants registered yet'
@@ -430,14 +538,27 @@ const ParticipantManagement = () => {
                   <Text type="secondary">Manage participant groups for group events</Text>
                 </div>
                 
-                <Button
-                  type="primary"
-                  icon={<Users size={16} />}
-                  onClick={() => openGroupModal()}
-                  className="md:inline-flex hidden:flex"
-                >
-                  <span className="hidden md:inline">Add Group</span>
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    type="primary"
+                    icon={<Users size={16} />}
+                    onClick={() => openGroupModal()}
+                    className="md:inline-flex hidden:flex"
+                  >
+                    <span className="hidden md:inline">Add Group</span>
+                  </Button>
+                  {selectedGroupKeys.length > 0 && (
+                    <Button 
+                      danger 
+                      icon={<Trash2 size={16} />}
+                      loading={batchDeletingGroups}
+                      onClick={handleBatchDeleteGroups}
+                      className="md:inline-flex hidden:flex"
+                    >
+                      <span className="hidden md:inline">Delete Selected ({selectedGroupKeys.length})</span>
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
             
@@ -494,6 +615,7 @@ const ParticipantManagement = () => {
               dataSource={groups}
               loading={loading}
               rowKey="id"
+              rowSelection={groupRowSelection}
               cardTitle={(record) => record.name}
               cardExtra={(record) => (
                 <Text type="secondary">{record.members?.length || 0} members</Text>
@@ -530,12 +652,16 @@ const ParticipantManagement = () => {
               
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <Form.Item
-                  label="Age"
-                  name="age"
-                  rules={[{ required: true, type: 'number', min: 1, max: 100 }]}
-                  normalize={(value) => value ? parseInt(value) : undefined}
+                  label="Age Category"
+                  name="age_category"
+                  rules={[{ required: true, message: 'Age category is required' }]}
                 >
-                  <Input type="number" />
+                  <Select placeholder="Select age category">
+                    <Select.Option value="Sub Juniors">Sub Juniors</Select.Option>
+                    <Select.Option value="Juniors">Juniors</Select.Option>
+                    <Select.Option value="Intermediates">Intermediates</Select.Option>
+                    <Select.Option value="Seniors">Seniors</Select.Option>
+                  </Select>
                 </Form.Item>
                 
                 <Form.Item

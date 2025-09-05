@@ -26,6 +26,10 @@ const JudgeManagement = () => {
   const [editingJudge, setEditingJudge] = useState<Judge | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
+  
+  // Batch selection state
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [batchDeleting, setBatchDeleting] = useState(false);
 
   useEffect(() => {
     fetchJudges();
@@ -139,6 +143,49 @@ const JudgeManagement = () => {
     });
   };
 
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('Please select judges to delete');
+      return;
+    }
+
+    Modal.confirm({
+      title: `Delete ${selectedRowKeys.length} judge(s)?`,
+      content: 'This action cannot be undone.',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          setBatchDeleting(true);
+          
+          // Delete each selected judge
+          for (const judgeId of selectedRowKeys) {
+            const { error } = await supabase
+              .from('judges')
+              .delete()
+              .eq('id', judgeId);
+            
+            if (error) throw error;
+          }
+
+          message.success(`Successfully deleted ${selectedRowKeys.length} judge(s)`);
+          setSelectedRowKeys([]);
+          fetchJudges();
+        } catch (error: any) {
+          message.error(error.message || 'Failed to delete judges');
+        } finally {
+          setBatchDeleting(false);
+        }
+      }
+    });
+  };
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (selectedRowKeys: React.Key[]) => {
+      setSelectedRowKeys(selectedRowKeys);
+    },
+  };
+
   const columns = [
     {
       title: 'Name',
@@ -218,18 +265,31 @@ const JudgeManagement = () => {
                 </Text>
               </div>
               
-              <Button
-                type="primary"
-                icon={<Plus size={16} />}
-                onClick={() => {
-                  setEditingJudge(null);
-                  form.resetFields();
-                  setIsModalOpen(true);
-                }}
-                className="md:inline-flex hidden:flex"
-              >
-                <span className="hidden md:inline">Add Judge</span>
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="primary"
+                  icon={<Plus size={16} />}
+                  onClick={() => {
+                    setEditingJudge(null);
+                    form.resetFields();
+                    setIsModalOpen(true);
+                  }}
+                  className="md:inline-flex hidden:flex"
+                >
+                  <span className="hidden md:inline">Add Judge</span>
+                </Button>
+                {selectedRowKeys.length > 0 && (
+                  <Button 
+                    danger 
+                    icon={<Trash2 size={16} />}
+                    loading={batchDeleting}
+                    onClick={handleBatchDelete}
+                    className="md:inline-flex hidden:flex"
+                  >
+                    <span className="hidden md:inline">Delete Selected ({selectedRowKeys.length})</span>
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -244,6 +304,7 @@ const JudgeManagement = () => {
               dataSource={judges}
               loading={loading}
               rowKey="id"
+              rowSelection={rowSelection}
               cardTitle={(record) => record.full_name}
               locale={{
                 emptyText: loading ? <Spin /> : 'No judges registered yet'

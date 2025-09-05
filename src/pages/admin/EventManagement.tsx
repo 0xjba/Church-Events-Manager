@@ -16,6 +16,7 @@ interface Event {
   type: string;
   event_type: string;
   season_id: string;
+  age_category: string | null;
   rules: string | null;
   time_limit: number | null;
   max_participants: number | null;
@@ -52,6 +53,8 @@ const EventManagement = () => {
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
   const [criteria, setCriteria] = useState<Criteria[]>([{ name: '', max_score: 10, weight: 1.0 }]);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [batchDeleting, setBatchDeleting] = useState(false);
 
   useEffect(() => {
     fetchEvents();
@@ -102,13 +105,24 @@ const EventManagement = () => {
         type: event.type,
         event_type: event.event_type || 'individual',
         season_id: event.season_id,
+        age_category: event.age_category,
         rules: event.rules || '',
         time_limit: event.time_limit || undefined,
         max_participants: event.max_participants || undefined,
         status: event.status,
         event_order: event.event_order || undefined
       });
-      setCriteria(event.criteria || [{ name: '', max_score: 10, weight: 1.0 }]);
+      // Use event_criteria from the fetched data
+      const eventCriteria = (event as any).event_criteria || [];
+      if (eventCriteria.length > 0) {
+        setCriteria(eventCriteria.map((c: any) => ({
+          name: c.name,
+          max_score: c.max_score,
+          weight: c.weight
+        })));
+      } else {
+        setCriteria([{ name: '', max_score: 10, weight: 1.0 }]);
+      }
     } else {
       setEditingEvent(null);
       form.resetFields();
@@ -153,6 +167,7 @@ const EventManagement = () => {
             type: values.type,
             event_type: values.event_type,
             season_id: values.season_id,
+            age_category: values.age_category || null,
             rules: values.rules || null,
             time_limit: values.time_limit || null,
             max_participants: values.max_participants || null,
@@ -176,6 +191,7 @@ const EventManagement = () => {
             type: values.type,
             event_type: values.event_type,
             season_id: values.season_id,
+            age_category: values.age_category || null,
             rules: values.rules || null,
             time_limit: values.time_limit || null,
             max_participants: values.max_participants || null,
@@ -285,6 +301,42 @@ const EventManagement = () => {
     }
   };
 
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('Please select events to delete');
+      return;
+    }
+
+    try {
+      setBatchDeleting(true);
+      
+      // Delete each selected event
+      for (const eventId of selectedRowKeys) {
+        const { error } = await supabase
+          .from('events')
+          .delete()
+          .eq('id', eventId);
+        
+        if (error) throw error;
+      }
+
+      message.success(`Successfully deleted ${selectedRowKeys.length} event(s)`);
+      setSelectedRowKeys([]);
+      fetchEvents();
+    } catch (error: any) {
+      message.error(error.message || 'Failed to delete events');
+    } finally {
+      setBatchDeleting(false);
+    }
+  };
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (selectedRowKeys: React.Key[]) => {
+      setSelectedRowKeys(selectedRowKeys);
+    },
+  };
+
   const columns = [
     { 
       title: 'Event', 
@@ -326,6 +378,12 @@ const EventManagement = () => {
           </span>
         );
       }
+    },
+    {
+      title: 'Age Category',
+      dataIndex: 'age_category',
+      key: 'age_category',
+      width: 120,
     },
     { 
       title: 'Status', 
@@ -410,6 +468,24 @@ const EventManagement = () => {
               >
                 <span className="hidden md:inline">Add Event</span>
               </Button>
+              {selectedRowKeys.length > 0 && (
+                <Popconfirm
+                  title={`Delete ${selectedRowKeys.length} event(s)?`}
+                  description="This action cannot be undone."
+                  onConfirm={handleBatchDelete}
+                  okText="Yes, Delete"
+                  cancelText="Cancel"
+                >
+                  <Button 
+                    danger 
+                    icon={<Trash2 size={16} />}
+                    loading={batchDeleting}
+                    className="md:inline-flex hidden:flex"
+                  >
+                    <span className="hidden md:inline">Delete Selected ({selectedRowKeys.length})</span>
+                  </Button>
+                </Popconfirm>
+              )}
             </div>
             <Text type="secondary">Create and manage competition events</Text>
           </div>
@@ -420,6 +496,7 @@ const EventManagement = () => {
               dataSource={filteredEvents}
               loading={loading}
               rowKey="id"
+              rowSelection={rowSelection}
               cardTitle={(record) => record.name}
               cardExtra={(record) => (
                 <Space>
@@ -513,6 +590,19 @@ const EventManagement = () => {
                     {season.name} ({season.year}) {!season.is_active ? '(Inactive)' : ''}
                   </Select.Option>
                 ))}
+              </Select>
+            </Form.Item>
+
+            <Form.Item
+              label="Age Category"
+              name="age_category"
+              rules={[{ required: true, message: 'Age category is required' }]}
+            >
+              <Select placeholder="Select age category">
+                <Select.Option value="Sub Juniors">Sub Juniors</Select.Option>
+                <Select.Option value="Juniors">Juniors</Select.Option>
+                <Select.Option value="Intermediates">Intermediates</Select.Option>
+                <Select.Option value="Seniors">Seniors</Select.Option>
               </Select>
             </Form.Item>
 

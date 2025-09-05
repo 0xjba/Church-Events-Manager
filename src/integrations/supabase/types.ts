@@ -156,6 +156,7 @@ export type Database = {
       }
       events: {
         Row: {
+          age_category: Database["public"]["Enums"]["age_category"] | null
           created_at: string
           event_order: number | null
           event_type: string
@@ -171,6 +172,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          age_category?: Database["public"]["Enums"]["age_category"] | null
           created_at?: string
           event_order?: number | null
           event_type?: string
@@ -186,6 +188,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          age_category?: Database["public"]["Enums"]["age_category"] | null
           created_at?: string
           event_order?: number | null
           event_type?: string
@@ -356,7 +359,7 @@ export type Database = {
       }
       participants: {
         Row: {
-          age: number
+          age_category: Database["public"]["Enums"]["age_category"]
           category: string
           chest_number: string
           church: string
@@ -373,7 +376,7 @@ export type Database = {
           username: string | null
         }
         Insert: {
-          age: number
+          age_category: Database["public"]["Enums"]["age_category"]
           category: string
           chest_number: string
           church: string
@@ -390,7 +393,7 @@ export type Database = {
           username?: string | null
         }
         Update: {
-          age?: number
+          age_category?: Database["public"]["Enums"]["age_category"]
           category?: string
           chest_number?: string
           church?: string
@@ -618,6 +621,7 @@ export type Database = {
       }
     }
     Enums: {
+      age_category: "Sub Juniors" | "Juniors" | "Intermediates" | "Seniors"
       app_role: "admin" | "judge" | "participant"
     }
     CompositeTypes: {
@@ -746,6 +750,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      age_category: ["Sub Juniors", "Juniors", "Intermediates", "Seniors"],
       app_role: ["admin", "judge", "participant"],
     },
   },

@@ -14,6 +14,7 @@ interface Event {
   type: string;
   event_type: string;
   status: string;
+  age_category?: string | null;
   rules?: string;
   time_limit?: number;
   max_participants?: number;
@@ -28,7 +29,7 @@ interface Event {
 interface Participant {
   id: string;
   full_name: string;
-  age: number | string;
+  age_category: string;
   chest_number: string;
   category: string;
   church: string;
@@ -139,18 +140,24 @@ const EventDetails = () => {
 
   const fetchAllParticipants = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('participants')
         .select('*')
-        .eq('is_active', true)
-        .order('full_name');
+        .eq('is_active', true);
+
+      // Filter by event's age category if it exists
+      if (event?.age_category) {
+        query = query.eq('age_category', event.age_category);
+      }
+
+      const { data, error } = await query.order('full_name');
 
       if (error) throw error;
       setParticipants(data || []);
     } catch (error: unknown) {
       message.error('Failed to load participants');
     }
-  }, []);
+  }, [event?.age_category]);
 
   const fetchEventParticipants = useCallback(async () => {
     try {
@@ -507,14 +514,11 @@ const EventDetails = () => {
       )
     },
     {
-      title: 'Age',
-      dataIndex: 'age',
-      key: 'age',
-      width: 80,
+      title: 'Age Category',
+      dataIndex: 'age_category',
+      key: 'age_category',
+      width: 120,
       align: 'center' as const,
-      render: (age: number | string) => (
-        <span>{typeof age === 'string' ? parseInt(age) || age : age}</span>
-      )
     },
     {
       title: 'District',

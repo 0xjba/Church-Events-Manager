@@ -1,4 +1,4 @@
-import { Table, List, Card, Typography } from 'antd';
+import { Table, List, Card, Typography, Checkbox } from 'antd';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 const { Text } = Typography;
@@ -13,6 +13,7 @@ interface ResponsiveTableProps {
   className?: string;
   cardTitle?: (record: any) => React.ReactNode;
   cardExtra?: (record: any) => React.ReactNode;
+  rowSelection?: any;
 }
 
 const ResponsiveTable = ({
@@ -24,7 +25,8 @@ const ResponsiveTable = ({
   locale,
   className,
   cardTitle,
-  cardExtra
+  cardExtra,
+  rowSelection
 }: ResponsiveTableProps) => {
   const isMobile = useIsMobile();
 
@@ -39,6 +41,7 @@ const ResponsiveTable = ({
         locale={locale}
         className={className}
         scroll={{ x: 800 }}
+        rowSelection={rowSelection}
       />
     );
   }
@@ -55,7 +58,22 @@ const ResponsiveTable = ({
         <List.Item key={record[rowKey]} style={{ padding: 0, marginBottom: 12 }}>
           <Card
             size="small"
-            title={cardTitle ? cardTitle(record) : record[columns[0]?.dataIndex]}
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {rowSelection && (
+                  <Checkbox
+                    checked={rowSelection.selectedRowKeys?.includes(record[rowKey])}
+                    onChange={(e) => {
+                      const newSelectedRowKeys = e.target.checked
+                        ? [...(rowSelection.selectedRowKeys || []), record[rowKey]]
+                        : (rowSelection.selectedRowKeys || []).filter((key: any) => key !== record[rowKey]);
+                      rowSelection.onChange?.(newSelectedRowKeys);
+                    }}
+                  />
+                )}
+                {cardTitle ? cardTitle(record) : record[columns[0]?.dataIndex]}
+              </div>
+            }
             extra={cardExtra ? cardExtra(record) : null}
             style={{ width: '100%' }}
           >

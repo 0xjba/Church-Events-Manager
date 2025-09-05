@@ -300,7 +300,7 @@ async function handleCreate(req: Request) {
 
   const {
     full_name,
-    age,
+    age_category,
     chest_number,
     category,
     church,
@@ -310,7 +310,7 @@ async function handleCreate(req: Request) {
   } = await req.json();
 
   // Validate required fields
-  if (!full_name || !age || !chest_number || !category || !church || !district || !username || !password) {
+  if (!full_name || !age_category || !chest_number || !category || !church || !district || !username || !password) {
     return new Response(
       JSON.stringify({ error: 'All fields are required' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -339,7 +339,7 @@ async function handleCreate(req: Request) {
     .from('participants')
     .insert({
       full_name,
-      age,
+      age_category,
       chest_number,
       category,
       church,
