@@ -7,12 +7,10 @@
   to = "/index.html"
   status = 200
 
+# Configure build environment and secrets scanning
 [build.environment]
   NODE_VERSION = "18.19.0"
   NPM_FLAGS = "--legacy-peer-deps"
-
-# Configure secrets scanning to ignore build output and specific paths
-[build.environment]
   SECRETS_SCAN_OMIT_PATHS = "dist/**/*,supabase/.temp/**/*"
   SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_PROJECT_ID,VITE_SUPABASE_PUBLISHABLE_KEY,VITE_SUPABASE_URL"
 
