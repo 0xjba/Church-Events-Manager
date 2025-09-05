@@ -51,7 +51,7 @@ const Navigation = () => {
       { key: '/admin', icon: <Settings size={18} />, label: 'Dashboard', path: '/admin' },
       { key: '/admin/participants', icon: <Users size={18} />, label: 'Participants', path: '/admin/participants' },
       { key: '/admin/judges', icon: <Gavel size={18} />, label: 'Judges', path: '/admin/judges' },
-      { key: '/admin/seasons', icon: <CalendarDays size={18} />, label: 'Seasons', path: '/admin/seasons' },
+      { key: '/admin/event-levels', icon: <CalendarDays size={18} />, label: 'Event Levels', path: '/admin/event-levels' },
       { key: '/admin/events', icon: <Calendar size={18} />, label: 'Events', path: '/admin/events' },
       { key: '/admin/results', icon: <Trophy size={18} />, label: 'Results', path: '/admin/results' },
     ] : []),

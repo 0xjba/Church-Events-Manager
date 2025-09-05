@@ -38,8 +38,7 @@ const Leaderboard = () => {
   const [selectedEvent, setSelectedEvent] = useState<string>('');
   const [eventResults, setEventResults] = useState<EventResult[]>([]);
   const [championshipData, setChampionshipData] = useState<any>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [categories, setCategories] = useState<string[]>([]);
+  // Category filtering removed as participant category column was dropped
   const [loading, setLoading] = useState(true);
   const [showChampionship, setShowChampionship] = useState(false);
 
@@ -52,7 +51,7 @@ const Leaderboard = () => {
     if (selectedEvent) {
       fetchEventResults(selectedEvent);
     }
-  }, [selectedEvent, selectedCategory]);
+  }, [selectedEvent]);
 
   const fetchPublishedEvents = async () => {
     try {
@@ -113,12 +112,8 @@ const Leaderboard = () => {
       
       let filteredResults = data || [];
       
-      // Filter by category if selected
-      if (selectedCategory !== 'all') {
-        filteredResults = filteredResults.filter(
-          result => result.participants?.category === selectedCategory
-        );
-      }
+      // Note: Category filtering removed as participant category column was dropped
+      // All participants are now treated equally regardless of category
       
       setEventResults(filteredResults);
     } catch (error) {
@@ -133,17 +128,8 @@ const Leaderboard = () => {
       
       let filteredStandings = standings.participants;
       
-      // Filter by category if selected
-      if (selectedCategory !== 'all') {
-        filteredStandings = filteredStandings.filter(
-          participant => participant.participant.category === selectedCategory
-        );
-        
-        // Re-rank after filtering
-        filteredStandings.forEach((participant, index) => {
-          participant.rank = index + 1;
-        });
-      }
+      // Note: Category filtering removed as participant category column was dropped
+      // All participants are now treated equally regardless of category
       
       setChampionshipData({
         ...standings,
@@ -208,12 +194,7 @@ const Leaderboard = () => {
         </div>
       ),
     },
-    {
-      title: 'Category',
-      dataIndex: ['participants', 'category'],
-      key: 'category',
-      render: (category: string) => <span style={{ textTransform: 'capitalize' }}>{category}</span>,
-    },
+    // Category column removed as participant category column was dropped
     {
       title: 'Church',
       dataIndex: ['participants', 'church'],
@@ -374,22 +355,7 @@ const Leaderboard = () => {
                 </Select>
               </div>
               
-              <div>
-                <Text strong style={{ display: 'block', marginBottom: '8px' }}>Category</Text>
-                <Select 
-                  value={selectedCategory} 
-                  onChange={setSelectedCategory}
-                  style={{ width: '100%' }}
-                  placeholder="Select category"
-                >
-                  <Select.Option value="all">All Categories</Select.Option>
-                  {categories.map(category => (
-                    <Select.Option key={category} value={category}>
-                      {category}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </div>
+              {/* Category filter removed as participant category column was dropped */}
               
               <div>
                 <Button
@@ -408,9 +374,6 @@ const Leaderboard = () => {
                 <Space align="center">
                   <Trophy size={24} style={{ color: '#8b5cf6' }} />
                   <Title level={3} style={{ margin: 0 }}>Championship Standings</Title>
-                  {selectedCategory !== 'all' && (
-                    <Badge color="blue" text={selectedCategory} />
-                  )}
                 </Space>
                 <Text type="secondary">
                   Overall rankings across {championshipData.events_count} events
@@ -434,9 +397,6 @@ const Leaderboard = () => {
                   <Title level={3} style={{ margin: 0 }}>
                     {events.find(e => e.id === selectedEvent)?.name || 'Event Results'}
                   </Title>
-                  {selectedCategory !== 'all' && (
-                    <Badge color="blue" text={selectedCategory} />
-                  )}
                 </Space>
                 <Text type="secondary">
                   Event leaderboard and participant rankings

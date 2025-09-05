@@ -27,7 +27,6 @@ interface Participant {
   id: string;
   full_name: string;
   chest_number: string;
-  category: string;
   church: string;
 }
 
@@ -205,7 +204,6 @@ const JudgeScoringInterface = () => {
               id,
               full_name,
               chest_number,
-              category,
               church
             )
           `)

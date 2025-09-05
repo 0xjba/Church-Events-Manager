@@ -151,7 +151,6 @@ export class ResultsCalculator {
           id,
           full_name,
           chest_number,
-          category,
           church,
           district
         )

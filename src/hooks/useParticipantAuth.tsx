@@ -7,7 +7,7 @@ interface ParticipantData {
   full_name: string;
   age?: number;
   chest_number?: string;
-  category?: 'children' | 'teens' | 'youth' | 'adults';
+  category?: 'individual' | 'group';
   church: string;
   district?: string;
   email?: string;

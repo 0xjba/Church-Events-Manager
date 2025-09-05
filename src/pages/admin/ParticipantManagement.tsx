@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
 import ResponsiveTable from '@/components/ResponsiveTable';
 import { Layout, Card, Button, Input, Form, Modal, Select, message, Spin, Space, Typography, Checkbox } from 'antd';
-import { Plus, Edit, Trash2, Users } from 'lucide-react';
+import { Plus, Edit, Trash2, Users, Upload } from 'lucide-react';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -48,6 +48,15 @@ const ParticipantManagement = () => {
   const [groups, setGroups] = useState<Group[]>([]);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
+  
+  // Bulk import state
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [parsedData, setParsedData] = useState<any[]>([]);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [isValidating, setIsValidating] = useState(false);
+  const [conflicts, setConflicts] = useState<any[]>([]);
+  const [resolvedData, setResolvedData] = useState<any[]>([]);
   const [submittingGroup, setSubmittingGroup] = useState(false);
   const [groupForm] = Form.useForm();
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
@@ -75,7 +84,7 @@ const ParticipantManagement = () => {
       if (error) throw error;
       setParticipants(data || []);
     } catch (error) {
-      message.error('Failed to load participants');
+      console.error('Error fetching participants:', error);
     } finally {
       setLoading(false);
     }
@@ -102,7 +111,7 @@ const ParticipantManagement = () => {
       if (error) throw error;
       setGroups(data || []);
     } catch (error) {
-      message.error('Failed to load groups');
+      console.error('Error fetching groups:', error);
     }
   };
 
@@ -128,33 +137,56 @@ const ParticipantManagement = () => {
           .join('');
       };
 
-      const password_hash = await hashPassword(values.password);
+      if (editingParticipant) {
+        // Update existing participant
+        const { error } = await supabase
+          .from('participants')
+          .update({
+            full_name: values.full_name,
+            age_category: values.age_category,
+            chest_number: values.chest_number,
+            church: values.church,
+            district: values.district,
+            username: values.username,
+            // Only update password if provided
+            ...(values.password && { password_hash: await hashPassword(values.password) })
+          })
+          .eq('id', editingParticipant.id);
 
-      // Create participant directly in the database
-      const { data: newParticipant, error } = await supabase
-        .from('participants')
-        .insert({
-          full_name: values.full_name,
-          age: values.age,
-          chest_number: values.chest_number,
-          category: values.category,
-          church: values.church,
-          district: values.district,
-          username: values.username,
-          password_hash: password_hash,
-          is_active: true,
-          created_by: user.id
-          // Note: profile_id column was removed from participants table
-        })
-        .select()
-        .single();
+        if (error) {
+          console.error('Database error:', error);
+          throw new Error(error.message || 'Failed to update participant');
+        }
 
-      if (error) {
-        console.error('Database error:', error);
-        throw new Error(error.message || 'Failed to create participant');
+        message.success('Participant updated successfully');
+      } else {
+        // Create new participant
+        const password_hash = await hashPassword(values.password);
+
+        const { data: newParticipant, error } = await supabase
+          .from('participants')
+          .insert({
+            full_name: values.full_name,
+            age_category: values.age_category,
+            chest_number: values.chest_number,
+            church: values.church,
+            district: values.district,
+            username: values.username,
+            password_hash: password_hash,
+            is_active: true,
+            created_by: user.id
+            // Note: profile_id column was removed from participants table
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Database error:', error);
+          throw new Error(error.message || 'Failed to create participant');
+        }
+
+        message.success('Participant created successfully with login credentials');
       }
-
-      message.success('Participant created successfully with login credentials');
       setIsModalOpen(false);
       form.resetFields();
       fetchParticipants();
@@ -410,6 +442,276 @@ const ParticipantManagement = () => {
     },
   };
 
+  // CSV parsing and validation functions
+  const parseCSV = (fileContent: string) => {
+    const lines = fileContent.split('\n').filter(line => line.trim());
+    if (lines.length < 2) {
+      throw new Error('CSV file must have at least a header row and one data row');
+    }
+    
+    const headers = lines[0].split(',').map(h => h.trim());
+    const requiredHeaders = ['full_name', 'age_category', 'chest_number', 'category', 'church', 'district', 'username', 'password'];
+    
+    // Check if all required headers are present
+    const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+    if (missingHeaders.length > 0) {
+      throw new Error(`Missing required columns: ${missingHeaders.join(', ')}`);
+    }
+    
+    const data = lines.slice(1).map((line, index) => {
+      const values = line.split(',').map(v => v.trim());
+      const row: any = {};
+      headers.forEach((header, i) => {
+        row[header] = values[i] || '';
+      });
+      row._rowNumber = index + 2; // +2 because we skip header and arrays are 0-indexed
+      return row;
+    });
+    
+    return data;
+  };
+
+  const validateParticipantData = (data: any[]) => {
+    const errors: string[] = [];
+    const validAgeCategories = ['Sub Juniors', 'Juniors', 'Intermediates', 'Seniors'];
+    const validCategories = ['individual', 'group'];
+    
+    data.forEach((row, index) => {
+      const rowNum = row._rowNumber;
+      
+      // Required field validation
+      if (!row.full_name) errors.push(`Row ${rowNum}: Missing full_name`);
+      if (!row.age_category) errors.push(`Row ${rowNum}: Missing age_category`);
+      if (!row.chest_number) errors.push(`Row ${rowNum}: Missing chest_number`);
+      if (!row.category) errors.push(`Row ${rowNum}: Missing category`);
+      if (!row.church) errors.push(`Row ${rowNum}: Missing church`);
+      if (!row.district) errors.push(`Row ${rowNum}: Missing district`);
+      if (!row.username) errors.push(`Row ${rowNum}: Missing username`);
+      if (!row.password) errors.push(`Row ${rowNum}: Missing password`);
+      
+      // Format validation
+      if (row.username && row.username.length < 3) {
+        errors.push(`Row ${rowNum}: Username must be at least 3 characters`);
+      }
+      if (row.password && row.password.length < 4) {
+        errors.push(`Row ${rowNum}: Password must be at least 4 characters`);
+      }
+      if (row.age_category && !validAgeCategories.includes(row.age_category)) {
+        errors.push(`Row ${rowNum}: Invalid age_category. Must be one of: ${validAgeCategories.join(', ')}`);
+      }
+      if (row.category && !validCategories.includes(row.category)) {
+        errors.push(`Row ${rowNum}: Invalid category. Must be one of: ${validCategories.join(', ')}`);
+      }
+    });
+    
+    return errors;
+  };
+
+  const handleFileUpload = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      message.error('Please upload a CSV file');
+      return;
+    }
+    
+    try {
+      setIsValidating(true);
+      const fileContent = await file.text();
+      const parsed = parseCSV(fileContent);
+      const errors = validateParticipantData(parsed);
+      
+      if (errors.length > 0) {
+        setCsvFile(file);
+        setParsedData(parsed);
+        setValidationErrors(errors);
+        setConflicts([]);
+        setResolvedData([]);
+        message.warning(`Found ${errors.length} validation errors. Please check the data.`);
+        return;
+      }
+      
+      // Check for conflicts and auto-resolve
+      const { conflicts: detectedConflicts, resolvedData: autoResolvedData } = await checkConflicts(parsed);
+      
+      setCsvFile(file);
+      setParsedData(parsed);
+      setValidationErrors([]);
+      setConflicts(detectedConflicts);
+      setResolvedData(autoResolvedData);
+      
+      if (detectedConflicts.length > 0) {
+        message.info(`Found ${detectedConflicts.length} conflicts. Auto-resolved and ready to import.`);
+      } else {
+        message.success(`Successfully parsed ${parsed.length} participants. Ready to import.`);
+      }
+    } catch (error: any) {
+      message.error(error.message || 'Failed to parse CSV file');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    const template = 'full_name,age_category,chest_number,category,church,district,username,password\nJohn Doe,Juniors,001,individual,Grace Church,District A,john.doe,password123\nJane Smith,Intermediates,002,group,Hope Church,District B,jane.smith,password456';
+    const blob = new Blob([template], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'participants_template.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  // Conflict detection and auto-resolution
+  const checkConflicts = async (data: any[]) => {
+    try {
+      // Get existing chest numbers and usernames
+      const { data: existingParticipants, error } = await supabase
+        .from('participants')
+        .select('chest_number, username');
+      
+      if (error) throw error;
+      
+      const existingChestNumbers = new Set(existingParticipants?.map(p => p.chest_number) || []);
+      const existingUsernames = new Set(existingParticipants?.map(p => p.username) || []);
+      
+      const conflicts = [];
+      const resolvedData = [];
+      
+      // Check for duplicates within the import data
+      const importChestNumbers = new Set();
+      const importUsernames = new Set();
+      
+      for (const row of data) {
+        const rowNum = row._rowNumber;
+        let hasConflict = false;
+        const changes = [];
+        
+        // Check chest number conflicts
+        if (existingChestNumbers.has(row.chest_number) || importChestNumbers.has(row.chest_number)) {
+          const newChestNumber = findNextChestNumber(existingChestNumbers, importChestNumbers);
+          changes.push(`Chest number '${row.chest_number}' → '${newChestNumber}' (auto-fixed)`);
+          row.chest_number = newChestNumber;
+          hasConflict = true;
+        }
+        importChestNumbers.add(row.chest_number);
+        
+        // Check username conflicts
+        if (existingUsernames.has(row.username) || importUsernames.has(row.username)) {
+          const newUsername = generateUniqueUsername(row.username, existingUsernames, importUsernames);
+          changes.push(`Username '${row.username}' → '${newUsername}' (auto-fixed)`);
+          row.username = newUsername;
+          hasConflict = true;
+        }
+        importUsernames.add(row.username);
+        
+        if (hasConflict) {
+          conflicts.push({
+            row: rowNum,
+            name: row.full_name,
+            changes: changes
+          });
+        }
+        
+        resolvedData.push(row);
+      }
+      
+      return { conflicts, resolvedData };
+    } catch (error: any) {
+      message.error('Failed to check conflicts: ' + error.message);
+      return { conflicts: [], resolvedData: data };
+    }
+  };
+
+  const findNextChestNumber = (existing: Set<string>, importSet: Set<string>) => {
+    let num = 1;
+    while (existing.has(num.toString().padStart(3, '0')) || importSet.has(num.toString().padStart(3, '0'))) {
+      num++;
+    }
+    return num.toString().padStart(3, '0');
+  };
+
+  const generateUniqueUsername = (username: string, existing: Set<string>, importSet: Set<string>) => {
+    let counter = 1;
+    let newUsername = username;
+    
+    while (existing.has(newUsername) || importSet.has(newUsername)) {
+      newUsername = `${username}.${counter}`;
+      counter++;
+    }
+    
+    return newUsername;
+  };
+
+  // Bulk import function
+  const handleBulkImport = async () => {
+    try {
+      setIsValidating(true);
+      
+      // Get the current user's session
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error('No active session found. Please log in again.');
+      }
+
+      // Hash password using the same method as the edge function
+      const hashPassword = async (password: string) => {
+        const encoder = new TextEncoder();
+        const salt = 'pypa-salt';
+        const passwordData = encoder.encode(password + salt);
+        const hash = await crypto.subtle.digest('SHA-256', passwordData);
+        return Array.from(new Uint8Array(hash))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+      };
+
+      // Prepare data for import
+      const dataToImport = resolvedData.length > 0 ? resolvedData : parsedData;
+      const participantsToInsert = [];
+      
+      for (const row of dataToImport) {
+        const password_hash = await hashPassword(row.password);
+        participantsToInsert.push({
+          full_name: row.full_name,
+          age_category: row.age_category,
+          chest_number: row.chest_number,
+          church: row.church,
+          district: row.district,
+          username: row.username,
+          password_hash: password_hash,
+          is_active: true,
+          created_by: user.id
+        });
+      }
+
+      // Insert all participants in a single transaction
+      const { data: newParticipants, error } = await supabase
+        .from('participants')
+        .insert(participantsToInsert)
+        .select();
+
+      if (error) {
+        console.error('Database error:', error);
+        throw new Error(error.message || 'Failed to import participants');
+      }
+
+      message.success(`Successfully imported ${newParticipants.length} participants`);
+      setIsBulkImportOpen(false);
+      setCsvFile(null);
+      setParsedData([]);
+      setValidationErrors([]);
+      setConflicts([]);
+      setResolvedData([]);
+      fetchParticipants();
+      
+    } catch (error: any) {
+      console.error('Import error:', error);
+      message.error(error.message || 'Failed to import participants');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
   const columns = [
     {
       title: 'Chest #',
@@ -426,13 +728,7 @@ const ParticipantManagement = () => {
       title: 'Age Category',
       dataIndex: 'age_category',
       key: 'age_category',
-      width: 120,
-    },
-    {
-      title: 'Category',
-      dataIndex: 'category',
-      key: 'category',
-      render: (category: string) => <span style={{ textTransform: 'capitalize' }}>{category}</span>,
+      width: 150,
     },
     {
       title: 'Church',
@@ -496,6 +792,13 @@ const ParticipantManagement = () => {
                 >
                   <span className="hidden md:inline">Add Participant</span>
                 </Button>
+                <Button
+                  icon={<Upload size={16} />}
+                  onClick={() => setIsBulkImportOpen(true)}
+                  className="md:inline-flex hidden:flex"
+                >
+                  <span className="hidden md:inline">Bulk Import</span>
+                </Button>
                 {selectedRowKeys.length > 0 && (
                   <Button 
                     danger 
@@ -512,11 +815,6 @@ const ParticipantManagement = () => {
           </div>
 
           <Card>
-            <div style={{ marginBottom: '16px' }}>
-              <Title level={4} style={{ margin: 0 }}>Participants</Title>
-              <Text type="secondary">All registered participants</Text>
-            </div>
-            
             <ResponsiveTable
               columns={columns}
               dataSource={participants}
@@ -525,7 +823,7 @@ const ParticipantManagement = () => {
               rowSelection={rowSelection}
               cardTitle={(record) => `${record.chest_number} - ${record.full_name}`}
               locale={{
-                emptyText: loading ? <Spin /> : 'No participants registered yet'
+                emptyText: loading ? <Spin /> : undefined
               }}
             />
           </Card>
@@ -534,8 +832,6 @@ const ParticipantManagement = () => {
             <div style={{ marginBottom: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                 <div>
-                  <Title level={4} style={{ margin: 0 }}>Groups</Title>
-                  <Text type="secondary">Manage participant groups for group events</Text>
                 </div>
                 
                 <div className="flex gap-2">
@@ -621,7 +917,7 @@ const ParticipantManagement = () => {
                 <Text type="secondary">{record.members?.length || 0} members</Text>
               )}
               locale={{
-                emptyText: 'No groups created yet'
+                emptyText: undefined
               }}
             />
           </Card>
@@ -674,19 +970,6 @@ const ParticipantManagement = () => {
               </div>
               
               <Form.Item
-                label="Category"
-                name="category"
-                rules={[{ required: true, message: 'Category is required' }]}
-              >
-                <Select placeholder="Select category">
-                  <Select.Option value="children">Children</Select.Option>
-                  <Select.Option value="teens">Teens</Select.Option>
-                  <Select.Option value="youth">Youth</Select.Option>
-                  <Select.Option value="adults">Adults</Select.Option>
-                </Select>
-              </Form.Item>
-              
-              <Form.Item
                 label="Church"
                 name="church"
                 rules={[{ required: true, message: 'Church is required' }]}
@@ -713,9 +996,17 @@ const ParticipantManagement = () => {
               <Form.Item
                 label="Password"
                 name="password"
-                rules={[{ required: true, message: 'Password must be at least 4 characters', min: 4 }]}
+                rules={[
+                  { 
+                    required: !editingParticipant, 
+                    message: 'Password must be at least 4 characters', 
+                    min: 4 
+                  }
+                ]}
               >
-                <Input.Password placeholder="Enter password for login" />
+                <Input.Password 
+                  placeholder={editingParticipant ? "Leave blank to keep current password" : "Enter password for login"} 
+                />
               </Form.Item>
               
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
@@ -806,6 +1097,159 @@ const ParticipantManagement = () => {
                 </Button>
               </div>
             </Form>
+          </Modal>
+
+          {/* Bulk Import Modal */}
+          <Modal
+            title="Bulk Import Participants"
+            open={isBulkImportOpen}
+            onCancel={() => {
+              setIsBulkImportOpen(false);
+              setCsvFile(null);
+              setParsedData([]);
+              setValidationErrors([]);
+              setConflicts([]);
+              setResolvedData([]);
+            }}
+            footer={null}
+            width={800}
+          >
+            {!csvFile ? (
+              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                <Upload size={48} style={{ color: '#1890ff', marginBottom: '16px' }} />
+                <Title level={4}>Upload CSV File</Title>
+                <Text type="secondary" style={{ marginBottom: '24px', display: 'block' }}>
+                  Upload a CSV file with participant data. Download the template for the correct format.
+                </Text>
+                
+                <div style={{ marginBottom: '24px' }}>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(file);
+                    }}
+                    style={{ display: 'none' }}
+                    id="csv-upload"
+                  />
+                  <label htmlFor="csv-upload">
+                    <Button type="dashed" size="large" style={{ width: '200px', height: '60px' }}>
+                      <Upload size={20} style={{ marginRight: '8px' }} />
+                      Choose CSV File
+                    </Button>
+                  </label>
+                </div>
+                
+                <div>
+                  <Button type="link" onClick={downloadTemplate} style={{ marginRight: '16px' }}>
+                    Download Template
+                  </Button>
+                  <Button onClick={() => setIsBulkImportOpen(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ marginBottom: '16px' }}>
+                  <Text strong>File: {csvFile.name}</Text>
+                  {isValidating && <Spin size="small" style={{ marginLeft: '8px' }} />}
+                  <Button 
+                    type="link" 
+                    onClick={() => {
+                      setCsvFile(null);
+                      setParsedData([]);
+                      setValidationErrors([]);
+                      setConflicts([]);
+                      setResolvedData([]);
+                    }}
+                    style={{ float: 'right' }}
+                  >
+                    Change File
+                  </Button>
+                </div>
+                
+                {validationErrors.length > 0 && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <Text type="danger" strong>Validation Errors ({validationErrors.length}):</Text>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: '8px' }}>
+                      {validationErrors.map((error, index) => (
+                        <div key={index} style={{ color: '#ff4d4f', fontSize: '12px', marginBottom: '4px' }}>
+                          {error}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {conflicts.length > 0 && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <Text type="warning" strong>Auto-Resolved Conflicts ({conflicts.length}):</Text>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: '8px' }}>
+                      {conflicts.map((conflict, index) => (
+                        <div key={index} style={{ color: '#faad14', fontSize: '12px', marginBottom: '4px' }}>
+                          <strong>Row {conflict.row} ({conflict.name}):</strong> {conflict.changes.join(', ')}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {(resolvedData.length > 0 || parsedData.length > 0) && (
+                  <div>
+                    <Text strong>Preview ({(resolvedData.length || parsedData.length)} participants):</Text>
+                    <div style={{ maxHeight: '300px', overflowY: 'auto', marginTop: '8px' }}>
+                      <table style={{ width: '100%', border: '1px solid #d9d9d9', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#f5f5f5' }}>
+                            <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Name</th>
+                            <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Age Category</th>
+                            <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Chest #</th>
+                            <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Event Category</th>
+                            <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Church</th>
+                            <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Username</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(resolvedData.length > 0 ? resolvedData : parsedData).slice(0, 10).map((row, index) => (
+                            <tr key={index}>
+                              <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.full_name}</td>
+                              <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.age_category}</td>
+                              <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.chest_number}</td>
+                              <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>
+                                {row.category === 'individual' ? 'Individual Event' : 'Group Event'}
+                              </td>
+                              <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.church}</td>
+                              <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.username}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {(resolvedData.length || parsedData.length) > 10 && (
+                        <Text type="secondary" style={{ fontSize: '12px' }}>
+                          ... and {(resolvedData.length || parsedData.length) - 10} more participants
+                        </Text>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                <div style={{ marginTop: '16px', textAlign: 'right' }}>
+                  <Button onClick={() => setIsBulkImportOpen(false)} style={{ marginRight: '8px' }}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="primary" 
+                    disabled={validationErrors.length > 0 || isValidating}
+                    loading={isValidating}
+                    onClick={handleBulkImport}
+                  >
+                    Import {(resolvedData.length || parsedData.length)} Participants
+                  </Button>
+                </div>
+              </div>
+            )}
           </Modal>
         </Content>
       </Layout>

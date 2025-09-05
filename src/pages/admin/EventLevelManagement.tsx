@@ -3,13 +3,13 @@ import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
 import ResponsiveTable from '@/components/ResponsiveTable';
 import { Layout, Card, Button, Form, Input, Switch, Modal, Badge, Typography, Space, Spin, message } from 'antd';
-import { Plus, Edit, Trash2, Trophy } from 'lucide-react';
+import { Plus, Edit, Trash2 } from 'lucide-react';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
-interface Season {
+interface EventLevel {
   id: string;
   name: string;
   year: number;
@@ -20,67 +20,66 @@ interface Season {
   event_count?: number;
 }
 
-const SeasonManagement = () => {
-  const [seasons, setSeasons] = useState<Season[]>([]);
+const EventLevelManagement = () => {
+  const [eventLevels, setEventLevels] = useState<EventLevel[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [editingSeason, setEditingSeason] = useState<Season | null>(null);
-  const [seasonToDelete, setSeasonToDelete] = useState<Season | null>(null);
+  const [editingLevel, setEditingLevel] = useState<EventLevel | null>(null);
+  const [levelToDelete, setLevelToDelete] = useState<EventLevel | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
 
   useEffect(() => {
-    console.log('SeasonManagement: Component mounted');
-    fetchSeasons();
+    console.log('EventLevelManagement: Component mounted');
+    fetchEventLevels();
   }, []);
 
   useEffect(() => {
-    console.log('SeasonManagement: Seasons data updated', { 
-      seasons: seasons.length, 
+    console.log('EventLevelManagement: Event levels data updated', { 
+      eventLevels: eventLevels.length, 
       loading, 
-      seasonsData: seasons 
+      eventLevelsData: eventLevels 
     });
-  }, [seasons, loading]);
+  }, [eventLevels, loading]);
 
-  const fetchSeasons = async () => {
+  const fetchEventLevels = async () => {
     try {
-      console.log('SeasonManagement: Fetching seasons...');
+      console.log('EventLevelManagement: Fetching event levels...');
       setLoading(true);
-      const { data: seasonsData, error: seasonsError } = await supabase
-        .from('seasons')
+      const { data: levelsData, error: levelsError } = await supabase
+        .from('event_levels')
         .select('*')
         .order('year', { ascending: false });
 
-      if (seasonsError) {
-        console.error('SeasonManagement: Error fetching seasons:', seasonsError);
-        throw seasonsError;
+      if (levelsError) {
+        console.error('EventLevelManagement: Error fetching event levels:', levelsError);
+        return;
       }
 
-      console.log('SeasonManagement: Raw seasons data:', seasonsData);
+      console.log('EventLevelManagement: Raw event levels data:', levelsData);
 
-      // Get event counts for each season
-      const seasonsWithCounts = await Promise.all(
-        seasonsData.map(async (season) => {
+      // Get event counts for each level
+      const levelsWithCounts = await Promise.all(
+        levelsData.map(async (level) => {
           const { count, error } = await supabase
             .from('events')
             .select('*', { count: 'exact', head: true })
-            .eq('season_id', season.id);
+            .eq('level_id', level.id);
 
           if (error) console.error('Error counting events:', error);
           
           return {
-            ...season,
+            ...level,
             event_count: count || 0,
           };
         })
       );
 
-      console.log('SeasonManagement: Seasons with counts:', seasonsWithCounts);
-      setSeasons(seasonsWithCounts);
+      console.log('EventLevelManagement: Event levels with counts:', levelsWithCounts);
+      setEventLevels(levelsWithCounts);
     } catch (error) {
-      console.error('Error fetching seasons:', error);
-      message.error('Failed to fetch seasons');
+      console.error('Error fetching event levels:', error);
     } finally {
       setLoading(false);
     }
@@ -90,22 +89,22 @@ const SeasonManagement = () => {
     try {
       setSubmitting(true);
 
-      if (editingSeason) {
+      if (editingLevel) {
         const { error } = await supabase
-          .from('seasons')
+          .from('event_levels')
           .update({
             name: values.name,
             year: values.year,
             description: values.description || null,
             is_active: values.is_active,
           })
-          .eq('id', editingSeason.id);
+          .eq('id', editingLevel.id);
 
         if (error) throw error;
-        message.success('Season updated successfully');
+        message.success('Event level updated successfully');
       } else {
         const { error } = await supabase
-          .from('seasons')
+          .from('event_levels')
           .insert([{
             name: values.name,
             year: values.year,
@@ -114,62 +113,62 @@ const SeasonManagement = () => {
           }]);
 
         if (error) throw error;
-        message.success('Season created successfully');
+        message.success('Event level created successfully');
       }
 
-      fetchSeasons();
+      fetchEventLevels();
       handleCloseModal();
     } catch (error: any) {
-      console.error('Error saving season:', error);
-      message.error(error.message || 'Failed to save season');
+      console.error('Error saving event level:', error);
+      message.error(error.message || 'Failed to save event level');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleEdit = (season: Season) => {
-    setEditingSeason(season);
+  const handleEdit = (level: EventLevel) => {
+    setEditingLevel(level);
     form.setFieldsValue({
-      name: season.name,
-      year: season.year,
-      description: season.description || '',
-      is_active: season.is_active,
+      name: level.name,
+      year: level.year,
+      description: level.description || '',
+      is_active: level.is_active,
     });
     setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
-    setEditingSeason(null);
+    setEditingLevel(null);
     form.resetFields();
   };
 
-  const handleDeleteClick = (season: Season) => {
-    setSeasonToDelete(season);
+  const handleDeleteClick = (level: EventLevel) => {
+    setLevelToDelete(level);
     setIsDeleteModalOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
-    if (!seasonToDelete) return;
+    if (!levelToDelete) return;
 
     try {
       setSubmitting(true);
       
-      // Delete the season (cascade will handle events and related data)
+      // Delete the event level (cascade will handle events and related data)
       const { error } = await supabase
-        .from('seasons')
+        .from('event_levels')
         .delete()
-        .eq('id', seasonToDelete.id);
+        .eq('id', levelToDelete.id);
 
       if (error) throw error;
 
-      message.success(`Season "${seasonToDelete.name}" and all its events deleted successfully`);
-      fetchSeasons();
+      message.success(`Event level "${levelToDelete.name}" and all its events deleted successfully`);
+      fetchEventLevels();
       setIsDeleteModalOpen(false);
-      setSeasonToDelete(null);
+      setLevelToDelete(null);
     } catch (error: any) {
-      console.error('Error deleting season:', error);
-      message.error(error.message || 'Failed to delete season');
+      console.error('Error deleting event level:', error);
+      message.error(error.message || 'Failed to delete event level');
     } finally {
       setSubmitting(false);
     }
@@ -177,9 +176,10 @@ const SeasonManagement = () => {
 
   const columns = [
     {
-      title: 'Season',
+      title: 'Event Level',
       dataIndex: 'name',
       key: 'name',
+      width: 150,
       render: (text: string) => <span style={{ fontWeight: 'medium' }}>{text}</span>,
     },
     {
@@ -205,10 +205,10 @@ const SeasonManagement = () => {
       ),
     },
     {
-      title: 'Events',
+      title: 'No. of Events',
       dataIndex: 'event_count',
       key: 'event_count',
-      width: 100,
+      width: 140,
       render: (count: number) => (
         <Badge count={count} color="blue" />
       ),
@@ -217,13 +217,13 @@ const SeasonManagement = () => {
       title: 'Actions',
       key: 'actions',
       width: 120,
-      render: (_: any, record: Season) => (
+      render: (_: any, record: EventLevel) => (
         <Space>
           <Button
             type="text"
             icon={<Edit size={16} />}
             onClick={() => {
-              console.log('SeasonManagement: Edit button clicked for season:', record);
+              console.log('EventLevelManagement: Edit button clicked for level:', record);
               handleEdit(record);
             }}
           />
@@ -232,7 +232,7 @@ const SeasonManagement = () => {
             danger
             icon={<Trash2 size={16} />}
             onClick={() => {
-              console.log('SeasonManagement: Delete button clicked for season:', record);
+              console.log('EventLevelManagement: Delete button clicked for level:', record);
               handleDeleteClick(record);
             }}
           />
@@ -251,10 +251,10 @@ const SeasonManagement = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div>
                 <Title level={2} style={{ margin: 0 }}>
-                  Season Management
+                  Event Level Management
                 </Title>
                 <Text type="secondary">
-                  Organize events by seasons and manage competition cycles
+                  Organize events by levels (Local, District, State) and manage competition hierarchy
                 </Text>
               </div>
               
@@ -262,62 +262,47 @@ const SeasonManagement = () => {
                 type="primary"
                 icon={<Plus size={16} />}
                 onClick={() => {
-                  console.log('SeasonManagement: Create season button clicked');
+                  console.log('EventLevelManagement: Create level button clicked');
                   setIsModalOpen(true);
                 }}
                 className="md:inline-flex hidden:flex"
               >
-                <span className="hidden md:inline">Create Season</span>
+                <span className="hidden md:inline">Create Event Level</span>
               </Button>
             </div>
           </div>
 
           <Card>
-            <div style={{ marginBottom: '16px' }}>
-              <Title level={4} style={{ margin: 0, marginBottom: '8px' }}>Seasons</Title>
-              <Text type="secondary">
-                Manage competition seasons and their associated events
-              </Text>
-            </div>
-
-            {loading ? (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
-                <Spin size="large" />
-              </div>
-            ) : seasons.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                <Trophy size={48} style={{ color: '#6b7280', marginBottom: '16px' }} />
-                <Title level={4} style={{ marginBottom: '8px' }}>No seasons found</Title>
-                <Text type="secondary">Create your first season to get started.</Text>
-              </div>
-            ) : (
-              <ResponsiveTable
-                columns={columns}
-                dataSource={seasons}
-                rowKey="id"
-                pagination={{ pageSize: 10 }}
-                cardTitle={(record) => (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 'medium' }}>{record.name}</span>
-                    <Badge color={record.is_active ? 'green' : 'default'} text={record.is_active ? 'Active' : 'Inactive'} />
-                  </div>
-                )}
-              />
-            )}
+            <ResponsiveTable
+              columns={columns}
+              dataSource={eventLevels}
+              loading={loading}
+              rowKey="id"
+              pagination={{ pageSize: 10 }}
+              cardTitle={(record) => (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 'medium' }}>{record.name}</span>
+                  <Badge color={record.is_active ? 'green' : 'default'} text={record.is_active ? 'Active' : 'Inactive'} />
+                </div>
+              )}
+              locale={{
+                emptyText: loading ? <Spin /> : undefined
+              }}
+            />
           </Card>
 
-          {/* Create/Edit Season Modal */}
+          {/* Create/Edit Event Level Modal */}
           <Modal
-            title={editingSeason ? 'Edit Season' : 'Create Season'}
+            title={editingLevel ? 'Edit Event Level' : 'Create Event Level'}
             open={isModalOpen}
             onCancel={handleCloseModal}
             footer={null}
             width={500}
           >
             <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
-              {editingSeason 
-                ? 'Update the season details below.' 
-                : 'Create a new season to organize your events.'
+              {editingLevel 
+                ? 'Update the event level details below.' 
+                : 'Create a new event level to organize your events.'
               }
             </Text>
 
@@ -331,11 +316,11 @@ const SeasonManagement = () => {
               }}
             >
               <Form.Item
-                label="Season Name"
+                label="Event Level Name"
                 name="name"
-                rules={[{ required: true, message: 'Season name is required' }]}
+                rules={[{ required: true, message: 'Event level name is required' }]}
               >
-                <Input placeholder="e.g., Spring Championship" />
+                <Input placeholder="e.g., Local Level, District Level, State Level" />
               </Form.Item>
 
               <Form.Item
@@ -353,7 +338,7 @@ const SeasonManagement = () => {
                 label="Description (Optional)"
                 name="description"
               >
-                <TextArea rows={3} placeholder="Season description..." />
+                <TextArea rows={3} placeholder="Event level description..." />
               </Form.Item>
 
               <div style={{ 
@@ -387,7 +372,7 @@ const SeasonManagement = () => {
                   Cancel
                 </Button>
                 <Button type="primary" htmlType="submit" loading={submitting}>
-                  {editingSeason ? 'Update' : 'Create'} Season
+                  {editingLevel ? 'Update' : 'Create'} Event Level
                 </Button>
               </div>
             </Form>
@@ -395,7 +380,7 @@ const SeasonManagement = () => {
 
           {/* Delete Confirmation Modal */}
           <Modal
-            title="Delete Season"
+            title="Delete Event Level"
             open={isDeleteModalOpen}
             onCancel={() => setIsDeleteModalOpen(false)}
             onOk={handleDeleteConfirm}
@@ -403,7 +388,7 @@ const SeasonManagement = () => {
             confirmLoading={submitting}
           >
             <Text>
-              Are you sure you want to delete season "{seasonToDelete?.name}"? 
+              Are you sure you want to delete event level "{levelToDelete?.name}"? 
               This will also delete all associated events and cannot be undone.
             </Text>
           </Modal>
@@ -413,4 +398,4 @@ const SeasonManagement = () => {
   );
 };
 
-export default SeasonManagement;
+export default EventLevelManagement;

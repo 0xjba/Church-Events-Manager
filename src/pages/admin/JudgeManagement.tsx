@@ -45,7 +45,7 @@ const JudgeManagement = () => {
       if (error) throw error;
       setJudges(data || []);
     } catch (error) {
-      message.error('Failed to load judges');
+      console.error('Error fetching judges:', error);
     } finally {
       setLoading(false);
     }
@@ -294,11 +294,6 @@ const JudgeManagement = () => {
           </div>
 
           <Card>
-            <div style={{ marginBottom: '16px' }}>
-              <Title level={4} style={{ margin: 0 }}>Judges</Title>
-              <Text type="secondary">All registered judges</Text>
-            </div>
-            
             <ResponsiveTable
               columns={columns}
               dataSource={judges}
@@ -307,7 +302,7 @@ const JudgeManagement = () => {
               rowSelection={rowSelection}
               cardTitle={(record) => record.full_name}
               locale={{
-                emptyText: loading ? <Spin /> : 'No judges registered yet'
+                emptyText: loading ? <Spin /> : undefined
               }}
             />
           </Card>

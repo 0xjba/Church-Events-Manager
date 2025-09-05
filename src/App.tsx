@@ -14,7 +14,7 @@ import ParticipantManagement from "./pages/admin/ParticipantManagement";
 import JudgeManagement from "./pages/admin/JudgeManagement";
 import EventManagement from "./pages/admin/EventManagement";
 import EventDetails from "./pages/admin/EventDetails";
-import SeasonManagement from "./pages/admin/SeasonManagement";
+import EventLevelManagement from "./pages/admin/EventLevelManagement";
 
 import RealtimeScoreboard from "./pages/admin/RealtimeScoreboard";
 import ResultsManagement from "./pages/admin/ResultsManagement";
@@ -60,9 +60,9 @@ const App = () => (
                 <JudgeManagement />
               </ProtectedRoute>
             } />
-            <Route path="/admin/seasons" element={
+            <Route path="/admin/event-levels" element={
               <ProtectedRoute requiredRole="admin">
-                <SeasonManagement />
+                <EventLevelManagement />
               </ProtectedRoute>
             } />
             <Route path="/admin/events" element={

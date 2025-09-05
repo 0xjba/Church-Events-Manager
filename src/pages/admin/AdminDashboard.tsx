@@ -4,7 +4,7 @@ import { useAdminStats } from '@/hooks/useAdminStats';
 import { useRecentActivity } from '@/hooks/useRecentActivity';
 import Navigation from '@/components/Navigation';
 import { Layout, Card, Statistic, Row, Col, Typography, Button, Spin, Alert, List, Avatar, Tag } from 'antd';
-import { Users, Calendar, Trophy, BarChart3, LogOut, RefreshCw, User, Award, Target, Clock } from 'lucide-react';
+import { Users, Calendar, Trophy, BarChart3, LogOut, RefreshCw, User, Award, Target } from 'lucide-react';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 
 
@@ -56,41 +56,36 @@ const AdminDashboard = () => {
               <Title level={2} style={{ margin: 0 }}>
                 Admin Dashboard
               </Title>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <Button 
-                  icon={<RefreshCw size={16} />} 
-                  onClick={() => {
-                    refetch();
-                    refetchActivities();
-                    setLastUpdated(new Date());
-                  }}
-                  loading={loading || activitiesLoading}
-                  size="small"
-                  type="default"
-                  style={{ 
-                    borderRadius: '6px',
-                    border: '1px solid #d9d9d9',
-                    boxShadow: '0 2px 0 rgba(0, 0, 0, 0.02)',
-                    height: '32px',
-                    padding: '4px 12px'
-                  }}
-                >
-                  Refresh
-                </Button>
-
-              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
               <Text type="secondary">
                 Welcome back, {profile?.full_name}
               </Text>
-              <Tag 
-                icon={<Clock size={12} />} 
-                color="blue"
-                style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+            </div>
+            <div>
+              <Button 
+                icon={<RefreshCw size={14} />} 
+                onClick={() => {
+                  refetch();
+                  refetchActivities();
+                  setLastUpdated(new Date());
+                }}
+                loading={loading || activitiesLoading}
+                size="small"
+                type="text"
+                style={{ 
+                  color: '#8b5cf6',
+                  padding: '4px 8px',
+                  height: 'auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
               >
-                Last updated: {lastUpdated.toLocaleTimeString()}
-              </Tag>
+                <span style={{ fontSize: '12px' }}>
+                  Last updated: {lastUpdated.toLocaleTimeString()}
+                </span>
+              </Button>
             </div>
           </div>
 

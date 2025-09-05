@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
 import { Layout, Card, Button, Checkbox, Table, message, Spin, Space, Typography, Badge, Divider, Modal, Input } from 'antd';
-import { ArrowLeft, Users, Plus, Minus, Search } from 'lucide-react';
+import { ArrowLeft, Users, Plus, Minus, Search, Trash2 } from 'lucide-react';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -121,7 +121,7 @@ const EventDetails = () => {
         .from('events')
         .select(`
           *,
-          season:seasons(id, name)
+          level:event_levels(id, name)
         `)
         .eq('id', eventId)
         .single();
@@ -504,6 +504,7 @@ const EventDetails = () => {
       title: 'Name',
       dataIndex: 'full_name',
       key: 'full_name',
+      width: 200,
       render: (text: string, record: Participant) => (
         <div>
           <div style={{ fontWeight: 500 }}>{text}</div>
@@ -517,29 +518,27 @@ const EventDetails = () => {
       title: 'Age Category',
       dataIndex: 'age_category',
       key: 'age_category',
-      width: 120,
+      width: 150,
       align: 'center' as const,
     },
     {
       title: 'District',
       dataIndex: 'district',
       key: 'district',
-      width: 120
+      width: 150
     },
     {
       title: 'Actions',
       key: 'actions',
-      width: 120,
+      width: 100,
       render: (_: unknown, record: Participant) => (
         <Button
           type="text"
           danger
-          icon={<Minus size={14} />}
+          icon={<Trash2 size={16} />}
           onClick={() => removeParticipantFromEvent(record.id)}
           disabled={!isParticipantRegistered(record.id)}
-        >
-          Remove
-        </Button>
+        />
       )
     }
   ];
@@ -549,6 +548,7 @@ const EventDetails = () => {
       title: 'Group Name',
       dataIndex: ['group', 'name'],
       key: 'name',
+      width: 200,
       render: (text: string, record: EventGroup) => (
         <div>
           <div style={{ fontWeight: 500 }}>{text}</div>
@@ -562,6 +562,7 @@ const EventDetails = () => {
       title: 'Members',
       dataIndex: ['group', 'members'],
       key: 'members',
+      width: 200,
       render: (members: any[]) => (
         <div>
           <div>{members?.length || 0} participants</div>
@@ -577,16 +578,14 @@ const EventDetails = () => {
     {
       title: 'Actions',
       key: 'actions',
-      width: 120,
+      width: 100,
       render: (_: unknown, record: EventGroup) => (
         <Button
           type="text"
           danger
-          icon={<Minus size={14} />}
+          icon={<Trash2 size={16} />}
           onClick={() => removeGroupFromEvent(record.group_id)}
-        >
-          Remove
-        </Button>
+        />
       )
     }
   ];
@@ -596,25 +595,25 @@ const EventDetails = () => {
       title: 'Judge Name',
       dataIndex: ['judge', 'full_name'],
       key: 'name',
+      width: 200,
     },
     {
       title: 'Church',
       dataIndex: ['judge', 'church'],
       key: 'church',
+      width: 200,
     },
     {
       title: 'Actions',
       key: 'actions',
-      width: 120,
+      width: 100,
       render: (_: unknown, record: EventJudge) => (
         <Button
           type="text"
           danger
-          icon={<Minus size={14} />}
+          icon={<Trash2 size={16} />}
           onClick={() => removeJudgeFromEvent(record.judge_id)}
-        >
-          Remove
-        </Button>
+        />
       )
     }
   ];

@@ -19,8 +19,8 @@ interface AssignedEvent {
   participants_count: number;
   my_scores_count: number;
   total_criteria: number;
-  season_id: string;
-  seasons?: {
+  level_id: string;
+  event_levels?: {
     id: string;
     name: string;
     is_active: boolean;
@@ -96,8 +96,8 @@ const JudgeDashboard = () => {
             status,
             time_limit,
             event_order,
-            season_id,
-            seasons (
+            level_id,
+            event_levels (
               id,
               name,
               is_active
@@ -300,7 +300,7 @@ const JudgeDashboard = () => {
                 {assignedEvents.map((event) => {
                   const progress = getScoringProgress(event);
                   const isComplete = isEventComplete(event);
-                  const isInactive = event.seasons && !event.seasons.is_active;
+                  const isInactive = event.event_levels && !event.event_levels.is_active;
                   
                   return (
                     <Card 

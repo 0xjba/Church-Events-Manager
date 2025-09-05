@@ -154,6 +154,36 @@ export type Database = {
           },
         ]
       }
+      event_levels: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           age_category: Database["public"]["Enums"]["age_category"] | null
@@ -161,11 +191,11 @@ export type Database = {
           event_order: number | null
           event_type: string
           id: string
+          level_id: string | null
           max_participants: number | null
           name: string
           results_published: boolean
           rules: string | null
-          season_id: string | null
           status: string
           time_limit: number | null
           type: string
@@ -177,11 +207,11 @@ export type Database = {
           event_order?: number | null
           event_type?: string
           id?: string
+          level_id?: string | null
           max_participants?: number | null
           name: string
           results_published?: boolean
           rules?: string | null
-          season_id?: string | null
           status?: string
           time_limit?: number | null
           type: string
@@ -193,11 +223,11 @@ export type Database = {
           event_order?: number | null
           event_type?: string
           id?: string
+          level_id?: string | null
           max_participants?: number | null
           name?: string
           results_published?: boolean
           rules?: string | null
-          season_id?: string | null
           status?: string
           time_limit?: number | null
           type?: string
@@ -205,10 +235,10 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "events_season_id_fkey"
-            columns: ["season_id"]
+            foreignKeyName: "events_level_id_fkey"
+            columns: ["level_id"]
             isOneToOne: false
-            referencedRelation: "seasons"
+            referencedRelation: "event_levels"
             referencedColumns: ["id"]
           },
         ]
@@ -579,36 +609,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      seasons: {
-        Row: {
-          created_at: string
-          description: string | null
-          id: string
-          is_active: boolean
-          name: string
-          updated_at: string
-          year: number
-        }
-        Insert: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_active?: boolean
-          name: string
-          updated_at?: string
-          year: number
-        }
-        Update: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_active?: boolean
-          name?: string
-          updated_at?: string
-          year?: number
-        }
-        Relationships: []
       }
     }
     Views: {

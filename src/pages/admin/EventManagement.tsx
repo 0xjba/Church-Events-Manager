@@ -15,7 +15,7 @@ interface Event {
   name: string;
   type: string;
   event_type: string;
-  season_id: string;
+  level_id: string;
   age_category: string | null;
   rules: string | null;
   time_limit: number | null;
@@ -23,11 +23,11 @@ interface Event {
   status: string;
   event_order: number | null;
   created_at: string;
-  season?: { id: string; name: string; year: number; };
+  level?: { id: string; name: string; year: number; };
   criteria?: Array<{ id: string; name: string; max_score: number; weight: number; }>;
 }
 
-interface Season {
+interface EventLevel {
   id: string;
   name: string;
   year: number;
@@ -45,8 +45,8 @@ const EventManagement = () => {
   const navigate = useNavigate();
   const [events, setEvents] = useState<Event[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
-  const [seasons, setSeasons] = useState<Season[]>([]);
-  const [selectedSeasonId, setSelectedSeasonId] = useState<string>('all');
+  const [eventLevels, setEventLevels] = useState<EventLevel[]>([]);
+  const [selectedLevelId, setSelectedLevelId] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
@@ -58,27 +58,27 @@ const EventManagement = () => {
 
   useEffect(() => {
     fetchEvents();
-    fetchSeasons();
+    fetchEventLevels();
   }, []);
 
   useEffect(() => {
-    if (selectedSeasonId === 'all') {
+    if (selectedLevelId === 'all') {
       setFilteredEvents(events);
     } else {
-      setFilteredEvents(events.filter(event => event.season_id === selectedSeasonId));
+      setFilteredEvents(events.filter(event => event.level_id === selectedLevelId));
     }
-  }, [events, selectedSeasonId]);
+  }, [events, selectedLevelId]);
 
-  const fetchSeasons = async () => {
+  const fetchEventLevels = async () => {
     try {
       const { data, error } = await supabase
-        .from('seasons')
+        .from('event_levels')
         .select('id, name, year, is_active')
         .order('year', { ascending: false });
       if (error) throw error;
-      setSeasons(data || []);
+      setEventLevels(data || []);
     } catch (error) {
-      message.error('Failed to load seasons');
+      console.error('Error fetching event levels:', error);
     }
   };
 
@@ -86,12 +86,12 @@ const EventManagement = () => {
     try {
       const { data, error } = await supabase
         .from('events')
-        .select(`*, seasons (id, name, year), event_criteria (id, name, max_score, weight)`)
+        .select(`*, event_levels (id, name, year), event_criteria (id, name, max_score, weight)`)
         .order('created_at', { ascending: false });
       if (error) throw error;
       setEvents(data || []);
     } catch (error) {
-      message.error('Failed to load events');
+      console.error('Error fetching events:', error);
     } finally {
       setLoading(false);
     }
@@ -104,7 +104,7 @@ const EventManagement = () => {
         name: event.name,
         type: event.type,
         event_type: event.event_type || 'individual',
-        season_id: event.season_id,
+        level_id: event.level_id,
         age_category: event.age_category,
         rules: event.rules || '',
         time_limit: event.time_limit || undefined,
@@ -149,11 +149,11 @@ const EventManagement = () => {
         return;
       }
 
-      // Check if season is active for new events
+      // Check if event level is active for new events
       if (!editingEvent) {
-        const selectedSeason = seasons.find(s => s.id === values.season_id);
-        if (selectedSeason && !selectedSeason.is_active) {
-          message.error('Cannot create events in inactive seasons');
+        const selectedLevel = eventLevels.find(l => l.id === values.level_id);
+        if (selectedLevel && !selectedLevel.is_active) {
+          message.error('Cannot create events in inactive event levels');
           return;
         }
       }
@@ -166,7 +166,7 @@ const EventManagement = () => {
             name: values.name,
             type: values.type,
             event_type: values.event_type,
-            season_id: values.season_id,
+            level_id: values.level_id,
             age_category: values.age_category || null,
             rules: values.rules || null,
             time_limit: values.time_limit || null,
@@ -190,7 +190,7 @@ const EventManagement = () => {
             name: values.name,
             type: values.type,
             event_type: values.event_type,
-            season_id: values.season_id,
+            level_id: values.level_id,
             age_category: values.age_category || null,
             rules: values.rules || null,
             time_limit: values.time_limit || null,
@@ -343,8 +343,8 @@ const EventManagement = () => {
       dataIndex: 'name', 
       key: 'name',
       render: (name: string, record: Event) => {
-        const season = seasons.find(s => s.id === record.season_id);
-        const isInactive = season && !season.is_active;
+        const level = eventLevels.find(l => l.id === record.level_id);
+        const isInactive = level && !level.is_active;
         return (
           <span style={{ 
             color: isInactive ? '#999' : 'inherit',
@@ -356,25 +356,24 @@ const EventManagement = () => {
       }
     },
     { title: 'Type', dataIndex: 'type', key: 'type', render: (type: string) => <span style={{ textTransform: 'capitalize' }}>{type}</span> },
-    { title: 'Category', dataIndex: 'event_type', key: 'event_type', render: (event_type: string) => (
-      <Badge 
-        color={event_type === 'individual' ? 'blue' : 'green'} 
-        text={event_type === 'individual' ? 'Individual' : 'Group'} 
-      />
+    { title: 'Category', dataIndex: 'event_type', key: 'event_type', width: 100, render: (event_type: string) => (
+      <span style={{ textTransform: 'capitalize' }}>
+        {event_type === 'individual' ? 'Individual' : 'Group'}
+      </span>
     ) },
     { 
-      title: 'Season', 
-      dataIndex: ['season', 'name'], 
-      key: 'season',
-      render: (seasonName: string, record: Event) => {
-        const season = seasons.find(s => s.id === record.season_id);
-        const isInactive = season && !season.is_active;
+      title: 'Event Level', 
+      dataIndex: ['event_levels', 'name'], 
+      key: 'level',
+      render: (levelName: string, record: Event) => {
+        const level = eventLevels.find(l => l.id === record.level_id);
+        const isInactive = level && !level.is_active;
         return (
           <span style={{ 
             color: isInactive ? '#999' : 'inherit',
             opacity: isInactive ? 0.6 : 1
           }}>
-            {seasonName} {isInactive ? '(Inactive)' : ''}
+            {levelName} {isInactive ? '(Inactive)' : ''}
           </span>
         );
       }
@@ -383,15 +382,15 @@ const EventManagement = () => {
       title: 'Age Category',
       dataIndex: 'age_category',
       key: 'age_category',
-      width: 120,
+      width: 150,
     },
     { 
       title: 'Status', 
       dataIndex: 'status', 
       key: 'status', 
       render: (status: string, record: Event) => {
-        const season = seasons.find(s => s.id === record.season_id);
-        const isInactive = season && !season.is_active;
+        const level = eventLevels.find(l => l.id === record.level_id);
+        const isInactive = level && !level.is_active;
         return (
           <Select
             value={status}
@@ -410,8 +409,8 @@ const EventManagement = () => {
       title: 'Actions',
       key: 'actions',
       render: (_: any, record: Event) => {
-        const season = seasons.find(s => s.id === record.season_id);
-        const isInactive = season && !season.is_active;
+        const level = eventLevels.find(l => l.id === record.level_id);
+        const isInactive = level && !level.is_active;
         return (
           <Space>
             <Button 
@@ -576,18 +575,18 @@ const EventManagement = () => {
             </Form.Item>
 
             <Form.Item
-              label="Season"
-              name="season_id"
-              rules={[{ required: true, message: 'Season is required' }]}
+              label="Event Level"
+              name="level_id"
+              rules={[{ required: true, message: 'Event level is required' }]}
             >
-              <Select placeholder="Select season">
-                {seasons.map(season => (
+              <Select placeholder="Select event level">
+                {eventLevels.map(level => (
                   <Select.Option 
-                    key={season.id} 
-                    value={season.id}
-                    disabled={!season.is_active && !editingEvent}
+                    key={level.id} 
+                    value={level.id}
+                    disabled={!level.is_active && !editingEvent}
                   >
-                    {season.name} ({season.year}) {!season.is_active ? '(Inactive)' : ''}
+                    {level.name} ({level.year}) {!level.is_active ? '(Inactive)' : ''}
                   </Select.Option>
                 ))}
               </Select>
