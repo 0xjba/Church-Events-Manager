@@ -6,13 +6,147 @@ import { scoreSubmissionService } from '@/utils/scoreSubmission';
 import { usePWA } from '@/hooks/usePWA';
 import Navigation from '@/components/Navigation';
 
-import { Layout, Card, Button, Input, Badge, Modal, Progress, Typography, Space, message, InputNumber, Row, Col, Divider } from 'antd';
-import { Clock, Play, Pause, Save, AlertTriangle, CheckCircle, Wifi, WifiOff, Download, Timer, User, Users, Target, Search as SearchIcon, X } from 'lucide-react';
+import { Layout, Card, Button, Input, Badge, Modal, Progress, Typography, Space, message, InputNumber, Row, Col, Divider, Slider } from 'antd';
+import { Clock, Play, Pause, Save, AlertTriangle, CheckCircle, Wifi, WifiOff, Download, Timer, User, Users, Target, Search as SearchIcon, X, ArrowLeft } from 'lucide-react';
 import React from 'react'; // Added missing import for React
+
+// Add custom CSS for improved slider interaction
+const sliderStyles = `
+  .ant-slider-rail {
+    cursor: pointer !important;
+    height: 8px !important;
+  }
+  
+  .ant-slider-track {
+    cursor: pointer !important;
+    height: 8px !important;
+  }
+  
+  .ant-slider-handle {
+    cursor: grab !important;
+    touch-action: none !important;
+    width: 20px !important;
+    height: 20px !important;
+    margin-top: -6px !important;
+    border-width: 3px !important;
+    border-radius: 50% !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    border-color: #8b5cf6 !important;
+  }
+  
+  .ant-slider-handle:focus {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  
+  .ant-slider-handle:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  
+  .ant-slider-handle::before {
+    display: none !important;
+  }
+  
+  .ant-slider-handle::after {
+    display: none !important;
+  }
+  
+  .ant-slider-handle:active {
+    cursor: grabbing !important;
+  }
+  
+  .ant-slider:hover .ant-slider-rail {
+    background-color: #d9d9d9 !important;
+  }
+  
+  .ant-slider:hover .ant-slider-track {
+    background-color: #8b5cf6 !important;
+  }
+  
+  .ant-slider {
+    height: 20px !important;
+  }
+`;
+
+// Inject the styles
+if (typeof document !== 'undefined') {
+  const styleSheet = document.createElement('style');
+  styleSheet.textContent = sliderStyles;
+  document.head.appendChild(styleSheet);
+}
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
-const { Search: SearchInput } = Input;
+
+// Custom Slider wrapper that handles track clicks and touch events
+const ClickableSlider = ({ 
+  min, 
+  max, 
+  value, 
+  onChange, 
+  onAfterChange, 
+  disabled, 
+  tooltip, 
+  style, 
+  trackStyle, 
+  handleStyle, 
+  railStyle,
+  step = 0.1
+}: any) => {
+  const calculateValue = (clientX: number, rect: DOMRect) => {
+    const percent = (clientX - rect.left) / rect.width;
+    const newValue = min + (max - min) * percent;
+    const steppedValue = Math.round(newValue / step) * step;
+    return Math.max(min, Math.min(max, steppedValue));
+  };
+
+  const handleTrackClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const newValue = calculateValue(e.clientX, rect);
+    
+    onChange?.(newValue);
+    onAfterChange?.(newValue);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const touch = e.touches[0];
+    const newValue = calculateValue(touch.clientX, rect);
+    
+    onChange?.(newValue);
+    onAfterChange?.(newValue);
+  };
+
+  return (
+    <div 
+      onClick={handleTrackClick} 
+      onTouchStart={handleTouchStart}
+      style={{ cursor: 'pointer', touchAction: 'none' }}
+    >
+      <Slider
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={onChange}
+        onAfterChange={onAfterChange}
+        disabled={disabled}
+        tooltip={tooltip}
+        style={style}
+        trackStyle={trackStyle}
+        handleStyle={handleStyle}
+        railStyle={railStyle}
+      />
+    </div>
+  );
+};
 
 interface Event {
   id: string;
@@ -631,131 +765,39 @@ const JudgeScoringInterface = () => {
         <Content style={{ padding: '12px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-4 md:pt-4">
           {/* Header */}
           <div style={{ marginBottom: '24px' }}>
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'column',
-              gap: '12px',
-              marginBottom: '16px'
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '16px',
-                flexWrap: 'wrap'
-              }}>
-                <Title level={2} style={{ 
-                  margin: 0, 
-                  color: '#111827',
-                  fontSize: '28px',
-                  fontWeight: 700
-                }}>
-                  {event.name}
-                </Title>
-                <div style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  padding: '6px 16px',
-                  backgroundColor: event.type === 'stage' ? '#dbeafe' : '#fef3c7',
-                  color: event.type === 'stage' ? '#1e40af' : '#92400e',
-                  borderRadius: '20px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  border: `1px solid ${event.type === 'stage' ? '#93c5fd' : '#fbbf24'}`
-                }}>
-                  {event.type}
-                </div>
-              </div>
-              <Text style={{ 
-                fontSize: '16px',
-                color: '#6b7280',
-                fontWeight: 500
-              }}>
-                Judge Scoring Interface
-              </Text>
-            </div>
-          </div>
-
-          {/* Network Status and PWA Install */}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            marginBottom: '24px',
-            padding: '12px 16px',
-            backgroundColor: isOnline ? '#f0fdf4' : '#fef3c7',
-            borderRadius: '8px',
-            border: `1px solid ${isOnline ? '#bbf7d0' : '#fbbf24'}`
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {isOnline ? (
-                <Wifi size={16} color="#16a34a" />
-              ) : (
-                <WifiOff size={16} color="#d97706" />
-              )}
-              <Text style={{ 
-                fontSize: '14px', 
-                fontWeight: 500,
-                color: isOnline ? '#16a34a' : '#d97706'
-              }}>
-                {isOnline ? 'Online' : 'Offline'}
-              </Text>
-              {pendingScoresCount > 0 && (
-                <Badge count={pendingScoresCount} color="orange" />
-              )}
-            </div>
+            <Button 
+              icon={<ArrowLeft size={16} />} 
+              onClick={() => navigate('/judge')}
+              style={{ marginBottom: '16px' }}
+            >
+              Back to All Events
+            </Button>
             
-            {isInstallable && (
-              <Button 
-                size="small" 
-                icon={<Download size={16} />} 
-                onClick={installApp}
-                style={{ 
-                  borderRadius: '6px',
-                  height: '32px',
-                  fontSize: '12px'
-                }}
-              >
-                Install App
-              </Button>
-            )}
-          </div>
-
-
-
-          {/* Overall Progress */}
-          <div style={{ 
-            marginBottom: '32px',
-            padding: '20px',
-            backgroundColor: '#f8fafc',
-            borderRadius: '16px',
-            border: '1px solid #e2e8f0'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <Text strong style={{ fontSize: '17px', color: '#1e293b' }}>
-                Scoring Progress
-              </Text>
-              <Text style={{ fontSize: '15px', color: '#64748b', fontWeight: 500 }}>
+            <div style={{ marginBottom: '8px' }}>
+              <Title level={2} style={{ 
+                margin: 0, 
+                color: '#111827',
+                fontSize: '28px',
+                fontWeight: 700
+              }}>
+                {event.name}
+              </Title>
+              <Text type="secondary" style={{ fontSize: '14px', marginTop: '4px', display: 'block' }}>
                 {event?.event_type === 'individual' 
-                  ? `${participants.filter(p => isParticipantScored(p.id)).length} of ${participants.length} completed`
-                  : `${groups.filter(g => isGroupScored(g.id)).length} of ${groups.length} completed`
+                  ? `${participants.filter(p => isParticipantScored(p.id)).length} of ${participants.length} participants completed`
+                  : `${groups.filter(g => isGroupScored(g.id)).length} of ${groups.length} groups completed`
                 }
               </Text>
             </div>
-            <Progress 
-              percent={event?.event_type === 'individual' ? getScoringProgress() : getGroupScoringProgress()} 
-              showInfo={false}
-              strokeColor="#3b82f6"
-              trailColor="#cbd5e1"
-              strokeWidth={10}
-              style={{ margin: 0 }}
-            />
           </div>
+
+
+
+
 
           {/* Search Bar */}
           <div style={{ marginBottom: '24px' }}>
-            <SearchInput
+            <Input
               placeholder={event?.event_type === 'individual' 
                 ? `Search by chest no. from ${participants.length} participants`
                 : `Search by group name from ${groups.length} groups`
@@ -768,8 +810,7 @@ const JudgeScoringInterface = () => {
                 borderRadius: '12px',
                 height: '48px',
                 fontSize: '15px',
-                border: '2px solid #e5e7eb',
-                boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
+                border: '2px solid #e5e7eb'
               }}
             />
           </div>
@@ -789,44 +830,37 @@ const JudgeScoringInterface = () => {
               return (
                 <React.Fragment key={participant.id}>
                   {/* Participant Card */}
-                  <Col xs={24} sm={12} md={8} lg={6}>
+                  <Col xs={12} sm={8} md={6} lg={4}>
                     <Card
                       hoverable
                       style={{ 
                         cursor: 'pointer',
-                        borderRadius: '12px',
-                        borderColor: isActive ? '#3b82f6' : '#e5e7eb',
+                        borderColor: isActive ? '#8c8c8c' : undefined,
                         borderWidth: isActive ? 2 : 1,
-                        boxShadow: isActive 
-                          ? '0 4px 6px -1px rgba(59, 130, 246, 0.1), 0 2px 4px -1px rgba(59, 130, 246, 0.06)'
-                          : '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
-                        transition: 'all 0.2s ease-in-out'
+                        boxShadow: isActive ? '0 2px 8px rgba(0, 0, 0, 0.1)' : undefined
                       }}
                       onClick={() => !isLocked && !isScored && startScoring(participant.id)}
-                      bodyStyle={{ padding: '16px' }}
+                      bodyStyle={{ padding: '12px' }}
                     >
                       <div style={{ textAlign: 'center' }}>
                         <div style={{ 
-                          marginBottom: '12px',
-                          padding: '12px',
-                          backgroundColor: isActive ? '#dbeafe' : '#f1f5f9',
+                          marginBottom: '8px',
+                          padding: '8px',
+                          backgroundColor: '#f5f5f5',
                           borderRadius: '50%',
-                          width: '48px',
-                          height: '48px',
+                          width: '36px',
+                          height: '36px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          margin: '0 auto 12px auto'
+                          margin: '0 auto 8px auto'
                         }}>
-                          <User size={24} color={isActive ? '#2563eb' : '#64748b'} />
+                          <User size={18} color="#666" />
                         </div>
                         
                         <Title level={4} style={{ 
                           margin: 0, 
-                          marginBottom: '8px', 
-                          color: '#0f172a',
-                          fontSize: '20px',
-                          fontWeight: 600
+                          marginBottom: '8px'
                         }}>
                           #{participant.chest_number}
                         </Title>
@@ -835,46 +869,33 @@ const JudgeScoringInterface = () => {
                           <Badge 
                             color={isScored ? 'success' : isLocked ? 'default' : 'processing'} 
                             text={isScored ? 'Completed' : isLocked ? 'Submitted' : 'Pending'}
-                            style={{ 
-                              fontSize: '11px',
-                              padding: '2px 8px',
-                              borderRadius: '8px',
-                              fontWeight: 500
-                            }}
                           />
                         </div>
                         
                         {isScored && (
                           <div style={{ 
-                            marginBottom: '12px',
-                            padding: '8px 16px',
-                            backgroundColor: '#ecfdf5',
-                            borderRadius: '8px',
-                            border: '1px solid #a7f3d0',
+                            marginBottom: '8px',
+                            padding: '4px 8px',
+                            backgroundColor: '#f5f5f5',
+                            borderRadius: '4px',
+                            border: '1px solid #d9d9d9',
                             display: 'inline-block',
                             textAlign: 'center',
-                            margin: '0 auto 12px auto'
+                            margin: '0 auto 8px auto'
                           }}>
-                            <Text strong style={{ color: '#065f46', fontSize: '12px' }}>
-                              {totalScore.toFixed(1)} pts
-                            </Text>
-                            <Text type="secondary" style={{ fontSize: '10px', display: 'block', color: '#059669' }}>
-                              {scorePercentage}%
+                            <Text style={{ fontSize: '11px', color: '#666' }}>
+                              {totalScore.toFixed(1)} pts ({scorePercentage}%)
                             </Text>
                           </div>
                         )}
                         
                         <Button 
                           type={isActive ? 'primary' : 'default'}
-                          size="small"
+                          size="middle"
                           disabled={isLocked || isScored}
                           style={{ 
-                            borderRadius: '8px',
+                            minWidth: '120px',
                             height: '32px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            padding: '0 20px',
-                            minWidth: '140px',
                             margin: '0 auto',
                             display: 'block'
                           }}
@@ -889,95 +910,53 @@ const JudgeScoringInterface = () => {
                   {isActive && (
                     <Col xs={24} style={{ marginTop: '16px', marginBottom: '24px' }}>
                       <Card 
-                        title={
-                          <span style={{ fontSize: '18px', fontWeight: 600, color: '#1f2937' }}>
-                            Scoring Participant #{participant.chest_number}
-                          </span>
-                        }
-                        style={{ 
-                          borderRadius: '12px',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                          border: '2px solid #3b82f6'
-                        }}
+                        title={`Scoring Participant #${participant.chest_number}`}
                         extra={
                           <Button 
                             onClick={stopScoring}
                             size="small"
-                            icon={<X size={16} />}
-                            style={{ borderRadius: '6px' }}
-                          >
-                            Close
-                          </Button>
+                            icon={<X size={14} color="#ff4d4f" />}
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '6px',
+                              backgroundColor: 'white',
+                              borderColor: '#d9d9d9',
+                              color: '#ff4d4f',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          />
                         }
                       >
                         <div style={{ padding: '20px 0' }}>
                           {/* Timer Section */}
                           {event.time_limit && (
                             <div style={{ 
-                              marginBottom: '24px',
-                              padding: '20px',
-                              backgroundColor: '#fef3c7',
-                              borderRadius: '12px',
-                              border: '1px solid #fbbf24'
+                              marginBottom: '16px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '12px 0'
                             }}>
-                              <div style={{ 
-                                display: 'flex', 
-                                flexDirection: 'column',
-                                gap: '20px',
-                                alignItems: 'center',
-                                textAlign: 'center'
-                              }}>
-                                <div style={{ 
-                                  display: 'flex', 
-                                  flexDirection: 'column',
-                                  alignItems: 'center',
-                                  gap: '8px'
-                                }}>
-                                  <Clock size={24} color="#d97706" />
-                                  <Text strong style={{ fontSize: '16px', color: '#92400e' }}>
-                                    Time Remaining
-                                  </Text>
-                                  <Text style={{ 
-                                    fontSize: '32px', 
-                                    fontFamily: 'monospace', 
-                                    fontWeight: 'bold',
-                                    color: timer <= 60 ? '#dc2626' : '#92400e'
-                                  }}>
-                                    {formatTime(timer)}
-                                  </Text>
-                                </div>
-                                
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Clock size={16} color="#fa8c16" />
+                                <Text style={{ color: '#fa8c16', fontSize: '14px', fontWeight: '500' }}>
+                                  Time Remaining: {formatTime(timer)}
+                                </Text>
                                 {timer <= 60 && timer > 0 && (
-                                  <div style={{ 
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    padding: '8px 16px',
-                                    backgroundColor: '#fee2e2',
-                                    borderRadius: '8px',
-                                    border: '1px solid #fca5a5'
-                                  }}>
-                                    <AlertTriangle size={16} color="#dc2626" />
-                                    <Text style={{ color: '#dc2626', fontSize: '14px', fontWeight: 500 }}>
-                                      Time Running Out!
-                                    </Text>
-                                  </div>
+                                  <Text style={{ color: '#fa8c16', fontSize: '12px' }}>
+                                    (Running Out!)
+                                  </Text>
                                 )}
-                                
-                                <Button 
-                                  onClick={resetTimer} 
-                                  size="middle"
-                                  style={{ 
-                                    borderRadius: '8px',
-                                    height: '40px',
-                                    fontSize: '14px',
-                                    fontWeight: 500,
-                                    padding: '0 24px'
-                                  }}
-                                >
-                                  Reset Timer
-                                </Button>
                               </div>
+                              <Button 
+                                onClick={resetTimer} 
+                                size="small"
+                              >
+                                Reset
+                              </Button>
                             </div>
                           )}
 
@@ -996,59 +975,92 @@ const JudgeScoringInterface = () => {
                               return (
                                 <div key={criterion.id} style={{ 
                                   padding: '20px',
-                                  border: '1px solid #e2e8f0',
-                                  borderRadius: '12px',
-                                  backgroundColor: '#f8fafc'
+                                  border: '1px solid #d9d9d9',
+                                  borderRadius: '6px',
+                                  backgroundColor: '#f5f5f5'
                                 }}>
                                   <div style={{ 
                                     display: 'flex', 
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
+                                    flexDirection: 'column',
                                     gap: '16px'
                                   }}>
-                                    <div style={{ flex: 1 }}>
-                                      <Text strong style={{ 
+                                    <div style={{ 
+                                      display: 'flex', 
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center'
+                                    }}>
+                                      <div style={{ flex: 1 }}>
+                                                                              <Text strong style={{ 
                                         display: 'block', 
-                                        fontSize: '16px',
-                                        color: '#1e293b',
                                         marginBottom: '6px'
                                       }}>
                                         {criterion.name}
                                       </Text>
-                                      <Text type="secondary" style={{ fontSize: '13px', color: '#64748b' }}>
+                                      <Text type="secondary">
                                         Max: {criterion.max_score}
                                       </Text>
+                                      </div>
+                                      <div style={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: '12px',
+                                        flexShrink: 0
+                                      }}>
+                                        <InputNumber
+                                          min={0}
+                                          max={criterion.max_score}
+                                          step={0.1}
+                                          precision={1}
+                                          value={currentScore === 0 ? undefined : currentScore}
+                                          onChange={(value) => updateScore(
+                                            participant.id,
+                                            criterion.id,
+                                            value || 0
+                                          )}
+                                          disabled={isLocked}
+                                          style={{ 
+                                            width: '50px',
+                                            height: '40px',
+                                            textAlign: 'center',
+                                            display: 'flex',
+                                            alignItems: 'center'
+                                          }}
+                                          placeholder="0.0"
+                                        />
+                                        <Text type="secondary" style={{ minWidth: '40px', display: 'flex', alignItems: 'center' }}>
+                                          /{criterion.max_score}
+                                        </Text>
+                                      </div>
                                     </div>
-                                    <div style={{ 
-                                      display: 'flex', 
-                                      alignItems: 'center', 
-                                      gap: '12px',
-                                      flexShrink: 0
-                                    }}>
-                                      <InputNumber
+                                    
+                                    {/* Slider */}
+                                    <div style={{ padding: '0 8px' }}>
+                                      <ClickableSlider
                                         min={0}
                                         max={criterion.max_score}
                                         step={0.1}
-                                        precision={1}
                                         value={currentScore}
                                         onChange={(value) => updateScore(
                                           participant.id,
                                           criterion.id,
-                                          value || 0
+                                          value
+                                        )}
+                                        onAfterChange={(value) => updateScore(
+                                          participant.id,
+                                          criterion.id,
+                                          value
                                         )}
                                         disabled={isLocked}
-                                        style={{ 
-                                          width: '120px',
-                                          height: '40px',
-                                          borderRadius: '8px',
-                                          border: '1px solid #d1d5db',
-                                          textAlign: 'center'
+                                        tooltip={null}
+                                        style={{ margin: 0 }}
+                                        trackStyle={{ backgroundColor: '#8b5cf6' }}
+                                        handleStyle={{ 
+                                          borderColor: '#8b5cf6',
+                                          cursor: 'grab',
+                                          touchAction: 'none'
                                         }}
-                                        placeholder="0.0"
+                                        railStyle={{ cursor: 'pointer' }}
                                       />
-                                      <Text type="secondary" style={{ fontSize: '14px', fontWeight: 500, color: '#6b7280', minWidth: '40px' }}>
-                                        /{criterion.max_score}
-                                      </Text>
                                     </div>
                                   </div>
                                 </div>
@@ -1058,27 +1070,20 @@ const JudgeScoringInterface = () => {
                           
                           {/* Total Score Display */}
                           <div style={{ 
-                            marginTop: '32px', 
-                            padding: '24px', 
-                            backgroundColor: '#f0fdf4', 
-                            borderRadius: '16px',
-                            border: '2px solid #22c55e',
-                            textAlign: 'center'
+                            marginTop: '8px', 
+                            textAlign: 'center',
+                            padding: '12px 0'
                           }}>
-                            <Text strong style={{ fontSize: '18px', color: '#166534', marginBottom: '8px', display: 'block' }}>
-                              Total Score
-                            </Text>
-                            <Text strong style={{ fontSize: '32px', color: '#166534', marginBottom: '12px', display: 'block' }}>
-                              {getTotalScoreForParticipant(participant.id).toFixed(1)} / {getMaxPossibleScore().toFixed(1)}
-                            </Text>
-                            <Text type="secondary" style={{ fontSize: '14px', color: '#059669' }}>
-                              {Math.round((getTotalScoreForParticipant(participant.id) / getMaxPossibleScore()) * 100)}% of maximum possible score
+                            <Text style={{ fontSize: '14px', color: '#666' }}>
+                              Total Score: <Text strong style={{ color: '#262626' }}>
+                                {getTotalScoreForParticipant(participant.id).toFixed(1)} / {getMaxPossibleScore().toFixed(1)} 
+                                ({Math.round((getTotalScoreForParticipant(participant.id) / getMaxPossibleScore()) * 100)}%)
+                              </Text>
                             </Text>
                           </div>
 
                           {/* Submit Button */}
                           <div style={{ 
-                            marginTop: '32px',
                             textAlign: 'center'
                           }}>
                             <Button 
@@ -1090,16 +1095,6 @@ const JudgeScoringInterface = () => {
                                 const score = getScoreForCriteria(participant.id, c.id);
                                 return score > 0;
                               })}
-                              style={{ 
-                                backgroundColor: '#22c55e',
-                                borderColor: '#22c55e',
-                                borderRadius: '12px',
-                                height: '48px',
-                                padding: '0 32px',
-                                fontSize: '16px',
-                                fontWeight: 600,
-                                color: 'white'
-                              }}
                             >
                               Submit Scores
                             </Button>
@@ -1120,50 +1115,43 @@ const JudgeScoringInterface = () => {
                 return (
                   <React.Fragment key={group.id}>
                     {/* Group Card */}
-                    <Col xs={24} sm={12} md={8} lg={6}>
+                    <Col xs={12} sm={8} md={6} lg={4}>
                       <Card
                         hoverable
                         style={{ 
                           cursor: 'pointer',
-                          borderRadius: '12px',
-                          borderColor: isActive ? '#3b82f6' : '#e5e7eb',
+                          borderColor: isActive ? '#8c8c8c' : undefined,
                           borderWidth: isActive ? 2 : 1,
-                          boxShadow: isActive 
-                            ? '0 4px 6px -1px rgba(59, 130, 246, 0.1), 0 2px 4px -1px rgba(59, 130, 246, 0.06)'
-                            : '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
-                          transition: 'all 0.2s ease-in-out'
+                          boxShadow: isActive ? '0 2px 8px rgba(0, 0, 0, 0.1)' : undefined
                         }}
                         onClick={() => !isScored && startGroupScoring(group.id)}
-                        bodyStyle={{ padding: '16px' }}
+                        bodyStyle={{ padding: '12px' }}
                       >
                         <div style={{ textAlign: 'center' }}>
                           <div style={{ 
-                            marginBottom: '12px',
-                            padding: '12px',
-                            backgroundColor: isActive ? '#dbeafe' : '#f1f5f9',
+                            marginBottom: '8px',
+                            padding: '8px',
+                            backgroundColor: '#f5f5f5',
                             borderRadius: '50%',
-                            width: '48px',
-                            height: '48px',
+                            width: '36px',
+                            height: '36px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            margin: '0 auto 12px auto'
+                            margin: '0 auto 8px auto'
                           }}>
-                            <Users size={24} color={isActive ? '#2563eb' : '#64748b'} />
+                            <Users size={18} color="#666" />
                           </div>
                           
                           <Title level={4} style={{ 
                             margin: 0, 
-                            marginBottom: '8px', 
-                            color: '#0f172a',
-                            fontSize: '18px',
-                            fontWeight: 600
+                            marginBottom: '8px'
                           }}>
                             {group.name}
                           </Title>
                           
                           <div style={{ marginBottom: '8px' }}>
-                            <Text type="secondary" style={{ fontSize: '12px', color: '#64748b' }}>
+                            <Text type="secondary">
                               {group.members?.length || 0} members
                             </Text>
                           </div>
@@ -1172,26 +1160,16 @@ const JudgeScoringInterface = () => {
                             <Badge 
                               color={isScored ? 'success' : 'processing'} 
                               text={isScored ? 'Completed' : 'Pending'}
-                              style={{ 
-                                fontSize: '11px',
-                                padding: '2px 8px',
-                                borderRadius: '8px',
-                                fontWeight: 500
-                              }}
                             />
                           </div>
                           
                           <Button 
                             type={isActive ? 'primary' : 'default'}
-                            size="small"
+                            size="middle"
                             disabled={isScored}
                             style={{ 
-                              borderRadius: '8px',
+                              minWidth: '120px',
                               height: '32px',
-                              fontSize: '12px',
-                              fontWeight: 500,
-                              padding: '0 20px',
-                              minWidth: '140px',
                               margin: '0 auto',
                               display: 'block'
                             }}
@@ -1206,96 +1184,71 @@ const JudgeScoringInterface = () => {
                     {isActive && (
                       <Col xs={24} style={{ marginTop: '16px', marginBottom: '24px' }}>
                         <Card 
-                          title={
-                            <span style={{ fontSize: '18px', fontWeight: 600, color: '#1f2937' }}>
-                              Scoring Group: {group.name}
-                            </span>
-                          }
-                          style={{ 
-                            borderRadius: '12px',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                            border: '2px solid #3b82f6'
-                          }}
+                          title={`Scoring Group: ${group.name}`}
                           extra={
                             <Button 
                               onClick={stopScoring}
                               size="small"
-                              icon={<X size={16} />}
-                              style={{ borderRadius: '6px' }}
-                            >
-                              Close
-                            </Button>
+                              icon={<X size={14} color="#ff4d4f" />}
+                              style={{
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '6px',
+                                backgroundColor: 'white',
+                                borderColor: '#d9d9d9',
+                                color: '#ff4d4f',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            />
                           }
                         >
                           <div style={{ padding: '20px 0' }}>
                             {/* Timer Section */}
                             {event?.time_limit && (
                               <div style={{ 
-                                marginBottom: '24px',
-                                padding: '16px',
-                                backgroundColor: '#fef3c7',
-                                borderRadius: '12px',
-                                border: '1px solid #f59e0b',
-                                textAlign: 'center'
+                                marginBottom: '16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '12px 0'
                               }}>
-                                <div style={{ marginBottom: '8px' }}>
-                                  <Text strong style={{ fontSize: '16px', color: '#92400e' }}>
-                                    Time Remaining
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <Clock size={16} color="#fa8c16" />
+                                  <Text style={{ color: '#fa8c16', fontSize: '14px', fontWeight: '500' }}>
+                                    Time Remaining: {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
                                   </Text>
+                                  {timer <= 30 && (
+                                    <Text style={{ color: '#fa8c16', fontSize: '12px' }}>
+                                      (Running Out!)
+                                    </Text>
+                                  )}
                                 </div>
-                                <div style={{ 
-                                  fontSize: '24px', 
-                                  fontWeight: 'bold', 
-                                  color: '#92400e',
-                                  marginBottom: '8px'
-                                }}>
-                                  {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
-                                </div>
-                                <div style={{ marginBottom: '12px' }}>
-                                  <Button 
-                                    size="small"
-                                    onClick={() => {
-                                      if (event?.time_limit) {
-                                        setTimer(event.time_limit * 60);
-                                        setIsTimerRunning(true);
-                                      }
-                                    }}
-                                    style={{ 
-                                      borderRadius: '6px',
-                                      fontSize: '12px',
-                                      height: '28px',
-                                      padding: '0 12px'
-                                    }}
-                                  >
-                                    Reset Timer
-                                  </Button>
-                                </div>
-                                {timer <= 30 && (
-                                  <div style={{ 
-                                    color: '#dc2626', 
-                                    fontSize: '12px', 
-                                    fontWeight: 'bold',
-                                    backgroundColor: '#fef2f2',
-                                    padding: '4px 8px',
-                                    borderRadius: '6px',
-                                    border: '1px solid #fecaca'
-                                  }}>
-                                    ⚠️ Time Running Out!
-                                  </div>
-                                )}
+                                <Button 
+                                  size="small"
+                                  onClick={() => {
+                                    if (event?.time_limit) {
+                                      setTimer(event.time_limit * 60);
+                                      setIsTimerRunning(true);
+                                    }
+                                  }}
+                                >
+                                  Reset
+                                </Button>
                               </div>
                             )}
 
                             {/* Group Members Display */}
                             <div style={{ marginBottom: '24px' }}>
-                              <Text strong style={{ fontSize: '16px', color: '#374151', marginBottom: '12px', display: 'block' }}>
+                              <Text strong style={{ marginBottom: '12px', display: 'block' }}>
                                 Group Members
                               </Text>
                               <div style={{ 
                                 padding: '16px',
-                                backgroundColor: '#f8fafc',
-                                borderRadius: '8px',
-                                border: '1px solid #e2e8f0'
+                                backgroundColor: '#f5f5f5',
+                                borderRadius: '6px',
+                                border: '1px solid #d9d9d9'
                               }}>
                                 {group.members?.map((member, idx) => (
                                   <div key={idx} style={{ 
@@ -1303,10 +1256,10 @@ const JudgeScoringInterface = () => {
                                     justifyContent: 'space-between', 
                                     alignItems: 'center',
                                     padding: '8px 0',
-                                    borderBottom: idx < (group.members?.length || 0) - 1 ? '1px solid #e2e8f0' : 'none'
+                                    borderBottom: idx < (group.members?.length || 0) - 1 ? '1px solid #d9d9d9' : 'none'
                                   }}>
                                     <span style={{ fontWeight: 500 }}>{member.participant.full_name}</span>
-                                    <span style={{ fontSize: '12px', color: '#64748b' }}>
+                                    <span style={{ fontSize: '12px', color: '#666' }}>
                                       #{member.participant.chest_number} • {member.participant.church}
                                     </span>
                                   </div>
@@ -1316,7 +1269,7 @@ const JudgeScoringInterface = () => {
 
                             {/* Scoring Criteria */}
                             <div style={{ marginBottom: '24px' }}>
-                              <Text strong style={{ fontSize: '16px', color: '#374151', marginBottom: '16px', display: 'block' }}>
+                              <Text strong style={{ marginBottom: '16px', display: 'block' }}>
                                 Scoring Criteria
                               </Text>
                               <div style={{ display: 'grid', gap: '16px' }}>
@@ -1326,46 +1279,73 @@ const JudgeScoringInterface = () => {
                                   return (
                                     <div key={criterion.id} style={{ 
                                       padding: '16px',
-                                      backgroundColor: '#f8fafc',
-                                      borderRadius: '8px',
-                                      border: '1px solid #e2e8f0'
+                                      backgroundColor: '#f5f5f5',
+                                      borderRadius: '6px',
+                                      border: '1px solid #d9d9d9'
                                     }}>
                                       <div style={{ 
                                         display: 'flex', 
-                                        justifyContent: 'space-between', 
-                                        alignItems: 'center',
-                                        marginBottom: '12px'
+                                        flexDirection: 'column',
+                                        gap: '16px'
                                       }}>
-                                        <Text strong style={{ fontSize: '15px', color: '#1f2937' }}>
+                                        <div style={{ 
+                                          display: 'flex', 
+                                          justifyContent: 'space-between', 
+                                          alignItems: 'center'
+                                        }}>
+                                                                                  <Text strong>
                                           {criterion.name}
                                         </Text>
-                                        <Text type="secondary" style={{ fontSize: '13px', color: '#6b7280' }}>
+                                        <Text type="secondary">
                                           Max: {criterion.max_score}
                                         </Text>
-                                      </div>
-                                      
-                                      <div style={{ 
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        gap: '12px'
-                                      }}>
-                                        <InputNumber
-                                          value={currentScore}
-                                          onChange={(value) => updateGroupScore(group.id, criterion.id, value || 0)}
-                                          min={0}
-                                          max={criterion.max_score}
-                                          step={0.1}
-                                          style={{ 
-                                            width: '120px',
-                                            borderRadius: '8px',
-                                            border: '1px solid #d1d5db',
-                                            textAlign: 'center'
-                                          }}
-                                          placeholder="0.0"
-                                        />
-                                        <Text type="secondary" style={{ fontSize: '14px', fontWeight: 500, color: '#6b7280', minWidth: '40px' }}>
-                                          /{criterion.max_score}
-                                        </Text>
+                                        </div>
+                                        
+                                        <div style={{ 
+                                          display: 'flex', 
+                                          alignItems: 'center', 
+                                          gap: '12px',
+                                          marginBottom: '8px'
+                                        }}>
+                                          <InputNumber
+                                            value={currentScore === 0 ? undefined : currentScore}
+                                            onChange={(value) => updateGroupScore(group.id, criterion.id, value || 0)}
+                                            min={0}
+                                            max={criterion.max_score}
+                                            step={0.1}
+                                            style={{ 
+                                              width: '50px',
+                                              textAlign: 'center',
+                                              display: 'flex',
+                                              alignItems: 'center'
+                                            }}
+                                            placeholder="0.0"
+                                          />
+                                          <Text type="secondary" style={{ minWidth: '40px', display: 'flex', alignItems: 'center' }}>
+                                            /{criterion.max_score}
+                                          </Text>
+                                        </div>
+                                        
+                                        {/* Slider */}
+                                        <div style={{ padding: '0 8px' }}>
+                                          <ClickableSlider
+                                            min={0}
+                                            max={criterion.max_score}
+                                            step={0.1}
+                                            value={currentScore}
+                                            onChange={(value) => updateGroupScore(group.id, criterion.id, value)}
+                                            onAfterChange={(value) => updateGroupScore(group.id, criterion.id, value)}
+                                            tooltip={null}
+                                            style={{ margin: 0 }}
+                                            trackStyle={{ backgroundColor: '#8b5cf6' }}
+                                            handleStyle={{ 
+                                              borderColor: '#8b5cf6',
+                                              cursor: 'grab',
+                                              touchAction: 'none'
+                                            }}
+                                            railStyle={{ cursor: 'pointer' }}
+                                          />
+                                        </div>
                                       </div>
                                     </div>
                                   );
@@ -1375,27 +1355,20 @@ const JudgeScoringInterface = () => {
                             
                             {/* Total Score Display */}
                             <div style={{ 
-                              marginTop: '32px', 
-                              padding: '24px', 
-                              backgroundColor: '#f0fdf4', 
-                              borderRadius: '16px',
-                              border: '2px solid #22c55e',
-                              textAlign: 'center'
+                              marginTop: '8px', 
+                              textAlign: 'center',
+                              padding: '12px 0'
                             }}>
-                              <Text strong style={{ fontSize: '18px', color: '#166534', marginBottom: '8px', display: 'block' }}>
-                                Total Score
-                              </Text>
-                              <Text strong style={{ fontSize: '32px', color: '#166534', marginBottom: '12px', display: 'block' }}>
-                                {getTotalScoreForGroup(group.id).toFixed(1)} / {getMaxPossibleScore().toFixed(1)}
-                              </Text>
-                              <Text type="secondary" style={{ fontSize: '14px', color: '#059669' }}>
-                                {Math.round((getTotalScoreForGroup(group.id) / getMaxPossibleScore()) * 100)}% of maximum possible score
+                              <Text style={{ fontSize: '14px', color: '#666' }}>
+                                Total Score: <Text strong style={{ color: '#262626' }}>
+                                  {getTotalScoreForGroup(group.id).toFixed(1)} / {getMaxPossibleScore().toFixed(1)} 
+                                  ({Math.round((getTotalScoreForGroup(group.id) / getMaxPossibleScore()) * 100)}%)
+                                </Text>
                               </Text>
                             </div>
 
                             {/* Submit Button */}
                             <div style={{ 
-                              marginTop: '32px',
                               textAlign: 'center'
                             }}>
                               <Button 
@@ -1407,16 +1380,6 @@ const JudgeScoringInterface = () => {
                                   const score = getGroupScoreForCriteria(group.id, c.id);
                                   return score > 0;
                                 })}
-                                style={{ 
-                                  backgroundColor: '#22c55e',
-                                  borderColor: '#22c55e',
-                                  borderRadius: '12px',
-                                  height: '48px',
-                                  padding: '0 32px',
-                                  fontSize: '16px',
-                                  fontWeight: 600,
-                                  color: 'white'
-                                }}
                               >
                                 Submit Scores
                               </Button>
@@ -1431,27 +1394,6 @@ const JudgeScoringInterface = () => {
             )}
           </Row>
 
-          {/* Action Buttons */}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between',
-            padding: '24px 0',
-            borderTop: '1px solid #e5e7eb'
-          }}>
-            <Button 
-              onClick={() => navigate('/judge')}
-              size="large"
-              style={{ 
-                borderRadius: '8px',
-                height: '44px',
-                padding: '0 24px'
-              }}
-            >
-              Back to Dashboard
-            </Button>
-            
-            <div></div>
-          </div>
         </Content>
       </Layout>
     </Layout>

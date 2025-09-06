@@ -189,17 +189,7 @@ const JudgeDashboard = () => {
       <Layout className="md:ml-64">
         <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
           <div style={{ marginBottom: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-              <img 
-                src="/pypa-logo.png" 
-                alt="PYPA Logo" 
-                style={{ 
-                  width: 32, 
-                  height: 32, 
-                  borderRadius: '8px',
-                  marginRight: '12px'
-                }} 
-              />
+            <div style={{ marginBottom: '8px' }}>
               <Title level={2} style={{ margin: 0 }}>
                 Judge Dashboard
               </Title>

@@ -76,9 +76,20 @@ export const ParticipantAuthProvider = ({ children }: { children: React.ReactNod
 
   const signIn = async (username: string, password: string) => {
     try {
+      const startTime = Date.now();
+      console.log(`[PERF] Frontend login started for: ${username}`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+      
       const { data, error } = await supabase.functions.invoke('participant-auth/login', {
-        body: { username, password }
+        body: { username, password },
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
+      const endTime = Date.now();
+      console.log(`[PERF] Frontend total login time: ${endTime - startTime}ms`);
 
       if (error || data?.error) {
         return { error: data?.error || error };
@@ -96,6 +107,9 @@ export const ParticipantAuthProvider = ({ children }: { children: React.ReactNod
       return {};
     } catch (error) {
       console.error('Auth sign in failed:', error);
+      if (error.name === 'AbortError') {
+        return { error: 'Request timed out. Please try again.' };
+      }
       return { error: 'Failed to sign in' };
     }
   };

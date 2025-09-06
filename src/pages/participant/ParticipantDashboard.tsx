@@ -44,7 +44,7 @@ const ParticipantDashboard = () => {
               </Title>
             </div>
             <Text type="secondary">
-              Chest Number: {participant.chest_number} | Category: {participant.category}
+              Chest Number: {participant.chest_number} | Category: {participant.age_category}
             </Text>
           </div>
 
@@ -81,7 +81,7 @@ const ParticipantDashboard = () => {
                 <div>
                   <Text strong style={{ fontSize: '14px' }}>Category:</Text>
                   <div>
-                    <Text type="secondary" style={{ textTransform: 'capitalize' }}>{participant.category}</Text>
+                    <Text type="secondary" style={{ textTransform: 'capitalize' }}>{participant.age_category}</Text>
                   </div>
                 </div>
                 <div>

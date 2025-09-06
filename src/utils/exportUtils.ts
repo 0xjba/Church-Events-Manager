@@ -35,7 +35,7 @@ export class ExportUtils {
       result.rank.toString(),
       result.participant.full_name,
       result.participant.chest_number,
-      result.participant.category,
+      result.participant.age_category,
       result.participant.church,
       result.participant.district,
       result.total_score.toString(),
@@ -213,7 +213,7 @@ export class ExportUtils {
                         <div class="participant-name">${result.participant.full_name}</div>
                         <div class="chest-number">#${result.participant.chest_number}</div>
                     </td>
-                    <td>${result.participant.category}</td>
+                    <td>${result.participant.age_category}</td>
                     <td>${result.participant.church}</td>
                     <td>${result.participant.district}</td>
                     <td class="score-cell">${result.total_score}</td>
@@ -298,7 +298,7 @@ export class ExportUtils {
       participant.rank.toString(),
       participant.participant.full_name,
       participant.participant.chest_number,
-      participant.participant.category,
+      participant.participant.age_category,
       participant.participant.church,
       participant.participant.district,
       participant.events_participated.toString(),
@@ -332,4 +332,85 @@ export class ExportUtils {
     link.click();
     document.body.removeChild(link);
   }
+
+  /**
+   * Generates winners export CSV for all completed events
+   */
+  static generateWinnersCSV(winnersData: WinnersExportData): string {
+    const headers = [
+      'Event Name',
+      'Event Type',
+      'Age Category',
+      'Rank',
+      'Participant Name',
+      'Chest Number',
+      'Church',
+      'District',
+      'Total Score',
+      'Average Score',
+      'Tie Breaker Reason'
+    ];
+
+    const rows = winnersData.events.flatMap(event => 
+      event.winners.map(winner => [
+        event.event_name,
+        event.event_type,
+        event.age_category || 'All Categories',
+        winner.rank.toString(),
+        winner.participant.full_name,
+        winner.participant.chest_number,
+        winner.participant.church,
+        winner.participant.district,
+        winner.total_score.toString(),
+        winner.average_score.toString(),
+        winner.tie_breaker_reason || ''
+      ])
+    );
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+
+    return csvContent;
+  }
+
+  /**
+   * Downloads winners export CSV
+   */
+  static downloadWinnersCSV(winnersData: WinnersExportData, filename?: string): void {
+    const csv = this.generateWinnersCSV(winnersData);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename || `winners_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+}
+
+export interface WinnersExportData {
+  events: Array<{
+    event_id: string;
+    event_name: string;
+    event_type: string;
+    age_category: string | null;
+    winners: Array<{
+      rank: number;
+      total_score: number;
+      average_score: number;
+      tie_breaker_reason: string | null;
+      participant: {
+        full_name: string;
+        chest_number: string;
+        church: string;
+        district: string;
+      };
+    }>;
+  }>;
+  generated_at: string;
 }

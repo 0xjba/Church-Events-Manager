@@ -82,6 +82,42 @@ export type Database = {
           },
         ]
       }
+      event_groups: {
+        Row: {
+          event_id: string
+          group_id: string
+          id: string
+          registered_at: string
+        }
+        Insert: {
+          event_id: string
+          group_id: string
+          id?: string
+          registered_at?: string
+        }
+        Update: {
+          event_id?: string
+          group_id?: string
+          id?: string
+          registered_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_groups_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_groups_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_judges: {
         Row: {
           assigned_at: string
@@ -118,6 +154,36 @@ export type Database = {
           },
         ]
       }
+      event_levels: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: []
+      }
       event_participants: {
         Row: {
           event_id: string
@@ -153,36 +219,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      event_levels: {
-        Row: {
-          created_at: string
-          description: string | null
-          id: string
-          is_active: boolean
-          name: string
-          updated_at: string
-          year: number
-        }
-        Insert: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_active?: boolean
-          name: string
-          updated_at?: string
-          year: number
-        }
-        Update: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_active?: boolean
-          name?: string
-          updated_at?: string
-          year?: number
-        }
-        Relationships: []
       }
       events: {
         Row: {
@@ -243,48 +279,24 @@ export type Database = {
           },
         ]
       }
-      groups: {
-        Row: {
-          id: string
-          name: string
-          description: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          description?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          name?: string
-          description?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       group_members: {
         Row: {
-          id: string
           group_id: string
-          participant_id: string
+          id: string
           joined_at: string
+          participant_id: string
         }
         Insert: {
-          id?: string
           group_id: string
-          participant_id: string
+          id?: string
           joined_at?: string
+          participant_id: string
         }
         Update: {
-          id?: string
           group_id?: string
-          participant_id?: string
+          id?: string
           joined_at?: string
+          participant_id?: string
         }
         Relationships: [
           {
@@ -303,41 +315,29 @@ export type Database = {
           },
         ]
       }
-      event_groups: {
+      groups: {
         Row: {
+          created_at: string
+          description: string | null
           id: string
-          event_id: string
-          group_id: string
-          registered_at: string
+          name: string
+          updated_at: string
         }
         Insert: {
+          created_at?: string
+          description?: string | null
           id?: string
-          event_id: string
-          group_id: string
-          registered_at?: string
+          name: string
+          updated_at?: string
         }
         Update: {
+          created_at?: string
+          description?: string | null
           id?: string
-          event_id?: string
-          group_id?: string
-          registered_at?: string
+          name?: string
+          updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "event_groups_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "event_groups_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       judges: {
         Row: {
@@ -390,7 +390,6 @@ export type Database = {
       participants: {
         Row: {
           age_category: Database["public"]["Enums"]["age_category"]
-          category: string
           chest_number: string
           church: string
           created_at: string
@@ -407,7 +406,6 @@ export type Database = {
         }
         Insert: {
           age_category: Database["public"]["Enums"]["age_category"]
-          category: string
           chest_number: string
           church: string
           created_at?: string
@@ -424,7 +422,6 @@ export type Database = {
         }
         Update: {
           age_category?: Database["public"]["Enums"]["age_category"]
-          category?: string
           chest_number?: string
           church?: string
           created_at?: string

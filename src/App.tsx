@@ -11,6 +11,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import ParticipantManagement from "./pages/admin/ParticipantManagement";
+import ParticipantDetails from "./pages/admin/ParticipantDetails";
 import JudgeManagement from "./pages/admin/JudgeManagement";
 import EventManagement from "./pages/admin/EventManagement";
 import EventDetails from "./pages/admin/EventDetails";
@@ -53,6 +54,11 @@ const App = () => (
             <Route path="/admin/participants" element={
               <ProtectedRoute requiredRole="admin">
                 <ParticipantManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/participants/:participantId" element={
+              <ProtectedRoute requiredRole="admin">
+                <ParticipantDetails />
               </ProtectedRoute>
             } />
             <Route path="/admin/judges" element={

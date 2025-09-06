@@ -2,6 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0';
 import { create, verify } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
+// import { hash, compare } from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,7 +15,7 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 );
 
-// Hash password using crypto API
+// Hash password using crypto API (Edge Function compatible)
 async function hashPassword(password: string, salt?: string): Promise<string> {
   const saltToUse = salt || Deno.env.get('PASSWORD_SALT') || 'pypa-salt';
   const encoder = new TextEncoder();
@@ -24,7 +25,7 @@ async function hashPassword(password: string, salt?: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Compare passwords
+// Compare passwords (Edge Function compatible)
 async function comparePassword(password: string, hash: string, salt?: string): Promise<boolean> {
   const hashedInput = await hashPassword(password, salt);
   return hashedInput === hash;
@@ -81,7 +82,12 @@ serve(async (req) => {
 
 // Handle participant login
 async function handleLogin(req: Request) {
+  const startTime = Date.now();
+  console.log(`[PERF] Login started for user: ${req.body ? 'parsed' : 'parsing...'}`);
+  
   const { username, password } = await req.json();
+  const parseTime = Date.now();
+  console.log(`[PERF] Request parsed in ${parseTime - startTime}ms`);
 
   if (!username || !password) {
     return new Response(
@@ -90,17 +96,35 @@ async function handleLogin(req: Request) {
     );
   }
 
-  // Try to find participant first
-  const { data: participant, error: participantError } = await supabase
-    .from('participants')
-    .select('*')
-    .eq('username', username)
-    .eq('is_active', true)
-    .single();
+  // Try to find both participant and judge in parallel
+  const dbQueryStart = Date.now();
+  const [participantResult, judgeResult] = await Promise.all([
+    supabase
+      .from('participants')
+      .select('*')
+      .eq('username', username)
+      .eq('is_active', true)
+      .single(),
+    supabase
+      .from('judges')
+      .select('*')
+      .eq('username', username)
+      .eq('is_active', true)
+      .single()
+  ]);
+  const dbQueryTime = Date.now();
+  console.log(`[PERF] Database queries completed in ${dbQueryTime - dbQueryStart}ms`);
 
-  if (participant && !participantError) {
+  const participant = participantResult.data;
+  const judge = judgeResult.data;
+
+  if (participant && !participantResult.error) {
     // Verify password for participant
+    const passwordStart = Date.now();
     const passwordValid = await comparePassword(password, participant.password_hash);
+    const passwordTime = Date.now();
+    console.log(`[PERF] Password verification completed in ${passwordTime - passwordStart}ms`);
+    
     if (!passwordValid) {
       console.log('Invalid password for participant:', username);
       return new Response(
@@ -109,16 +133,8 @@ async function handleLogin(req: Request) {
       );
     }
 
-    // Update login stats for participant
-    await supabase
-      .from('participants')
-      .update({
-        last_login: new Date().toISOString(),
-        login_count: (participant.login_count || 0) + 1
-      })
-      .eq('id', participant.id);
-
     // Generate JWT token for participant
+    const tokenStart = Date.now();
     const token = await create(
       { alg: 'HS256', typ: 'JWT' },
       {
@@ -131,6 +147,11 @@ async function handleLogin(req: Request) {
       },
       JWT_SECRET
     );
+    const tokenTime = Date.now();
+    console.log(`[PERF] JWT token created in ${tokenTime - tokenStart}ms`);
+
+    const totalTime = Date.now();
+    console.log(`[PERF] Total participant login time: ${totalTime - startTime}ms`);
 
     return new Response(
       JSON.stringify({
@@ -150,17 +171,13 @@ async function handleLogin(req: Request) {
     );
   }
 
-  // Try to find judge if participant not found
-  const { data: judge, error: judgeError } = await supabase
-    .from('judges')
-    .select('*')
-    .eq('username', username)
-    .eq('is_active', true)
-    .single();
-
-  if (judge && !judgeError) {
+  if (judge && !judgeResult.error) {
     // Verify password for judge
+    const passwordStart = Date.now();
     const passwordValid = await comparePassword(password, judge.password_hash);
+    const passwordTime = Date.now();
+    console.log(`[PERF] Password verification completed in ${passwordTime - passwordStart}ms`);
+    
     if (!passwordValid) {
       console.log('Invalid password for judge:', username);
       return new Response(
@@ -169,16 +186,8 @@ async function handleLogin(req: Request) {
       );
     }
 
-    // Update login stats for judge
-    await supabase
-      .from('judges')
-      .update({
-        last_login: new Date().toISOString(),
-        login_count: (judge.login_count || 0) + 1
-      })
-      .eq('id', judge.id);
-
     // Generate JWT token for judge
+    const tokenStart = Date.now();
     const token = await create(
       { alg: 'HS256', typ: 'JWT' },
       {
@@ -191,6 +200,11 @@ async function handleLogin(req: Request) {
       },
       JWT_SECRET
     );
+    const tokenTime = Date.now();
+    console.log(`[PERF] JWT token created in ${tokenTime - tokenStart}ms`);
+
+    const totalTime = Date.now();
+    console.log(`[PERF] Total judge login time: ${totalTime - startTime}ms`);
 
     return new Response(
       JSON.stringify({
@@ -234,8 +248,8 @@ async function handleVerify(req: Request) {
       throw new Error('Invalid token');
     }
 
+    // Verify user still exists and is active based on role
     if (payload.role === 'participant') {
-      // Verify participant still exists and is active
       const { data: participant, error } = await supabase
         .from('participants')
         .select('id, username, full_name, age, chest_number, category, church, district, is_active')
@@ -255,7 +269,6 @@ async function handleVerify(req: Request) {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     } else if (payload.role === 'judge') {
-      // Verify judge still exists and is active
       const { data: judge, error } = await supabase
         .from('judges')
         .select('id, username, full_name, email, church, is_active')

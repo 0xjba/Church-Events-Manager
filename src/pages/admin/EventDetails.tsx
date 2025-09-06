@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
-import { Layout, Card, Button, Checkbox, Table, message, Spin, Space, Typography, Badge, Divider, Modal, Input } from 'antd';
-import { ArrowLeft, Users, Plus, Minus, Search, Trash2 } from 'lucide-react';
+import { Layout, Card, Button, Checkbox, Table, message, Spin, Space, Typography, Badge, Divider, Modal, Input, InputNumber, Form } from 'antd';
+import { ArrowLeft, Users, Plus, Minus, Search, Trash2, Edit3, CheckCircle, XCircle } from 'lucide-react';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -31,7 +31,6 @@ interface Participant {
   full_name: string;
   age_category: string;
   chest_number: string;
-  category: string;
   church: string;
   district: string;
   username: string;
@@ -85,6 +84,29 @@ interface Criteria {
   weight: number;
 }
 
+interface Score {
+  id: string;
+  event_id: string;
+  participant_id: string;
+  judge_id: string;
+  criteria_id: string;
+  score: number;
+  is_locked: boolean;
+  created_at: string;
+  updated_at: string;
+  judge?: {
+    id: string;
+    full_name: string;
+    church: string;
+  };
+  criteria?: {
+    id: string;
+    name: string;
+    max_score: number;
+    weight: number;
+  };
+}
+
 const EventDetails = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
@@ -100,6 +122,10 @@ const EventDetails = () => {
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  
+  // Batch selection state for event participants
+  const [selectedEventParticipantKeys, setSelectedEventParticipantKeys] = useState<React.Key[]>([]);
+  const [batchDeletingParticipants, setBatchDeletingParticipants] = useState(false);
   const [groups, setGroups] = useState<Group[]>([]);
   const [judges, setJudges] = useState<Array<{ id: string; full_name: string; church: string }>>([]);
   
@@ -107,7 +133,14 @@ const EventDetails = () => {
   const [isParticipantModalOpen, setIsParticipantModalOpen] = useState(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [isJudgeModalOpen, setIsJudgeModalOpen] = useState(false);
+  const [isScoreModalOpen, setIsScoreModalOpen] = useState(false);
   const [selectedJudges, setSelectedJudges] = useState<string[]>([]);
+  
+  // Score management states
+  const [scores, setScores] = useState<Score[]>([]);
+  const [selectedParticipantForScoring, setSelectedParticipantForScoring] = useState<Participant | null>(null);
+  const [scoreForm] = Form.useForm();
+  const [savingScores, setSavingScores] = useState(false);
 
   // Filtered lists for search
   const [filteredParticipants, setFilteredParticipants] = useState<Participant[]>([]);
@@ -147,7 +180,7 @@ const EventDetails = () => {
 
       // Filter by event's age category if it exists
       if (event?.age_category) {
-        query = query.eq('age_category', event.age_category);
+        query = query.eq('age_category', event.age_category as 'Sub Juniors' | 'Juniors' | 'Intermediates' | 'Seniors');
       }
 
       const { data, error } = await query.order('full_name');
@@ -284,6 +317,33 @@ const EventDetails = () => {
     }
   }, []);
 
+  const fetchScores = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('scores')
+        .select(`
+          *,
+          judge:judges(
+            id,
+            full_name,
+            church
+          ),
+          criteria:event_criteria(
+            id,
+            name,
+            max_score,
+            weight
+          )
+        `)
+        .eq('event_id', eventId);
+
+      if (error) throw error;
+      setScores(data || []);
+    } catch (error: unknown) {
+      message.error('Failed to load scores');
+    }
+  }, [eventId]);
+
   const addParticipantsToEvent = useCallback(async () => {
     if (selectedParticipants.length === 0) {
       message.warning('Please select participants to add');
@@ -343,6 +403,36 @@ const EventDetails = () => {
     }
   }, [eventId, fetchEventParticipants]);
 
+  const handleBatchDeleteParticipants = useCallback(async () => {
+    if (selectedEventParticipantKeys.length === 0) {
+      message.warning('Please select participants to remove');
+      return;
+    }
+
+    try {
+      setBatchDeletingParticipants(true);
+      
+      // Delete each selected participant from the event
+      for (const participantId of selectedEventParticipantKeys) {
+        const { error } = await supabase
+          .from('event_participants')
+          .delete()
+          .eq('event_id', eventId)
+          .eq('participant_id', String(participantId));
+        
+        if (error) throw error;
+      }
+
+      message.success(`Successfully removed ${selectedEventParticipantKeys.length} participant(s) from the event`);
+      setSelectedEventParticipantKeys([]);
+      fetchEventParticipants();
+    } catch (error: any) {
+      message.error(error.message || 'Failed to remove participants from event');
+    } finally {
+      setBatchDeletingParticipants(false);
+    }
+  }, [selectedEventParticipantKeys, eventId, fetchEventParticipants]);
+
   const handleParticipantSelection = useCallback((participantId: string, checked: boolean) => {
     if (checked) {
       setSelectedParticipants([...selectedParticipants, participantId]);
@@ -358,6 +448,10 @@ const EventDetails = () => {
   const isGroupRegistered = useCallback((groupId: string) => {
     return eventGroups.some(eg => eg.group_id === groupId);
   }, [eventGroups]);
+
+  const hasScoresSubmitted = useCallback((participantId: string) => {
+    return scores.some(s => s.participant_id === participantId);
+  }, [scores]);
 
   const addGroupsToEvent = useCallback(async () => {
     if (selectedGroups.length === 0) {
@@ -477,6 +571,96 @@ const EventDetails = () => {
     }
   }, [selectedJudges, eventJudges, eventId, fetchEventJudges]);
 
+  const openScoreModal = useCallback((participant: Participant) => {
+    setSelectedParticipantForScoring(participant);
+    
+    // Get existing scores for this participant
+    const participantScores = scores.filter(s => s.participant_id === participant.id);
+    
+    // Prepare form data with existing scores
+    const formData: Record<string, number> = {};
+    participantScores.forEach(score => {
+      formData[`${score.judge_id}_${score.criteria_id}`] = score.score;
+    });
+    
+    scoreForm.setFieldsValue(formData);
+    setIsScoreModalOpen(true);
+  }, [scores, scoreForm]);
+
+  const saveScores = useCallback(async (values: Record<string, number>) => {
+    if (!selectedParticipantForScoring || !eventId) return;
+
+    try {
+      setSavingScores(true);
+      
+      // Get all judges and criteria for this event
+      const eventJudgeIds = eventJudges.map(ej => ej.judge_id);
+      
+      // Process each score entry
+      const scoreEntries: Array<{
+        event_id: string;
+        participant_id: string;
+        judge_id: string;
+        criteria_id: string;
+        score: number;
+        is_locked: boolean;
+      }> = [];
+
+      Object.entries(values).forEach(([key, score]) => {
+        if (score !== undefined && score !== null) {
+          const [judgeId, criteriaId] = key.split('_');
+          
+          // Only process if judge is assigned to this event
+          if (eventJudgeIds.includes(judgeId)) {
+            scoreEntries.push({
+              event_id: eventId,
+              participant_id: selectedParticipantForScoring.id,
+              judge_id: judgeId,
+              criteria_id: criteriaId,
+              score: Number(score),
+              is_locked: true
+            });
+          }
+        }
+      });
+
+      if (scoreEntries.length === 0) {
+        message.warning('No valid scores to save');
+        return;
+      }
+
+      // Delete existing scores for this participant first
+      const { error: deleteError } = await supabase
+        .from('scores')
+        .delete()
+        .eq('event_id', eventId)
+        .eq('participant_id', selectedParticipantForScoring.id);
+
+      if (deleteError) throw deleteError;
+
+      // Insert new scores
+      const { error: insertError } = await supabase
+        .from('scores')
+        .insert(scoreEntries);
+
+      if (insertError) throw insertError;
+
+      message.success('Scores saved successfully');
+      setIsScoreModalOpen(false);
+      setSelectedParticipantForScoring(null);
+      scoreForm.resetFields();
+      
+      // Refresh scores data
+      await fetchScores();
+      
+    } catch (error: unknown) {
+      console.error('Error saving scores:', error);
+      message.error('Failed to save scores');
+    } finally {
+      setSavingScores(false);
+    }
+  }, [selectedParticipantForScoring, eventId, eventJudges, scoreForm, fetchScores]);
+
   // useEffect to fetch data when component mounts
   useEffect(() => {
     if (eventId) {
@@ -488,8 +672,9 @@ const EventDetails = () => {
       fetchEventGroups();
       fetchEventJudges();
       fetchJudges();
+      fetchScores();
     }
-  }, [eventId, fetchEventDetails, fetchAllParticipants, fetchEventParticipants, fetchEventCriteria, fetchGroups, fetchEventGroups, fetchEventJudges, fetchJudges]);
+  }, [eventId, fetchEventDetails, fetchAllParticipants, fetchEventParticipants, fetchEventCriteria, fetchGroups, fetchEventGroups, fetchEventJudges, fetchJudges, fetchScores]);
 
   const handleGroupSelection = useCallback((groupId: string, checked: boolean) => {
     if (checked) {
@@ -509,7 +694,7 @@ const EventDetails = () => {
         <div>
           <div style={{ fontWeight: 500 }}>{text}</div>
           <div style={{ fontSize: '12px', color: '#666' }}>
-            Chest: {record.chest_number} • {record.category} • {record.church}
+            Chest: {record.chest_number} • {record.age_category} • {record.church}
           </div>
         </div>
       )
@@ -528,6 +713,39 @@ const EventDetails = () => {
       width: 150
     },
     {
+      title: 'Scores',
+      key: 'scores',
+      width: 150,
+      align: 'center' as const,
+      render: (_: unknown, record: Participant) => {
+        const hasScores = hasScoresSubmitted(record.id);
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {hasScores ? (
+                <>
+                  <CheckCircle size={16} style={{ color: '#52c41a' }} />
+                  <span style={{ fontSize: '12px', color: '#52c41a' }}>Submitted</span>
+                </>
+              ) : (
+                <>
+                  <XCircle size={16} style={{ color: '#ff4d4f' }} />
+                  <span style={{ fontSize: '12px', color: '#ff4d4f' }}>Not Submitted</span>
+                </>
+              )}
+            </div>
+            <Button
+              type="text"
+              size="small"
+              icon={<Edit3 size={14} />}
+              onClick={() => openScoreModal(record)}
+              title="Edit Scores"
+            />
+          </div>
+        );
+      }
+    },
+    {
       title: 'Actions',
       key: 'actions',
       width: 100,
@@ -542,6 +760,13 @@ const EventDetails = () => {
       )
     }
   ];
+
+  const eventParticipantRowSelection = {
+    selectedRowKeys: selectedEventParticipantKeys,
+    onChange: (selectedRowKeys: React.Key[]) => {
+      setSelectedEventParticipantKeys(selectedRowKeys);
+    },
+  };
 
   const groupColumns = [
     {
@@ -663,12 +888,8 @@ const EventDetails = () => {
               Back to Events
             </Button>
             
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <div style={{ marginBottom: '8px' }}>
               <Title level={2} style={{ margin: 0 }}>{event.name}</Title>
-              <Badge 
-                color={event.status === 'active' ? 'green' : event.status === 'completed' ? 'blue' : 'orange'} 
-                text={event.status.charAt(0).toUpperCase() + event.status.slice(1)} 
-              />
             </div>
             <Text type="secondary">
               {event.type.charAt(0).toUpperCase() + event.type.slice(1)} Event • {event.event_type === 'individual' ? 'Individual' : 'Group'} Category
@@ -700,6 +921,10 @@ const EventDetails = () => {
               <div>
                 <Text strong>Max Participants:</Text>
                 <div>{event.max_participants || 'Unlimited'}</div>
+              </div>
+              <div>
+                <Text strong>Age Category:</Text>
+                <div>{event.age_category || 'All Ages'}</div>
               </div>
               <div>
                 <Text strong>Event Order:</Text>
@@ -746,26 +971,38 @@ const EventDetails = () => {
                     <Users size={16} />
                     Event Participants ({eventParticipants.length})
                   </Space>
-                  <Button
-                    type="primary"
-                    icon={<Plus size={16} />}
-                    onClick={() => setIsParticipantModalOpen(true)}
-                    size="small"
-                    className="md:inline-flex hidden:flex"
-                  >
-                    <span className="hidden md:inline">Add</span>
-                  </Button>
+                  <Space>
+                    {selectedEventParticipantKeys.length > 0 && (
+                      <Button 
+                        danger 
+                        icon={<Trash2 size={16} />}
+                        loading={batchDeletingParticipants}
+                        onClick={handleBatchDeleteParticipants}
+                        size="small"
+                        className="md:inline-flex hidden:flex"
+                      >
+                        <span className="hidden md:inline">Remove Selected ({selectedEventParticipantKeys.length})</span>
+                      </Button>
+                    )}
+                    <Button
+                      type="primary"
+                      icon={<Plus size={16} />}
+                      onClick={() => setIsParticipantModalOpen(true)}
+                      size="small"
+                      className="md:inline-flex hidden:flex"
+                    >
+                      <span className="hidden md:inline">Add</span>
+                    </Button>
+                  </Space>
                 </div>
               }
               style={{ marginBottom: '24px' }}
             >
               <Table
                 columns={participantColumns}
-                dataSource={eventParticipants.map(ep => ({
-                  ...ep.participant,
-                  age: typeof ep.participant.age === 'string' ? parseInt(ep.participant.age) || ep.participant.age : ep.participant.age
-                }))}
+                dataSource={eventParticipants.map(ep => ep.participant)}
                 rowKey="id"
+                rowSelection={eventParticipantRowSelection}
                 pagination={false}
                 loading={participantsLoading}
                 locale={{
@@ -887,7 +1124,7 @@ const EventDetails = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>{participant.full_name}</span>
                   <span style={{ fontSize: '12px', color: '#666' }}>
-                    ({participant.chest_number} • {participant.category})
+                    ({participant.chest_number} • {participant.age_category})
                   </span>
                   {isParticipantRegistered(participant.id) && (
                     <Badge color="green" text="Already Registered" />
@@ -1058,6 +1295,133 @@ const EventDetails = () => {
         >
           Add {selectedJudges.length > 0 ? `${selectedJudges.length} ` : ''}Judge{selectedJudges.length !== 1 ? 's' : ''} to Event
         </Button>
+      </Modal>
+
+      {/* Score Editing Modal */}
+      <Modal
+        title={
+          <div>
+            <div style={{ fontSize: '16px', fontWeight: 500 }}>
+              Edit Scores - {selectedParticipantForScoring?.full_name}
+            </div>
+            <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+              Chest #{selectedParticipantForScoring?.chest_number} • {selectedParticipantForScoring?.age_category}
+            </div>
+          </div>
+        }
+        open={isScoreModalOpen}
+        onCancel={() => {
+          setIsScoreModalOpen(false);
+          setSelectedParticipantForScoring(null);
+          scoreForm.resetFields();
+        }}
+        footer={null}
+        width={800}
+      >
+        <Form
+          form={scoreForm}
+          layout="vertical"
+          onFinish={saveScores}
+        >
+          <div style={{ marginBottom: '16px' }}>
+            <Text type="secondary">
+              Enter scores for each judge and criteria. Leave empty if no score should be recorded.
+            </Text>
+          </div>
+
+          <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+            {eventJudges.map((eventJudge) => (
+              <div key={eventJudge.judge_id} style={{ marginBottom: '24px' }}>
+                <div style={{ 
+                  padding: '12px', 
+                  backgroundColor: '#f5f5f5', 
+                  borderRadius: '6px',
+                  marginBottom: '12px'
+                }}>
+                  <Text strong style={{ fontSize: '14px' }}>
+                    {eventJudge.judge.full_name}
+                  </Text>
+                  <div style={{ fontSize: '12px', color: '#666' }}>
+                    {eventJudge.judge.church}
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gap: '12px' }}>
+                  {criteria.map((criterion) => (
+                    <Form.Item
+                      key={`${eventJudge.judge_id}_${criterion.id}`}
+                      label={
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span>{criterion.name}</span>
+                          <span style={{ fontSize: '12px', color: '#666' }}>
+                            Max: {criterion.max_score} • Weight: {criterion.weight}
+                          </span>
+                        </div>
+                      }
+                      name={`${eventJudge.judge_id}_${criterion.id}`}
+                      rules={[
+                        {
+                          validator: (_, value) => {
+                            if (value === undefined || value === null || value === '') {
+                              return Promise.resolve();
+                            }
+                            if (value < 0) {
+                              return Promise.reject('Score cannot be negative');
+                            }
+                            if (value > criterion.max_score) {
+                              return Promise.reject(`Score cannot exceed ${criterion.max_score}`);
+                            }
+                            return Promise.resolve();
+                          }
+                        }
+                      ]}
+                    >
+                      <InputNumber
+                        min={0}
+                        max={criterion.max_score}
+                        step={0.1}
+                        precision={1}
+                        style={{ width: '100%' }}
+                        placeholder={`0 - ${criterion.max_score}`}
+                      />
+                    </Form.Item>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            marginTop: '24px',
+            paddingTop: '16px',
+            borderTop: '1px solid #f0f0f0'
+          }}>
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              {eventJudges.length} judges × {criteria.length} criteria = {eventJudges.length * criteria.length} possible scores
+            </Text>
+            <Space>
+              <Button
+                onClick={() => {
+                  setIsScoreModalOpen(false);
+                  setSelectedParticipantForScoring(null);
+                  scoreForm.resetFields();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="primary"
+                htmlType="submit"
+                loading={savingScores}
+              >
+                Save Scores
+              </Button>
+            </Space>
+          </div>
+        </Form>
       </Modal>
     </Layout>
   );

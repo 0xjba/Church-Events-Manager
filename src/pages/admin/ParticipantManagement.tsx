@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
 import ResponsiveTable from '@/components/ResponsiveTable';
 import { Layout, Card, Button, Input, Form, Modal, Select, message, Spin, Space, Typography, Checkbox } from 'antd';
-import { Plus, Edit, Trash2, Users, Upload } from 'lucide-react';
+import { Plus, Edit, Trash2, Users, Upload, Eye, Search } from 'lucide-react';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -11,9 +12,8 @@ const { Title, Text } = Typography;
 interface Participant {
   id: string;
   full_name: string;
-  age: number;
+  age_category: string;
   chest_number: string;
-  category: string;
   church: string;
   district: string;
   created_at: string;
@@ -37,6 +37,7 @@ interface Group {
 }
 
 const ParticipantManagement = () => {
+  const navigate = useNavigate();
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -68,11 +69,31 @@ const ParticipantManagement = () => {
   // Group batch selection state
   const [selectedGroupKeys, setSelectedGroupKeys] = useState<React.Key[]>([]);
   const [batchDeletingGroups, setBatchDeletingGroups] = useState(false);
+  
+  // Search state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredParticipants, setFilteredParticipants] = useState<Participant[]>([]);
+  
+  // File input ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchParticipants();
     fetchGroups();
   }, []);
+
+  // Filter participants based on search term
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredParticipants(participants);
+    } else {
+      const filtered = participants.filter(participant => 
+        participant.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        participant.chest_number.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredParticipants(filtered);
+    }
+  }, [participants, searchTerm]);
 
   const fetchParticipants = async () => {
     try {
@@ -244,7 +265,7 @@ const ParticipantManagement = () => {
             const { error } = await supabase
               .from('participants')
               .delete()
-              .eq('id', participantId);
+              .eq('id', String(participantId));
             
             if (error) throw error;
           }
@@ -418,7 +439,7 @@ const ParticipantManagement = () => {
             const { error } = await supabase
               .from('groups')
               .delete()
-              .eq('id', groupId);
+              .eq('id', String(groupId));
             
             if (error) throw error;
           }
@@ -450,7 +471,7 @@ const ParticipantManagement = () => {
     }
     
     const headers = lines[0].split(',').map(h => h.trim());
-    const requiredHeaders = ['full_name', 'age_category', 'chest_number', 'category', 'church', 'district', 'username', 'password'];
+    const requiredHeaders = ['full_name', 'age_category', 'chest_number', 'church', 'district', 'username', 'password'];
     
     // Check if all required headers are present
     const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
@@ -474,7 +495,6 @@ const ParticipantManagement = () => {
   const validateParticipantData = (data: any[]) => {
     const errors: string[] = [];
     const validAgeCategories = ['Sub Juniors', 'Juniors', 'Intermediates', 'Seniors'];
-    const validCategories = ['individual', 'group'];
     
     data.forEach((row, index) => {
       const rowNum = row._rowNumber;
@@ -483,7 +503,6 @@ const ParticipantManagement = () => {
       if (!row.full_name) errors.push(`Row ${rowNum}: Missing full_name`);
       if (!row.age_category) errors.push(`Row ${rowNum}: Missing age_category`);
       if (!row.chest_number) errors.push(`Row ${rowNum}: Missing chest_number`);
-      if (!row.category) errors.push(`Row ${rowNum}: Missing category`);
       if (!row.church) errors.push(`Row ${rowNum}: Missing church`);
       if (!row.district) errors.push(`Row ${rowNum}: Missing district`);
       if (!row.username) errors.push(`Row ${rowNum}: Missing username`);
@@ -499,25 +518,28 @@ const ParticipantManagement = () => {
       if (row.age_category && !validAgeCategories.includes(row.age_category)) {
         errors.push(`Row ${rowNum}: Invalid age_category. Must be one of: ${validAgeCategories.join(', ')}`);
       }
-      if (row.category && !validCategories.includes(row.category)) {
-        errors.push(`Row ${rowNum}: Invalid category. Must be one of: ${validCategories.join(', ')}`);
-      }
     });
     
     return errors;
   };
 
   const handleFileUpload = async (file: File) => {
+    console.log('handleFileUpload called with file:', file);
+    
     if (!file.name.toLowerCase().endsWith('.csv')) {
       message.error('Please upload a CSV file');
       return;
     }
     
     try {
+      console.log('Starting file validation...');
       setIsValidating(true);
       const fileContent = await file.text();
+      console.log('File content length:', fileContent.length);
       const parsed = parseCSV(fileContent);
+      console.log('Parsed data:', parsed);
       const errors = validateParticipantData(parsed);
+      console.log('Validation errors:', errors);
       
       if (errors.length > 0) {
         setCsvFile(file);
@@ -551,7 +573,7 @@ const ParticipantManagement = () => {
   };
 
   const downloadTemplate = () => {
-    const template = 'full_name,age_category,chest_number,category,church,district,username,password\nJohn Doe,Juniors,001,individual,Grace Church,District A,john.doe,password123\nJane Smith,Intermediates,002,group,Hope Church,District B,jane.smith,password456';
+    const template = 'full_name,age_category,chest_number,church,district,username,password\nJohn Doe,Juniors,001,Grace Church,District A,john.doe,password123\nJane Smith,Intermediates,002,Hope Church,District B,jane.smith,password456';
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -622,7 +644,7 @@ const ParticipantManagement = () => {
     }
   };
 
-  const findNextChestNumber = (existing: Set<string>, importSet: Set<string>) => {
+  const findNextChestNumber = (existing: Set<unknown>, importSet: Set<unknown>) => {
     let num = 1;
     while (existing.has(num.toString().padStart(3, '0')) || importSet.has(num.toString().padStart(3, '0'))) {
       num++;
@@ -630,7 +652,7 @@ const ParticipantManagement = () => {
     return num.toString().padStart(3, '0');
   };
 
-  const generateUniqueUsername = (username: string, existing: Set<string>, importSet: Set<string>) => {
+  const generateUniqueUsername = (username: string, existing: Set<unknown>, importSet: Set<unknown>) => {
     let counter = 1;
     let newUsername = username;
     
@@ -748,14 +770,22 @@ const ParticipantManagement = () => {
         <Space>
           <Button
             type="text"
+            icon={<Eye size={16} />}
+            onClick={() => navigate(`/admin/participants/${record.id}`)}
+            title="View Details"
+          />
+          <Button
+            type="text"
             icon={<Edit size={16} />}
             onClick={() => handleEdit(record)}
+            title="Edit Participant"
           />
           <Button
             type="text"
             danger
             icon={<Trash2 size={16} />}
             onClick={() => handleDelete(record.id)}
+            title="Delete Participant"
           />
         </Space>
       ),
@@ -815,15 +845,33 @@ const ParticipantManagement = () => {
           </div>
 
           <Card>
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                <Input
+                  placeholder="Search participants by name or chest number..."
+                  prefix={<Search size={16} />}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  allowClear
+                  style={{ flex: 1 }}
+                />
+                {searchTerm && (
+                  <Text type="secondary" style={{ whiteSpace: 'nowrap' }}>
+                    {filteredParticipants.length} of {participants.length} participants
+                  </Text>
+                )}
+              </div>
+            </div>
+            
             <ResponsiveTable
               columns={columns}
-              dataSource={participants}
+              dataSource={filteredParticipants}
               loading={loading}
               rowKey="id"
               rowSelection={rowSelection}
               cardTitle={(record) => `${record.chest_number} - ${record.full_name}`}
               locale={{
-                emptyText: loading ? <Spin /> : undefined
+                emptyText: loading ? <Spin /> : (searchTerm ? 'No participants found matching your search' : undefined)
               }}
             />
           </Card>
@@ -1124,21 +1172,40 @@ const ParticipantManagement = () => {
                 
                 <div style={{ marginBottom: '24px' }}>
                   <input
+                    ref={fileInputRef}
                     type="file"
                     accept=".csv"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) handleFileUpload(file);
+                      if (file) {
+                        console.log('File selected:', file.name);
+                        handleFileUpload(file);
+                      }
                     }}
                     style={{ display: 'none' }}
-                    id="csv-upload"
                   />
-                  <label htmlFor="csv-upload">
-                    <Button type="dashed" size="large" style={{ width: '200px', height: '60px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                    <Button 
+                      type="dashed" 
+                      size="large" 
+                      style={{ width: '200px', height: '60px', cursor: 'pointer' }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        console.log('Button clicked, triggering file input');
+                        if (fileInputRef.current) {
+                          fileInputRef.current.click();
+                        } else {
+                          console.error('File input ref not found');
+                        }
+                      }}
+                    >
                       <Upload size={20} style={{ marginRight: '8px' }} />
                       Choose CSV File
                     </Button>
-                  </label>
+                    <Text type="secondary" style={{ fontSize: '12px' }}>
+                      Click the button above to select a CSV file
+                    </Text>
+                  </div>
                 </div>
                 
                 <div>
@@ -1206,8 +1273,8 @@ const ParticipantManagement = () => {
                             <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Name</th>
                             <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Age Category</th>
                             <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Chest #</th>
-                            <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Event Category</th>
                             <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Church</th>
+                            <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>District</th>
                             <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Username</th>
                           </tr>
                         </thead>
@@ -1217,10 +1284,8 @@ const ParticipantManagement = () => {
                               <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.full_name}</td>
                               <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.age_category}</td>
                               <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.chest_number}</td>
-                              <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>
-                                {row.category === 'individual' ? 'Individual Event' : 'Group Event'}
-                              </td>
                               <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.church}</td>
+                              <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.district}</td>
                               <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.username}</td>
                             </tr>
                           ))}

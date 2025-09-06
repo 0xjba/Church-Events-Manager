@@ -177,11 +177,7 @@ const Navigation = () => {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Text type="secondary" style={{ fontSize: '13px' }}>Category:</Text>
-                  <Text strong style={{ fontSize: '13px', textTransform: 'capitalize' }}>{participant.category}</Text>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text type="secondary" style={{ fontSize: '13px' }}>Age:</Text>
-                  <Text strong style={{ fontSize: '13px' }}>{participant.age} years</Text>
+                  <Text strong style={{ fontSize: '13px', textTransform: 'capitalize' }}>{participant.age_category}</Text>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Text type="secondary" style={{ fontSize: '13px' }}>Chest Number:</Text>
@@ -214,14 +210,6 @@ const Navigation = () => {
                     {judgeData?.is_active ? 'Active' : 'Inactive'}
                   </Text>
                 </div>
-                {judgeData?.last_login && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text type="secondary" style={{ fontSize: '13px' }}>Last Login:</Text>
-                    <Text strong style={{ fontSize: '13px' }}>
-                      {new Date(judgeData.last_login).toLocaleDateString()}
-                    </Text>
-                  </div>
-                )}
               </div>
             )}
             
@@ -235,14 +223,6 @@ const Navigation = () => {
                   <Text type="secondary" style={{ fontSize: '13px' }}>Username:</Text>
                   <Text strong style={{ fontSize: '13px' }}>{profile.username}</Text>
                 </div>
-                {profile.last_login && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text type="secondary" style={{ fontSize: '13px' }}>Last Login:</Text>
-                    <Text strong style={{ fontSize: '13px' }}>
-                      {new Date(profile.last_login).toLocaleDateString()}
-                    </Text>
-                  </div>
-                )}
               </div>
             )}
           </div>

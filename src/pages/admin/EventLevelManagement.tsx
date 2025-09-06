@@ -201,7 +201,7 @@ const EventLevelManagement = () => {
       key: 'is_active',
       width: 100,
       render: (isActive: boolean) => (
-        <Badge color={isActive ? 'green' : 'default'} text={isActive ? 'Active' : 'Inactive'} />
+        <Text>{isActive ? 'Active' : 'Inactive'}</Text>
       ),
     },
     {
@@ -282,7 +282,7 @@ const EventLevelManagement = () => {
               cardTitle={(record) => (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 'medium' }}>{record.name}</span>
-                  <Badge color={record.is_active ? 'green' : 'default'} text={record.is_active ? 'Active' : 'Inactive'} />
+                  <Text>{record.is_active ? 'Active' : 'Inactive'}</Text>
                 </div>
               )}
               locale={{

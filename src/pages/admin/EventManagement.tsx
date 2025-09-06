@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import Navigation from '@/components/Navigation';
 import ResponsiveTable from '@/components/ResponsiveTable';
-import { Layout, Card, Button, Input, Select, Modal, Badge, Form, Typography, Space, Spin, message, Popconfirm } from 'antd';
-import { Plus, Edit, Trash2, X, Eye } from 'lucide-react';
+import { Layout, Card, Button, Input, Select, Modal, Badge, Form, Typography, Space, Spin, message, Popconfirm, Upload, Progress } from 'antd';
+import { Plus, Edit, Trash2, X, Eye, Copy, Upload as UploadIcon } from 'lucide-react';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -50,11 +50,21 @@ const EventManagement = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  const [duplicatingEvent, setDuplicatingEvent] = useState<Event | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
   const [criteria, setCriteria] = useState<Criteria[]>([{ name: '', max_score: 10, weight: 1.0 }]);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [batchDeleting, setBatchDeleting] = useState(false);
+  const [eventType, setEventType] = useState<string>('individual');
+  const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState(false);
+  const [bulkImportLoading, setBulkImportLoading] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importResults, setImportResults] = useState<{
+    success: number;
+    skipped: number;
+    errors: Array<{ chest_number: string; error: string; }>;
+  } | null>(null);
 
   useEffect(() => {
     fetchEvents();
@@ -97,34 +107,70 @@ const EventManagement = () => {
     }
   };
 
-  const openModal = (event?: Event) => {
+  const openModal = (event?: Event, isDuplicating: boolean = false) => {
     if (event) {
-      setEditingEvent(event);
-      form.setFieldsValue({
-        name: event.name,
-        type: event.type,
-        event_type: event.event_type || 'individual',
-        level_id: event.level_id,
-        age_category: event.age_category,
-        rules: event.rules || '',
-        time_limit: event.time_limit || undefined,
-        max_participants: event.max_participants || undefined,
-        status: event.status,
-        event_order: event.event_order || undefined
-      });
-      // Use event_criteria from the fetched data
-      const eventCriteria = (event as any).event_criteria || [];
-      if (eventCriteria.length > 0) {
-        setCriteria(eventCriteria.map((c: any) => ({
-          name: c.name,
-          max_score: c.max_score,
-          weight: c.weight
-        })));
+      if (isDuplicating) {
+        setDuplicatingEvent(event);
+        setEditingEvent(null);
+        // Pre-fill form with event data for duplication
+        const eventTypeValue = event.event_type || 'individual';
+        setEventType(eventTypeValue);
+        form.setFieldsValue({
+          name: `${event.name} (Copy)`,
+          type: event.type,
+          event_type: eventTypeValue,
+          level_id: event.level_id,
+          age_category: event.age_category,
+          rules: event.rules || '',
+          time_limit: event.time_limit || undefined,
+          max_participants: event.max_participants || undefined,
+          status: 'upcoming', // Default to upcoming for new events
+          event_order: event.event_order || undefined
+        });
+        // Use event_criteria from the fetched data
+        const eventCriteria = (event as any).event_criteria || [];
+        if (eventCriteria.length > 0) {
+          setCriteria(eventCriteria.map((c: any) => ({
+            name: c.name,
+            max_score: c.max_score,
+            weight: c.weight
+          })));
+        } else {
+          setCriteria([{ name: '', max_score: 10, weight: 1.0 }]);
+        }
       } else {
-        setCriteria([{ name: '', max_score: 10, weight: 1.0 }]);
+        setEditingEvent(event);
+        setDuplicatingEvent(null);
+        const eventTypeValue = event.event_type || 'individual';
+        setEventType(eventTypeValue);
+        form.setFieldsValue({
+          name: event.name,
+          type: event.type,
+          event_type: eventTypeValue,
+          level_id: event.level_id,
+          age_category: event.age_category,
+          rules: event.rules || '',
+          time_limit: event.time_limit || undefined,
+          max_participants: event.max_participants || undefined,
+          status: event.status,
+          event_order: event.event_order || undefined
+        });
+        // Use event_criteria from the fetched data
+        const eventCriteria = (event as any).event_criteria || [];
+        if (eventCriteria.length > 0) {
+          setCriteria(eventCriteria.map((c: any) => ({
+            name: c.name,
+            max_score: c.max_score,
+            weight: c.weight
+          })));
+        } else {
+          setCriteria([{ name: '', max_score: 10, weight: 1.0 }]);
+        }
       }
     } else {
       setEditingEvent(null);
+      setDuplicatingEvent(null);
+      setEventType('individual');
       form.resetFields();
       form.setFieldsValue({ event_type: 'individual' });
       setCriteria([{ name: '', max_score: 10, weight: 1.0 }]);
@@ -135,8 +181,14 @@ const EventManagement = () => {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingEvent(null);
+    setDuplicatingEvent(null);
     form.resetFields();
     setCriteria([{ name: '', max_score: 10, weight: 1.0 }]);
+    setEventType('individual');
+  };
+
+  const handleEventTypeChange = (value: string) => {
+    setEventType(value);
   };
 
   const onSubmit = async (values: any) => {
@@ -315,7 +367,7 @@ const EventManagement = () => {
         const { error } = await supabase
           .from('events')
           .delete()
-          .eq('id', eventId);
+          .eq('id', eventId as string);
         
         if (error) throw error;
       }
@@ -328,6 +380,210 @@ const EventManagement = () => {
     } finally {
       setBatchDeleting(false);
     }
+  };
+
+  // CSV parsing function
+  const parseCSV = (csvText: string) => {
+    const lines = csvText.trim().split('\n');
+    const headers = lines[0].split(',').map(h => h.trim());
+    
+    if (headers[0] !== 'chest_number' || headers[1] !== 'age_category' || headers[2] !== 'events') {
+      throw new Error('CSV must have columns: chest_number, age_category, events');
+    }
+
+    return lines.slice(1).map((line, index) => {
+      // Parse CSV line properly handling quoted values
+      const parseCSVLine = (line: string): string[] => {
+        const result: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        
+        result.push(current.trim());
+        return result;
+      };
+
+      const values = parseCSVLine(line);
+      if (values.length !== 3) {
+        throw new Error(`Invalid CSV format at line ${index + 2}. Expected 3 columns, got ${values.length}`);
+      }
+      
+      const chest_number = values[0];
+      const age_category = values[1];
+      // Remove quotes and split by comma for events
+      const eventsString = values[2].replace(/^"(.*)"$/, '$1');
+      const events = eventsString.split(',').map(e => e.trim()).filter(e => e);
+      
+      return { chest_number, age_category, events };
+    });
+  };
+
+
+  // Bulk import function
+  const handleBulkImport = async (file: File) => {
+    try {
+      setBulkImportLoading(true);
+      setImportProgress(0);
+      setImportResults(null);
+
+      // Read CSV file
+      const csvText = await file.text();
+      const csvData = parseCSV(csvText);
+
+      // Get all events from database
+      const { data: allEvents, error: eventsError } = await supabase
+        .from('events')
+        .select('id, name, age_category')
+        .eq('event_type', 'individual');
+
+      if (eventsError) throw eventsError;
+
+      // Create event name + age_category to event object mapping
+      const eventMap = new Map<string, any>();
+      allEvents?.forEach(event => {
+        const key = `${event.name.toLowerCase()}-${event.age_category || 'no-category'}`;
+        eventMap.set(key, event);
+      });
+
+      // Get all participants
+      const { data: allParticipants, error: participantsError } = await supabase
+        .from('participants')
+        .select('id, chest_number, age_category');
+
+      if (participantsError) throw participantsError;
+
+      // Create chest number to participant mapping
+      const participantMap = new Map<string, any>();
+      allParticipants?.forEach(participant => {
+        participantMap.set(participant.chest_number, participant);
+      });
+
+      // Get existing event participants
+      const { data: existingEventParticipants, error: existingError } = await supabase
+        .from('event_participants')
+        .select('event_id, participant_id');
+
+      if (existingError) throw existingError;
+
+      // Create set of existing combinations
+      const existingCombinations = new Set<string>();
+      existingEventParticipants?.forEach(ep => {
+        existingCombinations.add(`${ep.event_id}-${ep.participant_id}`);
+      });
+
+      const results = {
+        success: 0,
+        skipped: 0,
+        errors: [] as Array<{ chest_number: string; error: string; }>
+      };
+
+      // Process each CSV row
+      for (let i = 0; i < csvData.length; i++) {
+        const { chest_number, age_category, events } = csvData[i];
+        
+        try {
+          // Validate participant exists
+          const participant = participantMap.get(chest_number);
+          if (!participant) {
+            results.errors.push({
+              chest_number,
+              error: 'Participant not found'
+            });
+            continue;
+          }
+
+          // Validate CSV age category matches participant age category
+          if (participant.age_category !== age_category) {
+            results.errors.push({
+              chest_number,
+              error: `Age category mismatch. CSV: ${age_category}, Participant: ${participant.age_category}`
+            });
+            continue;
+          }
+
+          // Process each event for this participant
+          for (const eventName of events) {
+            const eventKey = `${eventName.toLowerCase()}-${age_category}`;
+            const event = eventMap.get(eventKey);
+            if (!event) {
+              results.errors.push({
+                chest_number,
+                error: `Event not found: ${eventName} (${age_category})`
+              });
+              continue;
+            }
+
+            // Check if already registered
+            const combinationKey = `${event.id}-${participant.id}`;
+            if (existingCombinations.has(combinationKey)) {
+              results.skipped++;
+              continue;
+            }
+
+            // Add participant to event
+            const { error: insertError } = await supabase
+              .from('event_participants')
+              .insert({
+                event_id: event.id,
+                participant_id: participant.id
+              });
+
+            if (insertError) {
+              results.errors.push({
+                chest_number,
+                error: `Failed to add to ${eventName}: ${insertError.message}`
+              });
+            } else {
+              results.success++;
+              existingCombinations.add(combinationKey); // Add to prevent duplicates in same batch
+            }
+          }
+        } catch (error: any) {
+          results.errors.push({
+            chest_number,
+            error: error.message || 'Unknown error'
+          });
+        }
+
+        // Update progress
+        setImportProgress(Math.round(((i + 1) / csvData.length) * 100));
+      }
+
+      setImportResults(results);
+      
+      if (results.success > 0) {
+        message.success(`Successfully added ${results.success} participant(s) to events`);
+      }
+      if (results.skipped > 0) {
+        message.info(`${results.skipped} participant(s) were already registered`);
+      }
+      if (results.errors.length > 0) {
+        message.error(`${results.errors.length} error(s) occurred during import`);
+      }
+
+    } catch (error: any) {
+      message.error(error.message || 'Failed to import CSV');
+    } finally {
+      setBulkImportLoading(false);
+    }
+  };
+
+  const closeBulkImportModal = () => {
+    setIsBulkImportModalOpen(false);
+    setImportResults(null);
+    setImportProgress(0);
   };
 
   const rowSelection = {
@@ -429,6 +685,14 @@ const EventManagement = () => {
               disabled={isInactive}
               style={{ opacity: isInactive ? 0.6 : 1 }}
             />
+            <Button 
+              type="text" 
+              icon={<Copy size={16} />} 
+              onClick={() => openModal(record, true)}
+              title="Duplicate Event"
+              disabled={isInactive}
+              style={{ opacity: isInactive ? 0.6 : 1 }}
+            />
             <Popconfirm
               title="Delete Event"
               description="Are you sure you want to delete this event? This action cannot be undone."
@@ -459,14 +723,23 @@ const EventManagement = () => {
           <div style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <Title level={2} style={{ margin: 0 }}>Event Management</Title>
-              <Button 
-                type="primary" 
-                icon={<Plus size={16} />} 
-                onClick={() => openModal()}
-                className="md:inline-flex hidden:flex"
-              >
-                <span className="hidden md:inline">Add Event</span>
-              </Button>
+              <Space>
+                <Button 
+                  icon={<UploadIcon size={16} />} 
+                  onClick={() => setIsBulkImportModalOpen(true)}
+                  className="md:inline-flex hidden:flex"
+                >
+                  <span className="hidden md:inline">Bulk Import Participants</span>
+                </Button>
+                <Button 
+                  type="primary" 
+                  icon={<Plus size={16} />} 
+                  onClick={() => openModal()}
+                  className="md:inline-flex hidden:flex"
+                >
+                  <span className="hidden md:inline">Add Event</span>
+                </Button>
+              </Space>
               {selectedRowKeys.length > 0 && (
                 <Popconfirm
                   title={`Delete ${selectedRowKeys.length} event(s)?`}
@@ -512,6 +785,12 @@ const EventManagement = () => {
                     onClick={() => openModal(record)}
                     title="Edit Event"
                   />
+                  <Button 
+                    size="small" 
+                    icon={<Copy size={14} />} 
+                    onClick={() => openModal(record, true)}
+                    title="Duplicate Event"
+                  />
                   <Popconfirm
                     title="Delete Event"
                     description="Are you sure you want to delete this event?"
@@ -530,7 +809,7 @@ const EventManagement = () => {
 
       {/* Event Modal */}
       <Modal
-        title={editingEvent ? 'Edit Event' : 'Create New Event'}
+        title={editingEvent ? 'Edit Event' : duplicatingEvent ? 'Duplicate Event' : 'Create New Event'}
         open={isModalOpen}
         onCancel={closeModal}
         footer={null}
@@ -568,7 +847,7 @@ const EventManagement = () => {
               name="event_type"
               rules={[{ required: true, message: 'Event category is required' }]}
             >
-              <Select>
+              <Select onChange={handleEventTypeChange}>
                 <Select.Option value="individual">Individual Event</Select.Option>
                 <Select.Option value="group">Group Event</Select.Option>
               </Select>
@@ -595,9 +874,17 @@ const EventManagement = () => {
             <Form.Item
               label="Age Category"
               name="age_category"
-              rules={[{ required: true, message: 'Age category is required' }]}
+              rules={[
+                { 
+                  required: eventType === 'individual', 
+                  message: 'Age category is required for individual events' 
+                }
+              ]}
             >
-              <Select placeholder="Select age category">
+              <Select 
+                placeholder={eventType === 'group' ? 'Optional' : 'Select age category'}
+                allowClear
+              >
                 <Select.Option value="Sub Juniors">Sub Juniors</Select.Option>
                 <Select.Option value="Juniors">Juniors</Select.Option>
                 <Select.Option value="Intermediates">Intermediates</Select.Option>
@@ -728,10 +1015,113 @@ const EventManagement = () => {
               Cancel
             </Button>
             <Button type="primary" htmlType="submit" loading={submitting}>
-              {editingEvent ? 'Update Event' : 'Create Event'}
+              {editingEvent ? 'Update Event' : duplicatingEvent ? 'Create Duplicate Event' : 'Create Event'}
             </Button>
           </div>
         </Form>
+      </Modal>
+
+      {/* Bulk Import Modal */}
+      <Modal
+        title="Bulk Import Participants to Events"
+        open={isBulkImportModalOpen}
+        onCancel={closeBulkImportModal}
+        footer={null}
+        width={600}
+        destroyOnClose
+      >
+        <div style={{ marginTop: '16px' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <Text strong>CSV Format Requirements:</Text>
+            <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
+              <li>First column: <Text code>chest_number</Text></li>
+              <li>Second column: <Text code>age_category</Text> (Sub Juniors, Juniors, Intermediates, Seniors)</li>
+              <li>Third column: <Text code>events</Text> (comma-separated event names)</li>
+              <li>Example: <Text code>201,Juniors,"Solo Song Female, Bible Quiz"</Text></li>
+            </ul>
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <Text strong>Important Notes:</Text>
+            <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
+              <li>Age category in CSV must match the participant's age category in the database</li>
+              <li>Events are matched by name + age category combination</li>
+              <li>Same event name can exist for different age categories (e.g., "Solo Song Female" for Juniors, Intermediates, Seniors)</li>
+            </ul>
+          </div>
+
+          {!importResults && (
+            <Upload.Dragger
+              accept=".csv"
+              beforeUpload={(file) => {
+                handleBulkImport(file);
+                return false; // Prevent default upload
+              }}
+              disabled={bulkImportLoading}
+              style={{ marginBottom: '16px' }}
+            >
+              <p className="ant-upload-drag-icon">
+                <UploadIcon size={48} />
+              </p>
+              <p className="ant-upload-text">
+                Click or drag CSV file to this area to upload
+              </p>
+              <p className="ant-upload-hint">
+                Only CSV files are supported
+              </p>
+            </Upload.Dragger>
+          )}
+
+          {bulkImportLoading && (
+            <div style={{ marginBottom: '16px' }}>
+              <Text>Processing CSV file...</Text>
+              <Progress percent={importProgress} style={{ marginTop: '8px' }} />
+            </div>
+          )}
+
+          {importResults && (
+            <div>
+              <Text strong>Import Results:</Text>
+              <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '6px' }}>
+                <div style={{ marginBottom: '8px' }}>
+                  <Text style={{ color: '#52c41a' }}>✓ Successfully added: {importResults.success}</Text>
+                </div>
+                <div style={{ marginBottom: '8px' }}>
+                  <Text style={{ color: '#faad14' }}>⚠ Already registered: {importResults.skipped}</Text>
+                </div>
+                <div>
+                  <Text style={{ color: '#ff4d4f' }}>✗ Errors: {importResults.errors.length}</Text>
+                </div>
+              </div>
+
+              {importResults.errors.length > 0 && (
+                <div style={{ marginTop: '16px' }}>
+                  <Text strong>Error Details:</Text>
+                  <div style={{ 
+                    marginTop: '8px', 
+                    maxHeight: '200px', 
+                    overflowY: 'auto', 
+                    border: '1px solid #d9d9d9', 
+                    borderRadius: '6px',
+                    padding: '8px'
+                  }}>
+                    {importResults.errors.map((error, index) => (
+                      <div key={index} style={{ marginBottom: '4px', fontSize: '12px' }}>
+                        <Text code>{error.chest_number}</Text>: {error.error}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginTop: '16px', textAlign: 'right' }}>
+                <Button onClick={closeBulkImportModal}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       </Modal>
     </Layout>
   );

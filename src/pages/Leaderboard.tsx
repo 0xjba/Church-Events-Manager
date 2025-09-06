@@ -245,7 +245,7 @@ const Leaderboard = () => {
     },
     {
       title: 'Category',
-      dataIndex: ['participant', 'category'],
+      dataIndex: ['participant', 'age_category'],
       key: 'category',
       render: (category: string) => <span style={{ textTransform: 'capitalize' }}>{category}</span>,
     },
