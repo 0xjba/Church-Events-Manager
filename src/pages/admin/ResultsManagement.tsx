@@ -17,6 +17,7 @@ interface Event {
   status: string;
   results_published: boolean;
   event_order: number | null;
+  age_category: string | null;
 }
 
 const ResultsManagement = () => {
@@ -471,7 +472,7 @@ const ResultsManagement = () => {
 
   const columns = [
     { title: 'Event', dataIndex: 'name', key: 'name' },
-    { title: 'Type', dataIndex: 'type', key: 'type' },
+    { title: 'Age Category', dataIndex: 'age_category', key: 'age_category', render: (age_category: string | null) => age_category || 'All Categories' },
     { title: 'Status', dataIndex: 'status', key: 'status', render: (status: string) => <Badge color="blue" text={status} /> },
     { title: 'Results', dataIndex: 'results_published', key: 'results_published', render: (published: boolean) => <Badge color={published ? 'green' : 'orange'} text={published ? 'Published' : 'Draft'} /> },
     { 
