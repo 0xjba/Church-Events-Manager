@@ -1,13 +1,9 @@
-const CACHE_NAME = 'devotional-events-v1';
+const CACHE_NAME = 'devotional-events-v2';
 const urlsToCache = [
   '/',
-  '/auth',
-  '/judge',
-  '/participant',
-  '/leaderboard',
-  '/static/js/bundle.js',
-  '/static/css/main.css',
-  '/manifest.json'
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png'
 ];
 
 // Install event - cache resources
@@ -49,17 +45,33 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Skip requests for non-existent assets that might cause issues
+  if (event.request.url.includes('/static/')) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
         // Return cached version or fetch from network
-        return response || fetch(event.request);
-      })
-      .catch(() => {
-        // Return offline fallback for navigation requests
-        if (event.request.mode === 'navigate') {
-          return caches.match('/');
-        }
+        return response || fetch(event.request)
+          .then((fetchResponse) => {
+            // Only cache successful responses and avoid caching HTML error pages
+            if (fetchResponse.status === 200 && !fetchResponse.headers.get('content-type')?.includes('text/html')) {
+              const responseClone = fetchResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, responseClone);
+              });
+            }
+            return fetchResponse;
+          })
+          .catch(() => {
+            // Return offline fallback for navigation requests
+            if (event.request.mode === 'navigate') {
+              return caches.match('/');
+            }
+            throw new Error('Network request failed');
+          });
       })
   );
 });
