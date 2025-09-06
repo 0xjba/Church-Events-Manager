@@ -155,6 +155,7 @@ interface Event {
   event_type: string;
   time_limit: number | null;
   status: string;
+  age_category: string | null;
 }
 
 interface Participant {
@@ -782,6 +783,9 @@ const JudgeScoringInterface = () => {
               }}>
                 {event.name}
               </Title>
+              <Text type="secondary" style={{ fontSize: '16px', marginTop: '4px', display: 'block', fontWeight: 500 }}>
+                {event.age_category || 'All Categories'}
+              </Text>
               <Text type="secondary" style={{ fontSize: '14px', marginTop: '4px', display: 'block' }}>
                 {event?.event_type === 'individual' 
                   ? `${participants.filter(p => isParticipantScored(p.id)).length} of ${participants.length} participants completed`

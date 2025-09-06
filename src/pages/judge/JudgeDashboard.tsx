@@ -20,6 +20,7 @@ interface AssignedEvent {
   my_scores_count: number;
   total_criteria: number;
   level_id: string;
+  age_category: string | null;
   event_levels?: {
     id: string;
     name: string;
@@ -97,6 +98,7 @@ const JudgeDashboard = () => {
             time_limit,
             event_order,
             level_id,
+            age_category,
             event_levels (
               id,
               name,
@@ -306,7 +308,7 @@ const JudgeDashboard = () => {
                           <Title level={5} style={{ margin: 0, marginBottom: '4px' }}>{event.name}</Title>
                           <Space size={16} wrap>
                             <Text type="secondary" style={{ textTransform: 'capitalize' }}>
-                              {event.type} Performance
+                              {event.age_category || 'All Categories'}
                             </Text>
                             <Space size={4}>
                               <Users size={12} />
