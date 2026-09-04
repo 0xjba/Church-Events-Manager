@@ -331,6 +331,34 @@ const ResultsManagement = () => {
     }
   };
 
+  // Custom ordering function for events in winners modal
+  const getEventOrder = (ageCategory: string | null, eventName: string): number => {
+    const ageOrder = {
+      'Sub Juniors': 1,
+      'Juniors': 2,
+      'Intermediates': 3,
+      'Seniors': 4
+    };
+
+    const eventOrder = {
+      'Solo Song': 1,
+      'Action Song': 2,
+      'Story Telling': 3,
+      'Solo Song Male': 1,
+      'Solo Song Female': 2,
+      'Speech': 3,
+      'Essay': 4,
+      'Story': 5,
+      'Verses': 6,
+      'Bible Quiz': 7
+    };
+
+    const agePriority = ageOrder[ageCategory as keyof typeof ageOrder] || 999;
+    const eventPriority = eventOrder[eventName as keyof typeof eventOrder] || 999;
+
+    return agePriority * 1000 + eventPriority;
+  };
+
   const fetchWinners = async () => {
     try {
       setExportingWinners(true);
@@ -352,13 +380,18 @@ const ResultsManagement = () => {
         return;
       }
 
+      // Sort events according to the specified order
+      const sortedEvents = completedEvents.sort((a, b) => {
+        return getEventOrder(a.age_category, a.name) - getEventOrder(b.age_category, b.name);
+      });
+
       // Fetch winners (top 3) for each event
       const winnersData: WinnersExportData = {
         events: [],
         generated_at: new Date().toISOString()
       };
 
-      for (const event of completedEvents) {
+      for (const event of sortedEvents) {
         // Get top 3 results for this event
         const { data: eventResults, error: resultsError } = await supabase
           .from('results')
@@ -456,18 +489,21 @@ const ResultsManagement = () => {
       });
     });
 
-    // Find participant with highest points
-    let champion = null;
-    let maxPoints = 0;
+    // Find participants with highest points (handle ties)
+    const participants = Object.values(participantPoints);
+    if (participants.length === 0) {
+      return null;
+    }
 
-    Object.values(participantPoints).forEach((participant: any) => {
-      if (participant.totalPoints > maxPoints) {
-        maxPoints = participant.totalPoints;
-        champion = participant;
-      }
-    });
+    const maxPoints = Math.max(...participants.map((p: any) => p.totalPoints));
+    const champions = participants.filter((p: any) => p.totalPoints === maxPoints);
 
-    return champion;
+    return {
+      champions: champions,
+      maxPoints: maxPoints,
+      isTie: champions.length > 1,
+      totalParticipants: participants.length
+    };
   };
 
   const columns = [
@@ -743,7 +779,23 @@ const ResultsManagement = () => {
                   </Text>
                   {individualChampion && (
                     <div style={{ marginTop: '8px', fontSize: '14px', color: '#1890ff', fontWeight: 600 }}>
-                      Individual Champion: {individualChampion.participant.full_name} (#{individualChampion.participant.chest_number}) - {individualChampion.participant.church} - {individualChampion.totalPoints} Points
+                      {individualChampion.isTie ? (
+                        <div>
+                          <div>Individual Champions (Tie): {individualChampion.champions.length} participants tied with {individualChampion.maxPoints} Points</div>
+                          <div style={{ fontSize: '12px', marginTop: '4px', color: '#64748b' }}>
+                            {individualChampion.champions.map((champion: any, index: number) => (
+                              <span key={champion.participant.full_name}>
+                                {champion.participant.full_name} (#{champion.participant.chest_number}) - {champion.participant.church}
+                                {index < individualChampion.champions.length - 1 ? ', ' : ''}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          Individual Champion: {individualChampion.champions[0].participant.full_name} (#{individualChampion.champions[0].participant.chest_number}) - {individualChampion.champions[0].participant.church} - {individualChampion.maxPoints} Points
+                        </div>
+                      )}
                     </div>
                   )}
                   <div style={{ marginTop: '8px', fontSize: '14px', color: '#64748b' }}>
@@ -752,7 +804,29 @@ const ResultsManagement = () => {
                 </div>
 
                 <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-                  {winnersData.events.map((event, eventIndex) => (
+                  {winnersData.events.map((event, eventIndex) => {
+                    // Check if this is the first event of a new age category
+                    const isFirstOfCategory = eventIndex === 0 || 
+                      winnersData.events[eventIndex - 1].age_category !== event.age_category;
+                    
+                    return (
+                      <div key={event.event_id}>
+                        {/* Age Category Header */}
+                        {isFirstOfCategory && (
+                          <div style={{
+                            marginTop: eventIndex > 0 ? '32px' : '0',
+                            marginBottom: '16px',
+                            padding: '12px 16px',
+                            backgroundColor: '#1e293b',
+                            color: 'white',
+                            borderRadius: '8px',
+                            textAlign: 'center'
+                          }}>
+                            <Text strong style={{ fontSize: '18px', color: 'white' }}>
+                              {event.age_category || 'All Categories'} Age Category
+                            </Text>
+                          </div>
+                        )}
                     <div
                       key={event.event_id}
                       style={{
@@ -872,7 +946,9 @@ const ResultsManagement = () => {
                         </table>
                       </div>
                     </div>
-                  ))}
+                      </div>
+                    );
+                  })}
 
                   {/* Individual Champion Table */}
                   {individualChampion && (
@@ -897,7 +973,7 @@ const ResultsManagement = () => {
                               Individual Championship
                             </Text>
                             <div style={{ fontSize: '14px', color: '#64748b', marginTop: '4px' }}>
-                              Overall Champion • 1 Winner
+                              {individualChampion.isTie ? `Overall Champions (Tie) • ${individualChampion.champions.length} Winners` : 'Overall Champion • 1 Winner'}
                             </div>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -936,43 +1012,45 @@ const ResultsManagement = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            <tr style={{ backgroundColor: '#fefce8' }}>
-                              <td style={{ padding: '12px', textAlign: 'center' }}>
-                                <div style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  width: '32px',
-                                  height: '32px',
-                                  borderRadius: '50%',
-                                  backgroundColor: '#fbbf24',
-                                  color: '#1f2937',
-                                  fontSize: '14px',
-                                  fontWeight: 'bold'
-                                }}>
-                                  1
-                                </div>
-                              </td>
-                              <td style={{ padding: '12px' }}>
-                                <div>
-                                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#1f2937' }}>
-                                    {individualChampion.participant.full_name}
+                            {individualChampion.champions.map((champion: any, index: number) => (
+                              <tr key={champion.participant.full_name} style={{ backgroundColor: '#fefce8' }}>
+                                <td style={{ padding: '12px', textAlign: 'center' }}>
+                                  <div style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#fbbf24',
+                                    color: '#1f2937',
+                                    fontSize: '14px',
+                                    fontWeight: 'bold'
+                                  }}>
+                                    1
                                   </div>
-                                </div>
-                              </td>
-                              <td style={{ padding: '12px', fontSize: '14px', color: '#6b7280' }}>
-                                #{individualChampion.participant.chest_number}
-                              </td>
-                              <td style={{ padding: '12px', fontSize: '14px', color: '#374151' }}>
-                                {individualChampion.participant.church}
-                              </td>
-                              <td style={{ padding: '12px', fontSize: '14px', color: '#374151' }}>
-                                {individualChampion.participant.district}
-                              </td>
-                              <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: 600, color: '#1890ff' }}>
-                                {showScoresForEvent['champion'] ? individualChampion.totalPoints : '***'}
-                              </td>
-                            </tr>
+                                </td>
+                                <td style={{ padding: '12px' }}>
+                                  <div>
+                                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#1f2937' }}>
+                                      {champion.participant.full_name}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td style={{ padding: '12px', fontSize: '14px', color: '#6b7280' }}>
+                                  #{champion.participant.chest_number}
+                                </td>
+                                <td style={{ padding: '12px', fontSize: '14px', color: '#374151' }}>
+                                  {champion.participant.church}
+                                </td>
+                                <td style={{ padding: '12px', fontSize: '14px', color: '#374151' }}>
+                                  {champion.participant.district}
+                                </td>
+                                <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: 600, color: '#1890ff' }}>
+                                  {showScoresForEvent['champion'] ? champion.totalPoints : '***'}
+                                </td>
+                              </tr>
+                            ))}
                           </tbody>
                         </table>
                       </div>
