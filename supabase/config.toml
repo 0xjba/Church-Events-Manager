@@ -9,3 +9,8 @@ max_rows = 1000
 
 [functions.participant-auth]
 verify_jwt = false
+
+# The judge token is issued and verified by the function itself, so the
+# platform gateway must not reject it for not being a Supabase JWT.
+[functions.scores]
+verify_jwt = false

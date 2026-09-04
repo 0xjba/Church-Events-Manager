@@ -351,7 +351,6 @@ export type Database = {
           is_active: boolean | null
           last_login: string | null
           login_count: number | null
-          password_hash: string | null
           updated_at: string
           username: string | null
         }
@@ -366,7 +365,6 @@ export type Database = {
           is_active?: boolean | null
           last_login?: string | null
           login_count?: number | null
-          password_hash?: string | null
           updated_at?: string
           username?: string | null
         }
@@ -381,7 +379,6 @@ export type Database = {
           is_active?: boolean | null
           last_login?: string | null
           login_count?: number | null
-          password_hash?: string | null
           updated_at?: string
           username?: string | null
         }
@@ -400,7 +397,6 @@ export type Database = {
           is_active: boolean | null
           last_login: string | null
           login_count: number | null
-          password_hash: string | null
           updated_at: string
           username: string | null
         }
@@ -416,7 +412,6 @@ export type Database = {
           is_active?: boolean | null
           last_login?: string | null
           login_count?: number | null
-          password_hash?: string | null
           updated_at?: string
           username?: string | null
         }
@@ -432,7 +427,6 @@ export type Database = {
           is_active?: boolean | null
           last_login?: string | null
           login_count?: number | null
-          password_hash?: string | null
           updated_at?: string
           username?: string | null
         }

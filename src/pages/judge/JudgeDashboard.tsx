@@ -110,6 +110,16 @@ const JudgeDashboard = () => {
 
       if (eventsError) throw eventsError;
 
+      // Score counts come from the edge function: the scores table is closed to
+      // clients, and the judge is identified by their token rather than by an
+      // id sent from the browser.
+      const token = localStorage.getItem('participant_token');
+      const { data: summary } = await supabase.functions.invoke('scores/summary', {
+        body: {},
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const scoreCounts: Record<string, number> = summary?.counts ?? {};
+
       // For each event, get participant count, criteria count, and judge's scoring progress
       const enrichedEvents = await Promise.all(
         eventsData.map(async (eventJudge: any) => {
@@ -127,17 +137,12 @@ const JudgeDashboard = () => {
             .select('*', { count: 'exact', head: true })
             .eq('event_id', event.id);
 
-          // Get judge's scores count
-          const { count: scoresCount } = await supabase
-            .from('scores')
-            .select('*', { count: 'exact', head: true })
-            .eq('event_id', event.id)
-            .eq('judge_id', participant.id);
+          const scoresCount = scoreCounts[event.id] ?? 0;
 
           return {
             ...event,
             participants_count: participantCount || 0,
-            my_scores_count: scoresCount || 0,
+            my_scores_count: scoresCount,
             total_criteria: criteriaCount || 0,
           };
         })

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { setPassword } from '@/utils/credentials';
 import Navigation from '@/components/Navigation';
 import ResponsiveTable from '@/components/ResponsiveTable';
 import { Layout, Card, Button, Input, Form, Modal, message, Spin, Space, Typography } from 'antd';
@@ -51,16 +52,6 @@ const JudgeManagement = () => {
     }
   };
 
-  const hashPassword = async (password: string) => {
-    const encoder = new TextEncoder();
-    const salt = 'pypa-salt'; // Use same salt as edge function
-    const passwordData = encoder.encode(password + salt);
-    const hash = await crypto.subtle.digest('SHA-256', passwordData);
-    return Array.from(new Uint8Array(hash))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-  };
-
   const onSubmit = async (values: any) => {
     try {
       setSubmitting(true);
@@ -75,21 +66,22 @@ const JudgeManagement = () => {
           contact: values.contact || null,
         };
 
-        // Only update password if provided
-        if (values.password) {
-          updateData.password_hash = await hashPassword(values.password);
-        }
-
         const { error } = await supabase
           .from('judges')
           .update(updateData)
           .eq('id', editingJudge.id);
 
         if (error) throw error;
+
+        // Hashing happens in the edge function, not here.
+        if (values.password) {
+          await setPassword('judge', editingJudge.id, values.password);
+        }
+
         message.success('Judge updated successfully');
       } else {
         // Create new judge record
-        const { error: judgeError } = await supabase
+        const { data: newJudge, error: judgeError } = await supabase
           .from('judges')
           .insert({
             full_name: values.full_name,
@@ -97,11 +89,21 @@ const JudgeManagement = () => {
             email: values.email,
             church: values.church,
             contact: values.contact || null,
-            password_hash: await hashPassword(values.password),
             is_active: true
-          });
+          })
+          .select()
+          .single();
 
         if (judgeError) throw judgeError;
+
+        try {
+          await setPassword('judge', newJudge.id, values.password);
+        } catch (credentialError) {
+          // Don't leave a judge behind that nobody can log in as.
+          await supabase.from('judges').delete().eq('id', newJudge.id);
+          throw credentialError;
+        }
+
         message.success('Judge added successfully');
       }
 
@@ -109,8 +111,8 @@ const JudgeManagement = () => {
       form.resetFields();
       setEditingJudge(null);
       fetchJudges();
-    } catch (error) {
-      message.error(editingJudge ? 'Failed to update judge' : 'Failed to add judge');
+    } catch (error: any) {
+      message.error(error?.message || (editingJudge ? 'Failed to update judge' : 'Failed to add judge'));
     } finally {
       setSubmitting(false);
     }
@@ -353,7 +355,11 @@ const JudgeManagement = () => {
               <Form.Item
                 label={editingJudge ? "Password (leave blank to keep current)" : "Password"}
                 name="password"
-                rules={editingJudge ? [] : [{ required: true, message: 'Password is required' }]}
+                rules={[{
+                  required: !editingJudge,
+                  message: 'Password must be at least 8 characters',
+                  min: 8,
+                }]}
               >
                 <Input.Password />
               </Form.Item>

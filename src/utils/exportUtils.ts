@@ -12,6 +12,15 @@ export interface ExportData {
   generated_at: string;
 }
 
+// Spreadsheets treat a leading =, +, - or @ as the start of a formula, so a
+// participant name like "=cmd|..." would execute on open. Prefixing with a
+// quote keeps the text intact and inert.
+function escapeCsvCell(value: unknown): string {
+  const text = String(value ?? '');
+  const escaped = text.replace(/"/g, '""');
+  return /^[=+\-@\t\r]/.test(escaped) ? `'${escaped}` : escaped;
+}
+
 export class ExportUtils {
   /**
    * Generates CSV data for event results
@@ -46,7 +55,7 @@ export class ExportUtils {
     ]);
 
     const csvContent = [headers, ...rows]
-      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .map(row => row.map(cell => `"${escapeCsvCell(cell)}"`).join(','))
       .join('\n');
 
     return csvContent;

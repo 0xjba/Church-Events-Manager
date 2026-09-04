@@ -247,20 +247,15 @@ const JudgeScoringInterface = () => {
       message.info('Offline - Scores will be cached until connection is restored');
     };
 
-    const updatePendingCount = () => {
-      setPendingScoresCount(scoreSubmissionService.getPendingCount());
-    };
-
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Check pending scores periodically
-    const interval = setInterval(updatePendingCount, 1000);
+    const unsubscribe = scoreSubmissionService.onPendingChange(setPendingScoresCount);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      clearInterval(interval);
+      unsubscribe();
     };
   }, []);
 
@@ -384,15 +379,18 @@ const JudgeScoringInterface = () => {
 
       // Fetch existing scores
       if (judgeId) {
-        const { data: existingScoresData, error: scoresError } = await supabase
-          .from('scores')
-          .select('*')
-          .eq('event_id', eventId)
-          .eq('judge_id', judgeId);
+        // The scores table is closed to clients; the edge function checks the
+        // judge's token and returns only that judge's rows.
+        const token = localStorage.getItem('participant_token');
+        const { data: mine, error: scoresError } = await supabase.functions.invoke('scores/mine', {
+          body: { event_id: eventId },
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
         if (scoresError) throw scoresError;
+        if (mine?.error) throw new Error(mine.error);
 
-        setExistingScores(existingScoresData || []);
+        setExistingScores(mine?.scores || []);
       }
     } catch (error: any) {
       message.error('Failed to load event data: ' + error.message);
@@ -529,6 +527,10 @@ const JudgeScoringInterface = () => {
   };
 
   const isParticipantScored = (participantId: string) => {
+    // An event with no criteria cannot have been scored; criteria.every()
+    // would otherwise return true for everyone and block all scoring.
+    if (criteria.length === 0) return false;
+
     // Check if participant has scores for ALL criteria in the database
     return criteria.every(c => {
       const existing = existingScores.find(s => 
@@ -540,6 +542,8 @@ const JudgeScoringInterface = () => {
   };
 
   const isGroupScored = (groupId: string) => {
+    if (criteria.length === 0) return false;
+
     // Check if group has scores for ALL criteria in the database
     return criteria.every(c => {
       const existing = existingScores.find(s => 
@@ -587,24 +591,22 @@ const JudgeScoringInterface = () => {
 
       // Get scores for this specific participant
       const participantScores = scores.filter(s => s.participant_id === participantId);
-      
-      if (participantScores.length === 0) {
-        message.error('No scores to submit for this participant');
+
+      // Every criterion has to be scored: a partial sheet would later be
+      // averaged against complete ones, and an untouched field is not a zero.
+      const missing = criteria.filter(c => !participantScores.some(s => s.criteria_id === c.id));
+      if (missing.length > 0) {
+        message.error(`Score every criterion before submitting. Missing: ${missing.map(c => c.name).join(', ')}`);
         return;
       }
 
-      // Submit scores using the network-aware service
-      for (const score of participantScores) {
-        await scoreSubmissionService.submitScore({
-          eventId,
-          participantId,
-          criteriaId: score.criteria_id,
-          judgeId,
-          score: score.score
-        });
-      }
-      
-      message.success(isOnline ? 'Scores submitted successfully!' : 'Scores cached offline - will submit when online');
+      const delivered = await scoreSubmissionService.submitScoresheet({
+        eventId,
+        participantId,
+        scores: participantScores.map(s => ({ criteria_id: s.criteria_id, score: s.score })),
+      });
+
+      message.success(delivered ? 'Scores submitted successfully!' : 'Scores saved on this device - will submit when online');
       
       // Clear local scores for this participant
       setScores(prev => prev.filter(s => s.participant_id !== participantId));
@@ -641,24 +643,20 @@ const JudgeScoringInterface = () => {
 
       // Get scores for this specific group
       const groupScores = scores.filter(s => s.group_id === groupId);
-      
-      if (groupScores.length === 0) {
-        message.error('No scores to submit for this group');
+
+      const missing = criteria.filter(c => !groupScores.some(s => s.criteria_id === c.id));
+      if (missing.length > 0) {
+        message.error(`Score every criterion before submitting. Missing: ${missing.map(c => c.name).join(', ')}`);
         return;
       }
 
-      // Submit scores using the network-aware service
-      for (const score of groupScores) {
-        await scoreSubmissionService.submitScore({
-          eventId,
-          groupId,
-          criteriaId: score.criteria_id,
-          judgeId,
-          score: score.score
-        });
-      }
-      
-      message.success(isOnline ? 'Group scores submitted successfully!' : 'Group scores cached offline - will submit when online');
+      const delivered = await scoreSubmissionService.submitScoresheet({
+        eventId,
+        groupId,
+        scores: groupScores.map(s => ({ criteria_id: s.criteria_id, score: s.score })),
+      });
+
+      message.success(delivered ? 'Group scores submitted successfully!' : 'Group scores saved on this device - will submit when online');
       
       // Clear local scores for this group
       setScores(prev => prev.filter(s => s.group_id !== groupId));

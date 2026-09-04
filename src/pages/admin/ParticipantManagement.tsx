@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { setPassword, setPasswords } from '@/utils/credentials';
 import Navigation from '@/components/Navigation';
 import ResponsiveTable from '@/components/ResponsiveTable';
 import { Layout, Card, Button, Input, Form, Modal, Select, message, Spin, Space, Typography, Checkbox } from 'antd';
@@ -147,17 +148,6 @@ const ParticipantManagement = () => {
         throw new Error('No active session found. Please log in again.');
       }
 
-      // Hash password using the same method as the edge function
-      const hashPassword = async (password: string) => {
-        const encoder = new TextEncoder();
-        const salt = 'pypa-salt';
-        const passwordData = encoder.encode(password + salt);
-        const hash = await crypto.subtle.digest('SHA-256', passwordData);
-        return Array.from(new Uint8Array(hash))
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join('');
-      };
-
       if (editingParticipant) {
         // Update existing participant
         const { error } = await supabase
@@ -169,8 +159,6 @@ const ParticipantManagement = () => {
             church: values.church,
             district: values.district,
             username: values.username,
-            // Only update password if provided
-            ...(values.password && { password_hash: await hashPassword(values.password) })
           })
           .eq('id', editingParticipant.id);
 
@@ -179,11 +167,14 @@ const ParticipantManagement = () => {
           throw new Error(error.message || 'Failed to update participant');
         }
 
+        // Hashing happens in the edge function, not here.
+        if (values.password) {
+          await setPassword('participant', editingParticipant.id, values.password);
+        }
+
         message.success('Participant updated successfully');
       } else {
         // Create new participant
-        const password_hash = await hashPassword(values.password);
-
         const { data: newParticipant, error } = await supabase
           .from('participants')
           .insert({
@@ -193,7 +184,6 @@ const ParticipantManagement = () => {
             church: values.church,
             district: values.district,
             username: values.username,
-            password_hash: password_hash,
             is_active: true,
             created_by: user.id
             // Note: profile_id column was removed from participants table
@@ -204,6 +194,14 @@ const ParticipantManagement = () => {
         if (error) {
           console.error('Database error:', error);
           throw new Error(error.message || 'Failed to create participant');
+        }
+
+        try {
+          await setPassword('participant', newParticipant.id, values.password);
+        } catch (credentialError) {
+          // Don't leave a participant behind that nobody can log in as.
+          await supabase.from('participants').delete().eq('id', newParticipant.id);
+          throw credentialError;
         }
 
         message.success('Participant created successfully with login credentials');
@@ -512,8 +510,8 @@ const ParticipantManagement = () => {
       if (row.username && row.username.length < 3) {
         errors.push(`Row ${rowNum}: Username must be at least 3 characters`);
       }
-      if (row.password && row.password.length < 4) {
-        errors.push(`Row ${rowNum}: Password must be at least 4 characters`);
+      if (row.password && row.password.length < 8) {
+        errors.push(`Row ${rowNum}: Password must be at least 8 characters`);
       }
       if (row.age_category && !validAgeCategories.includes(row.age_category)) {
         errors.push(`Row ${rowNum}: Invalid age_category. Must be one of: ${validAgeCategories.join(', ')}`);
@@ -676,35 +674,18 @@ const ParticipantManagement = () => {
         throw new Error('No active session found. Please log in again.');
       }
 
-      // Hash password using the same method as the edge function
-      const hashPassword = async (password: string) => {
-        const encoder = new TextEncoder();
-        const salt = 'pypa-salt';
-        const passwordData = encoder.encode(password + salt);
-        const hash = await crypto.subtle.digest('SHA-256', passwordData);
-        return Array.from(new Uint8Array(hash))
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join('');
-      };
-
       // Prepare data for import
       const dataToImport = resolvedData.length > 0 ? resolvedData : parsedData;
-      const participantsToInsert = [];
-      
-      for (const row of dataToImport) {
-        const password_hash = await hashPassword(row.password);
-        participantsToInsert.push({
-          full_name: row.full_name,
-          age_category: row.age_category,
-          chest_number: row.chest_number,
-          church: row.church,
-          district: row.district,
-          username: row.username,
-          password_hash: password_hash,
-          is_active: true,
-          created_by: user.id
-        });
-      }
+      const participantsToInsert = dataToImport.map(row => ({
+        full_name: row.full_name,
+        age_category: row.age_category,
+        chest_number: row.chest_number,
+        church: row.church,
+        district: row.district,
+        username: row.username,
+        is_active: true,
+        created_by: user.id
+      }));
 
       // Insert all participants in a single transaction
       const { data: newParticipants, error } = await supabase
@@ -715,6 +696,22 @@ const ParticipantManagement = () => {
       if (error) {
         console.error('Database error:', error);
         throw new Error(error.message || 'Failed to import participants');
+      }
+
+      // Passwords are hashed server side, keyed by the row that was just created.
+      try {
+        const credentials = newParticipants.map(created => {
+          const row = dataToImport.find(r => r.username === created.username);
+          if (!row) throw new Error(`Could not match a password to ${created.username}`);
+          return { user_type: 'participant' as const, user_id: created.id, password: row.password };
+        });
+        await setPasswords(credentials);
+      } catch (credentialError) {
+        await supabase
+          .from('participants')
+          .delete()
+          .in('id', newParticipants.map(p => p.id));
+        throw credentialError;
       }
 
       message.success(`Successfully imported ${newParticipants.length} participants`);
@@ -1047,8 +1044,8 @@ const ParticipantManagement = () => {
                 rules={[
                   { 
                     required: !editingParticipant, 
-                    message: 'Password must be at least 4 characters', 
-                    min: 4 
+                    message: 'Password must be at least 8 characters', 
+                    min: 8 
                   }
                 ]}
               >

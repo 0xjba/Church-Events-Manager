@@ -76,9 +76,6 @@ export const ParticipantAuthProvider = ({ children }: { children: React.ReactNod
 
   const signIn = async (username: string, password: string) => {
     try {
-      const startTime = Date.now();
-      console.log(`[PERF] Frontend login started for: ${username}`);
-      
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
       
@@ -88,8 +85,6 @@ export const ParticipantAuthProvider = ({ children }: { children: React.ReactNod
       });
 
       clearTimeout(timeoutId);
-      const endTime = Date.now();
-      console.log(`[PERF] Frontend total login time: ${endTime - startTime}ms`);
 
       if (error || data?.error) {
         return { error: data?.error || error };

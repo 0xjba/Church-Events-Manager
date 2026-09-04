@@ -1,4 +1,5 @@
-import { ConfigProvider, App as AntApp } from 'antd';
+import { lazy, Suspense } from 'react';
+import { ConfigProvider, App as AntApp, Spin } from 'antd';
 import { message } from 'antd';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
@@ -9,21 +10,30 @@ import ParticipantProtectedRoute from "@/components/ParticipantProtectedRoute";
 import JudgeProtectedRoute from "@/components/JudgeProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import ParticipantManagement from "./pages/admin/ParticipantManagement";
-import ParticipantDetails from "./pages/admin/ParticipantDetails";
-import JudgeManagement from "./pages/admin/JudgeManagement";
-import EventManagement from "./pages/admin/EventManagement";
-import EventDetails from "./pages/admin/EventDetails";
-import EventLevelManagement from "./pages/admin/EventLevelManagement";
 
-import RealtimeScoreboard from "./pages/admin/RealtimeScoreboard";
-import ResultsManagement from "./pages/admin/ResultsManagement";
-import JudgeScoringInterface from "./pages/judge/JudgeScoringInterface";
-import ParticipantDashboard from "./pages/participant/ParticipantDashboard";
-import JudgeDashboard from "./pages/judge/JudgeDashboard";
-import Leaderboard from "./pages/Leaderboard";
 import NotFound from "./pages/NotFound";
+
+// Route level code splitting: the admin screens are the biggest part of the
+// bundle and a public visitor never opens them.
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const ParticipantManagement = lazy(() => import("./pages/admin/ParticipantManagement"));
+const ParticipantDetails = lazy(() => import("./pages/admin/ParticipantDetails"));
+const JudgeManagement = lazy(() => import("./pages/admin/JudgeManagement"));
+const EventManagement = lazy(() => import("./pages/admin/EventManagement"));
+const EventDetails = lazy(() => import("./pages/admin/EventDetails"));
+const EventLevelManagement = lazy(() => import("./pages/admin/EventLevelManagement"));
+const RealtimeScoreboard = lazy(() => import("./pages/admin/RealtimeScoreboard"));
+const ResultsManagement = lazy(() => import("./pages/admin/ResultsManagement"));
+const JudgeScoringInterface = lazy(() => import("./pages/judge/JudgeScoringInterface"));
+const ParticipantDashboard = lazy(() => import("./pages/participant/ParticipantDashboard"));
+const JudgeDashboard = lazy(() => import("./pages/judge/JudgeDashboard"));
+const Leaderboard = lazy(() => import("./pages/Leaderboard"));
+
+const PageFallback = () => (
+  <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <Spin size="large" />
+  </div>
+);
 
 const queryClient = new QueryClient();
 
@@ -41,6 +51,7 @@ const App = () => (
           >
             <AntApp>
               <BrowserRouter>
+          <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
@@ -124,6 +135,7 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
               </BrowserRouter>
             </AntApp>
           </ConfigProvider>

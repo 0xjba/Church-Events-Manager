@@ -53,6 +53,39 @@ This application uses environment variables for sensitive configuration. Ensure:
 3. **Use environment variables** in production deployments
 4. **Keep secrets secure** and local only
 
+### Auth model
+
+Admins sign in through Supabase Auth. Judges and participants use a separate
+username/password login handled by the `participant-auth` edge function, which
+issues a token Postgres cannot verify. Anything those users read or write that
+is not public therefore goes through an edge function running with the service
+role, never straight from the browser:
+
+| Table | Browser access |
+| --- | --- |
+| `user_credentials` | none, service role only |
+| `scores` | admins via their session; everyone else read-only once results are published |
+| `participants`, `judges`, `events` | readable; writable by admins only |
+
+Passwords are hashed with PBKDF2-SHA256 (210k iterations, per-user salt) inside
+the edge function. Hashes created by the old scheme still work at login and are
+upgraded in place the first time the account signs in.
+
+### Applying the security migration
+
+```bash
+supabase db push
+supabase functions deploy participant-auth
+supabase functions deploy scores
+supabase secrets set JWT_SECRET=... ALLOWED_ORIGINS=https://your-site LEGACY_PASSWORD_SALT=pypa-salt
+```
+
+The migration moves password hashes into `user_credentials` and drops the
+`password_hash` columns, so deploy the functions in the same window as the
+migration. Because the old hashes were readable by anyone holding the public
+anon key, treat every existing password as compromised and reset them from the
+admin screens afterwards.
+
 ## 🚀 Deployment
 
 ### Netlify

@@ -1,448 +1,239 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0';
-import { create, verify } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
-// import { hash, compare } from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+import { corsHeaders, json } from '../_shared/cors.ts';
+import { generatePassword, hashPassword, verifyPassword } from '../_shared/password.ts';
+import { authenticateCustomUser, bearer, issueToken, requireAdmin, writeAuditLog } from '../_shared/auth.ts';
+import { clientKey, rateLimit } from '../_shared/rateLimit.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-// Initialize Supabase client
+// Service role client: the credentials table is unreachable for anon and
+// authenticated, so every credential read and write happens here.
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL') ?? '',
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
 );
 
-// Hash password using crypto API (Edge Function compatible)
-async function hashPassword(password: string, salt?: string): Promise<string> {
-  const saltToUse = salt || Deno.env.get('PASSWORD_SALT') || 'pypa-salt';
-  const encoder = new TextEncoder();
-  const passwordData = encoder.encode(password + saltToUse);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', passwordData);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-// Compare passwords (Edge Function compatible)
-async function comparePassword(password: string, hash: string, salt?: string): Promise<boolean> {
-  const hashedInput = await hashPassword(password, salt);
-  return hashedInput === hash;
-}
-
-// JWT secret for participant tokens
-const JWT_SECRET = await crypto.subtle.importKey(
-  'raw',
-  new TextEncoder().encode(Deno.env.get('JWT_SECRET')),
-  { name: 'HMAC', hash: 'SHA-256' },
-  false,
-  ['sign', 'verify']
-);
-
-if (!Deno.env.get('JWT_SECRET')) {
-  throw new Error('JWT_SECRET environment variable is required');
-}
+const INVALID_CREDENTIALS = 'Invalid credentials';
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders(req) });
   }
 
   try {
-    const url = new URL(req.url);
-    const action = url.pathname.split('/').pop();
-    
-    console.log(`Participant auth action: ${action}`);
+    const action = new URL(req.url).pathname.split('/').pop();
 
     switch (action) {
       case 'login':
         return await handleLogin(req);
       case 'verify':
         return await handleVerify(req);
-      case 'create':
-        return await handleCreate(req);
+      case 'set-password':
+        return await handleSetPassword(req);
       case 'reset':
         return await handleReset(req);
       default:
-        return new Response(
-          JSON.stringify({ error: 'Invalid action' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return json(req, { error: 'Invalid action' }, 400);
     }
   } catch (error) {
-    console.error('Error in participant-auth function:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    // Never echo the internal error back to the client.
+    console.error('participant-auth failure:', error);
+    return json(req, { error: 'Something went wrong' }, 500);
   }
 });
 
-// Handle participant login
-async function handleLogin(req: Request) {
-  const startTime = Date.now();
-  console.log(`[PERF] Login started for user: ${req.body ? 'parsed' : 'parsing...'}`);
-  
-  const { username, password } = await req.json();
-  const parseTime = Date.now();
-  console.log(`[PERF] Request parsed in ${parseTime - startTime}ms`);
+async function getCredential(userType: 'participant' | 'judge', userId: string) {
+  const { data } = await supabase
+    .from('user_credentials')
+    .select('password_hash')
+    .eq('user_type', userType)
+    .eq('user_id', userId)
+    .maybeSingle();
+  return data?.password_hash ?? null;
+}
 
-  if (!username || !password) {
-    return new Response(
-      JSON.stringify({ error: 'Username and password are required' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+async function storeCredential(userType: 'participant' | 'judge', userId: string, password: string) {
+  const password_hash = await hashPassword(password);
+  const { error } = await supabase
+    .from('user_credentials')
+    .upsert(
+      { user_type: userType, user_id: userId, password_hash, updated_at: new Date().toISOString() },
+      { onConflict: 'user_type,user_id' },
     );
+  if (error) throw error;
+}
+
+async function handleLogin(req: Request) {
+  const { username, password } = await req.json().catch(() => ({}));
+
+  if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
+    return json(req, { error: 'Username and password are required' }, 400);
   }
 
-  // Try to find both participant and judge in parallel
-  const dbQueryStart = Date.now();
+  // 10 attempts per minute per IP, and 10 per minute per account.
+  if (!rateLimit(clientKey(req, 'login'), 10, 60_000) || !rateLimit(`user:${username}`, 10, 60_000)) {
+    return json(req, { error: 'Too many attempts. Try again in a minute.' }, 429);
+  }
+
   const [participantResult, judgeResult] = await Promise.all([
-    supabase
-      .from('participants')
-      .select('*')
-      .eq('username', username)
-      .eq('is_active', true)
-      .single(),
-    supabase
-      .from('judges')
-      .select('*')
-      .eq('username', username)
-      .eq('is_active', true)
-      .single()
+    supabase.from('participants').select('*').eq('username', username).eq('is_active', true).maybeSingle(),
+    supabase.from('judges').select('*').eq('username', username).eq('is_active', true).maybeSingle(),
   ]);
-  const dbQueryTime = Date.now();
-  console.log(`[PERF] Database queries completed in ${dbQueryTime - dbQueryStart}ms`);
 
   const participant = participantResult.data;
   const judge = judgeResult.data;
+  const account = participant
+    ? { type: 'participant' as const, record: participant }
+    : judge
+    ? { type: 'judge' as const, record: judge }
+    : null;
 
-  if (participant && !participantResult.error) {
-    // Verify password for participant
-    const passwordStart = Date.now();
-    const passwordValid = await comparePassword(password, participant.password_hash);
-    const passwordTime = Date.now();
-    console.log(`[PERF] Password verification completed in ${passwordTime - passwordStart}ms`);
-    
-    if (!passwordValid) {
-      console.log('Invalid password for participant:', username);
-      return new Response(
-        JSON.stringify({ error: 'Invalid credentials' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+  if (!account) {
+    // Spend comparable time on unknown users so the response does not reveal
+    // whether the account exists.
+    await verifyPassword(password, await hashPassword(password));
+    return json(req, { error: INVALID_CREDENTIALS }, 401);
+  }
 
-    // Generate JWT token for participant
-    const tokenStart = Date.now();
-    const token = await create(
-      { alg: 'HS256', typ: 'JWT' },
-      {
-        sub: participant.id,
-        username: participant.username,
-        role: 'participant',
-        full_name: participant.full_name,
-        category: participant.category,
-        exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60), // 24 hours
-      },
-      JWT_SECRET
-    );
-    const tokenTime = Date.now();
-    console.log(`[PERF] JWT token created in ${tokenTime - tokenStart}ms`);
+  const stored = await getCredential(account.type, account.record.id);
+  const { valid, needsUpgrade } = stored
+    ? await verifyPassword(password, stored)
+    : { valid: false, needsUpgrade: false };
 
-    const totalTime = Date.now();
-    console.log(`[PERF] Total participant login time: ${totalTime - startTime}ms`);
+  if (!valid) {
+    return json(req, { error: INVALID_CREDENTIALS }, 401);
+  }
 
-    return new Response(
-      JSON.stringify({
-        token,
-        participant: {
-          id: participant.id,
-          username: participant.username,
-          full_name: participant.full_name,
-          age: participant.age,
-          chest_number: participant.chest_number,
-          category: participant.category,
-          church: participant.church,
-          district: participant.district,
-        }
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  // Legacy SHA-256 hash: replace it with PBKDF2 now that we hold the password.
+  if (needsUpgrade) {
+    await storeCredential(account.type, account.record.id, password).catch((error) =>
+      console.error('password upgrade failed:', error)
     );
   }
 
-  if (judge && !judgeResult.error) {
-    // Verify password for judge
-    const passwordStart = Date.now();
-    const passwordValid = await comparePassword(password, judge.password_hash);
-    const passwordTime = Date.now();
-    console.log(`[PERF] Password verification completed in ${passwordTime - passwordStart}ms`);
-    
-    if (!passwordValid) {
-      console.log('Invalid password for judge:', username);
-      return new Response(
-        JSON.stringify({ error: 'Invalid credentials' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+  const token = await issueToken({
+    sub: account.record.id,
+    username: account.record.username,
+    role: account.type,
+    full_name: account.record.full_name,
+  });
 
-    // Generate JWT token for judge
-    const tokenStart = Date.now();
-    const token = await create(
-      { alg: 'HS256', typ: 'JWT' },
-      {
-        sub: judge.id,
-        username: judge.username,
-        role: 'judge',
-        full_name: judge.full_name,
-        church: judge.church,
-        exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60), // 24 hours
-      },
-      JWT_SECRET
-    );
-    const tokenTime = Date.now();
-    console.log(`[PERF] JWT token created in ${tokenTime - tokenStart}ms`);
-
-    const totalTime = Date.now();
-    console.log(`[PERF] Total judge login time: ${totalTime - startTime}ms`);
-
-    return new Response(
-      JSON.stringify({
-        token,
-        judge: {
-          id: judge.id,
-          username: judge.username,
-          full_name: judge.full_name,
-          email: judge.email,
-          church: judge.church,
-        }
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  // Neither participant nor judge found
-  console.log('User not found:', username);
-  return new Response(
-    JSON.stringify({ error: 'Invalid credentials' }),
-    { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
-}
-
-// Handle token verification
-async function handleVerify(req: Request) {
-  const authHeader = req.headers.get('Authorization');
-  const token = authHeader?.replace('Bearer ', '');
-
-  if (!token) {
-    return new Response(
-      JSON.stringify({ valid: false, error: 'No token provided' }),
-      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  try {
-    const payload = await verify(token, JWT_SECRET);
-    
-    if (!payload.sub || (payload.role !== 'participant' && payload.role !== 'judge')) {
-      throw new Error('Invalid token');
-    }
-
-    // Verify user still exists and is active based on role
-    if (payload.role === 'participant') {
-      const { data: participant, error } = await supabase
-        .from('participants')
-        .select('id, username, full_name, age, chest_number, category, church, district, is_active')
-        .eq('id', payload.sub)
-        .eq('is_active', true)
-        .single();
-
-      if (error || !participant) {
-        throw new Error('Participant not found or inactive');
-      }
-
-      return new Response(
-        JSON.stringify({
-          valid: true,
-          participant
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    } else if (payload.role === 'judge') {
-      const { data: judge, error } = await supabase
-        .from('judges')
-        .select('id, username, full_name, email, church, is_active')
-        .eq('id', payload.sub)
-        .eq('is_active', true)
-        .single();
-
-      if (error || !judge) {
-        throw new Error('Judge not found or inactive');
-      }
-
-      return new Response(
-        JSON.stringify({
-          valid: true,
-          judge
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-  } catch (error) {
-    console.log('Token verification failed:', error.message);
-    return new Response(
-      JSON.stringify({ valid: false, error: 'Invalid token' }),
-      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-}
-
-// Handle participant creation (admin only)
-async function handleCreate(req: Request) {
-  const authHeader = req.headers.get('Authorization');
-  const supabaseToken = authHeader?.replace('Bearer ', '');
-
-  // Verify admin/judge access through Supabase auth
-  const { data: { user }, error: authError } = await supabase.auth.getUser(supabaseToken);
-  if (authError || !user) {
-    return new Response(
-      JSON.stringify({ error: 'Unauthorized' }),
-      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  const {
-    full_name,
-    age_category,
-    chest_number,
-    category,
-    church,
-    district,
-    username,
-    password
-  } = await req.json();
-
-  // Validate required fields
-  if (!full_name || !age_category || !chest_number || !category || !church || !district || !username || !password) {
-    return new Response(
-      JSON.stringify({ error: 'All fields are required' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  // Check for duplicate chest number or username
-  const { data: existing } = await supabase
-    .from('participants')
-    .select('chest_number, username')
-    .or(`chest_number.eq.${chest_number},username.eq.${username}`);
-
-  if (existing && existing.length > 0) {
-    const duplicateField = existing.find(p => p.chest_number === chest_number) ? 'chest number' : 'username';
-    return new Response(
-      JSON.stringify({ error: `A participant with this ${duplicateField} already exists` }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  // Hash password
-  const password_hash = await hashPassword(password);
-
-  // Create participant
-  const { data: newParticipant, error: createError } = await supabase
-    .from('participants')
-    .insert({
-      full_name,
-      age_category,
-      chest_number,
-      category,
-      church,
-      district,
-      username,
-      password_hash,
-      is_active: true,
-      created_by: user.id
-      // Note: profile_id column was removed from participants table
-    })
-    .select()
-    .single();
-
-  if (createError) {
-    console.error('Error creating participant:', createError);
-    return new Response(
-      JSON.stringify({ error: 'Failed to create participant' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  return new Response(
-    JSON.stringify({
-      success: true,
-      message: 'Participant created successfully',
+  if (account.type === 'participant') {
+    const p = account.record;
+    return json(req, {
+      token,
       participant: {
-        id: newParticipant.id,
-        username: newParticipant.username,
-        full_name: newParticipant.full_name
-      }
-    }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
+        id: p.id,
+        username: p.username,
+        full_name: p.full_name,
+        age: p.age,
+        chest_number: p.chest_number,
+        age_category: p.age_category,
+        church: p.church,
+        district: p.district,
+      },
+    });
+  }
+
+  const j = account.record;
+  return json(req, {
+    token,
+    judge: {
+      id: j.id,
+      username: j.username,
+      full_name: j.full_name,
+      email: j.email,
+      church: j.church,
+    },
+  });
 }
 
-// Handle password reset (admin only)
+async function handleVerify(req: Request) {
+  const authenticated = await authenticateCustomUser(supabase, bearer(req));
+  if (!authenticated) {
+    return json(req, { valid: false, error: 'Invalid token' }, 401);
+  }
+
+  const { claims, record } = authenticated;
+  const safe = { ...record };
+  delete (safe as Record<string, unknown>).password_hash;
+
+  return claims.role === 'judge'
+    ? json(req, { valid: true, judge: safe })
+    : json(req, { valid: true, participant: safe });
+}
+
+// Admin sets or replaces a password. Hashing used to happen in the browser with
+// a salt baked into the bundle; it happens here now.
+async function handleSetPassword(req: Request) {
+  const admin = await requireAdmin(supabase, bearer(req));
+  if (!admin) return json(req, { error: 'Unauthorized' }, 401);
+
+  const body = await req.json().catch(() => ({}));
+  const entries: Array<{ user_type: string; user_id: string; password: string }> =
+    Array.isArray(body.credentials) ? body.credentials : [body];
+
+  if (entries.length === 0 || entries.length > 500) {
+    return json(req, { error: 'Between 1 and 500 credentials per request' }, 400);
+  }
+
+  for (const entry of entries) {
+    if (entry.user_type !== 'participant' && entry.user_type !== 'judge') {
+      return json(req, { error: 'user_type must be participant or judge' }, 400);
+    }
+    if (typeof entry.user_id !== 'string' || typeof entry.password !== 'string') {
+      return json(req, { error: 'user_id and password are required' }, 400);
+    }
+    if (entry.password.length < 8) {
+      return json(req, { error: 'Passwords must be at least 8 characters' }, 400);
+    }
+  }
+
+  for (const entry of entries) {
+    await storeCredential(entry.user_type as 'participant' | 'judge', entry.user_id, entry.password);
+    await writeAuditLog(supabase, {
+      user_id: admin.id,
+      actor_type: 'admin',
+      action: 'set_password',
+      table_name: 'user_credentials',
+      record_id: entry.user_id,
+      new_values: { user_type: entry.user_type },
+    });
+  }
+
+  return json(req, { success: true, updated: entries.length });
+}
+
 async function handleReset(req: Request) {
-  const authHeader = req.headers.get('Authorization');
-  const supabaseToken = authHeader?.replace('Bearer ', '');
+  const admin = await requireAdmin(supabase, bearer(req));
+  if (!admin) return json(req, { error: 'Unauthorized' }, 401);
 
-  // Verify admin access through Supabase auth
-  const { data: { user }, error: authError } = await supabase.auth.getUser(supabaseToken);
-  if (authError || !user) {
-    return new Response(
-      JSON.stringify({ error: 'Unauthorized' }),
-      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+  const { username, user_type = 'participant' } = await req.json().catch(() => ({}));
+  if (typeof username !== 'string' || !username) {
+    return json(req, { error: 'Username is required' }, 400);
+  }
+  if (user_type !== 'participant' && user_type !== 'judge') {
+    return json(req, { error: 'user_type must be participant or judge' }, 400);
   }
 
-  const { username } = await req.json();
+  const table = user_type === 'judge' ? 'judges' : 'participants';
+  const { data: account } = await supabase
+    .from(table)
+    .select('id')
+    .eq('username', username)
+    .maybeSingle();
 
-  if (!username) {
-    return new Response(
-      JSON.stringify({ error: 'Username is required' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
+  if (!account) return json(req, { error: 'Account not found' }, 404);
 
-  // Generate new secure password
-  const newPassword = generateSecurePassword();
-  const password_hash = await hashPassword(newPassword);
+  const newPassword = generatePassword();
+  await storeCredential(user_type, account.id, newPassword);
+  await writeAuditLog(supabase, {
+    user_id: admin.id,
+    actor_type: 'admin',
+    action: 'reset_password',
+    table_name: 'user_credentials',
+    record_id: account.id,
+    new_values: { user_type },
+  });
 
-  // Update participant password
-  const { error: updateError } = await supabase
-    .from('participants')
-    .update({ password_hash })
-    .eq('username', username);
-
-  if (updateError) {
-    return new Response(
-      JSON.stringify({ error: 'Failed to reset password' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  return new Response(
-    JSON.stringify({
-      success: true,
-      new_password: newPassword
-    }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
-}
-
-// Helper function to generate secure passwords
-function generateSecurePassword(): string {
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-  let password = '';
-  for (let i = 0; i < 8; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return password;
+  return json(req, { success: true, new_password: newPassword });
 }
