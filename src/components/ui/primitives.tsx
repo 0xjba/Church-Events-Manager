@@ -39,7 +39,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       disabled={disabled || loading}
       className={cn(
         'inline-flex select-none items-center justify-center rounded-lg font-medium transition-colors',
-        'disabled:pointer-events-none disabled:opacity-50',
+        // A faded fill drops the label to ~1.8:1; an inert grey keeps a
+        // disabled button readable, which matters when "not yet" is the
+        // state a judge stares at most.
+        'disabled:pointer-events-none disabled:border-transparent disabled:bg-muted disabled:text-muted-foreground',
         buttonVariants[variant],
         buttonSizes[size],
         block && 'w-full',

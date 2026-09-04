@@ -947,7 +947,7 @@ const RowButton = ({
     onClick={onClick}
     disabled={disabled}
     className={cn(
-      'flex h-9 w-9 items-center justify-center rounded-lg transition-colors disabled:opacity-40',
+      'flex h-9 w-9 items-center justify-center rounded-lg transition-colors disabled:text-muted-foreground/45 disabled:hover:bg-transparent',
       danger
         ? 'text-muted-foreground hover:bg-destructive-soft hover:text-destructive'
         : 'text-muted-foreground hover:bg-surface-sunken hover:text-foreground',

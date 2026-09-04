@@ -17,62 +17,64 @@
 
 @layer base {
   :root {
-    /* Neutrals — warm paper, not blue-grey. */
-    --background: 40 32% 97%;
-    --foreground: 218 44% 13%;
+    /* Neutrals — barely warm paper; enough to kill the blue-white glare
+       without tipping the greys yellow. */
+    --background: 42 22% 97%;
+    --foreground: 215 30% 12%;
 
-    --surface: 40 40% 99.5%;
-    --surface-foreground: 218 44% 13%;
-    --surface-sunken: 40 26% 94%;
+    --surface: 0 0% 100%;
+    --surface-foreground: 215 30% 12%;
+    --surface-sunken: 42 18% 94.5%;
     --surface-raised: 0 0% 100%;
 
-    --card: 40 40% 99.5%;
-    --card-foreground: 218 44% 13%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 30% 12%;
 
-    --popover: 40 40% 99.5%;
-    --popover-foreground: 218 44% 13%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 30% 12%;
 
-    /* Brand — ink navy carries the chrome and every primary action. */
-    --primary: 214 56% 22%;
-    --primary-foreground: 40 40% 98%;
-    --primary-soft: 214 38% 93%;
-    --primary-strong: 214 62% 15%;
+    /* Brand — ink carries the chrome and every primary action. Deep enough
+       for white text at 12:1, so the same colour works as fill and as type. */
+    --primary: 213 62% 20%;
+    --primary-foreground: 0 0% 100%;
+    --primary-soft: 213 44% 92%;
+    --primary-strong: 213 68% 13%;
 
-    --secondary: 40 24% 94%;
-    --secondary-foreground: 218 30% 22%;
+    --secondary: 42 16% 94%;
+    --secondary-foreground: 215 24% 20%;
 
-    --muted: 40 22% 93%;
-    --muted-foreground: 215 14% 42%;
+    --muted: 42 14% 93%;
+    --muted-foreground: 215 12% 38%;
 
-    --accent: 36 60% 94%;
-    --accent-foreground: 34 66% 28%;
+    --accent: 36 66% 93%;
+    --accent-foreground: 30 72% 26%;
 
-    /* State */
-    --success: 158 48% 30%;
-    --success-foreground: 40 40% 98%;
-    --success-soft: 158 40% 92%;
+    /* State — each holds 4.5:1 on paper as text, and on its own soft tint. */
+    --success: 158 60% 24%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 156 44% 91%;
 
-    --warning: 28 78% 42%;
-    --warning-foreground: 40 40% 98%;
-    --warning-soft: 34 82% 92%;
+    --warning: 26 82% 34%;
+    --warning-foreground: 0 0% 100%;
+    --warning-soft: 34 84% 90%;
 
-    --destructive: 4 62% 44%;
-    --destructive-foreground: 40 40% 98%;
-    --destructive-soft: 6 70% 94%;
+    --destructive: 2 66% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 4 74% 94%;
 
-    --info: 202 58% 34%;
-    --info-foreground: 40 40% 98%;
-    --info-soft: 202 52% 92%;
+    --info: 205 66% 30%;
+    --info-foreground: 0 0% 100%;
+    --info-soft: 202 60% 92%;
 
-    /* Placings — brass, pewter, copper. Used nowhere else. */
-    --gold: 36 62% 42%;
-    --silver: 215 10% 48%;
-    --bronze: 20 50% 40%;
+    /* Placings — struck metal, nowhere else in the interface. */
+    --gold: 34 72% 34%;
+    --silver: 214 12% 40%;
+    --bronze: 18 54% 33%;
 
-    --border: 38 20% 87%;
-    --border-strong: 36 16% 76%;
-    --input: 38 20% 84%;
-    --ring: 214 56% 22%;
+    --border: 40 14% 88%;
+    --border-strong: 40 10% 78%;
+    --input: 40 14% 84%;
+    --ring: 213 62% 20%;
 
     --radius: 0.5rem;
 
@@ -147,19 +149,21 @@
     overscroll-behavior-y: none;
   }
 
-  /* Fraunces carries titles, brand and big numbers; Manrope does the reading. */
+  /* One family throughout; hierarchy comes from weight and size, not a
+     second typeface. */
   h1,
   h2,
   h3 {
-    @apply font-display;
-    font-variation-settings: 'SOFT' 20, 'WONK' 0;
-    letter-spacing: -0.015em;
+    font-weight: 600;
+    letter-spacing: -0.018em;
   }
 
-  /* Tabular figures wherever numbers are compared down a column. */
+  /* Scores, chest numbers, counts: mono so digits line up down a column and
+     read as data rather than prose. */
   .tnum {
+    @apply font-mono;
     font-variant-numeric: tabular-nums;
-    font-feature-settings: 'tnum';
+    letter-spacing: -0.01em;
   }
 
   :focus-visible {

@@ -6,20 +6,20 @@ import type { ThemeConfig } from 'antd';
  * the hex equivalents of those HSL tokens; change both together.
  */
 export const palette = {
-  primary: '#1B3458',
-  primaryHover: '#264773',
-  primaryActive: '#0F233E',
-  brass: '#AE7829',
-  success: '#287156',
-  warning: '#BF6518',
-  danger: '#B6342B',
-  info: '#246489',
-  text: '#131D30',
-  textSecondary: '#5C697A',
-  border: '#E5E0D7',
-  surface: '#FFFEFB',
-  background: '#FAF8F5',
-  sunken: '#F4F1EC',
+  primary: '#132F53',
+  primaryHover: '#1F4372',
+  primaryActive: '#0A1D38',
+  brass: '#95651E',
+  success: '#189662',
+  warning: '#9E4F10',
+  danger: '#B22420',
+  info: '#1A5C7F',
+  text: '#151C27',
+  textSecondary: '#565F6D',
+  border: '#E4E1DA',
+  surface: '#FFFFFF',
+  background: '#F8F7F3',
+  sunken: '#F2F0EA',
 } as const;
 
 export const antdTheme: ThemeConfig = {
@@ -42,7 +42,7 @@ export const antdTheme: ThemeConfig = {
     controlHeightLG: 44,
     fontSize: 14,
     fontFamily:
-      "Manrope, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
+      "'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
     wireframe: false,
   },
   components: {
@@ -56,7 +56,7 @@ export const antdTheme: ThemeConfig = {
       headerBg: palette.sunken,
       headerColor: palette.textSecondary,
       headerSplitColor: 'transparent',
-      rowHoverBg: '#F4F1EC',
+      rowHoverBg: '#F2F0EA',
       borderColor: palette.border,
       cellPaddingBlock: 12,
       cellPaddingBlockSM: 8,
@@ -69,7 +69,7 @@ export const antdTheme: ThemeConfig = {
       paddingLG: 20,
     },
     Input: { paddingBlock: 8 },
-    Select: { optionSelectedBg: '#E8EDF5' },
+    Select: { optionSelectedBg: '#E4EBF5' },
     Segmented: { itemSelectedBg: palette.surface },
     Tabs: { horizontalItemPadding: '10px 0', horizontalMargin: '0 0 16px 0' },
   },

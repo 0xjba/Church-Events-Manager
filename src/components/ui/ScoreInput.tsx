@@ -80,7 +80,7 @@ export const ScoreInput = ({
           aria-label={`Decrease ${label}`}
           disabled={disabled || (value ?? 0) <= 0}
           onClick={() => nudge(-step)}
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-foreground transition-colors active:bg-muted disabled:opacity-40"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-foreground transition-colors active:bg-muted disabled:border-border/60 disabled:bg-surface-sunken disabled:text-muted-foreground/70"
         >
           <Minus size={20} />
         </button>
@@ -116,7 +116,7 @@ export const ScoreInput = ({
           aria-label={`Increase ${label}`}
           disabled={disabled || (value ?? 0) >= max}
           onClick={() => nudge(step)}
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-foreground transition-colors active:bg-muted disabled:opacity-40"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-foreground transition-colors active:bg-muted disabled:border-border/60 disabled:bg-surface-sunken disabled:text-muted-foreground/70"
         >
           <Plus size={20} />
         </button>
