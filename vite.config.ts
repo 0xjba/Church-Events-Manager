@@ -24,11 +24,13 @@ export default defineConfig(({ mode }) => ({
     ...(mode === 'development' ? [componentTagger()] : []),
   ],
   resolve: {
+    // A single React copy, so a newly installed package cannot bring its own.
+    dedupe: ['react', 'react-dom'],
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
   optimizeDeps: {
-    include: ['react', 'react-dom'],
+    include: ['react', 'react-dom', '@phosphor-icons/react'],
   },
 }));

@@ -2,117 +2,217 @@
 @tailwind components;
 @tailwind utilities;
 
-/* PYPA - Mobile-first PWA Design System
-All colors MUST be HSL.
-*/
+/*
+ * PYPA design tokens.
+ *
+ * Two surfaces share one system: a mobile-first surface for judges and
+ * participants (thumb reachable controls, one task per screen) and a
+ * desktop-first surface for admins (dense tables, more per screen).
+ *
+ * The palette is ink navy on warm paper with brass for anything that marks
+ * achievement — placings, medals, champion rows. Brass is never a button and
+ * never decoration. State colours (success / warning / danger) mean state
+ * only, so a red cell always says something is wrong.
+ */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Neutrals — warm paper, not blue-grey. */
+    --background: 40 32% 97%;
+    --foreground: 218 44% 13%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --surface: 40 40% 99.5%;
+    --surface-foreground: 218 44% 13%;
+    --surface-sunken: 40 26% 94%;
+    --surface-raised: 0 0% 100%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --card: 40 40% 99.5%;
+    --card-foreground: 218 44% 13%;
 
-    --primary: 258 90% 66%;
-    --primary-foreground: 0 0% 100%;
+    --popover: 40 40% 99.5%;
+    --popover-foreground: 218 44% 13%;
 
-    --secondary: 220 14.3% 95.9%;
-    --secondary-foreground: 220.9 39.3% 11%;
+    /* Brand — ink navy carries the chrome and every primary action. */
+    --primary: 214 56% 22%;
+    --primary-foreground: 40 40% 98%;
+    --primary-soft: 214 38% 93%;
+    --primary-strong: 214 62% 15%;
 
-    --muted: 220 14.3% 95.9%;
-    --muted-foreground: 220 8.9% 46.1%;
+    --secondary: 40 24% 94%;
+    --secondary-foreground: 218 30% 22%;
 
-    --accent: 220 14.3% 95.9%;
-    --accent-foreground: 220.9 39.3% 11%;
+    --muted: 40 22% 93%;
+    --muted-foreground: 215 14% 42%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --accent: 36 60% 94%;
+    --accent-foreground: 34 66% 28%;
 
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 100%;
+    /* State */
+    --success: 158 48% 30%;
+    --success-foreground: 40 40% 98%;
+    --success-soft: 158 40% 92%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
+    --warning: 28 78% 42%;
+    --warning-foreground: 40 40% 98%;
+    --warning-soft: 34 82% 92%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 258 90% 66%;
+    --destructive: 4 62% 44%;
+    --destructive-foreground: 40 40% 98%;
+    --destructive-soft: 6 70% 94%;
+
+    --info: 202 58% 34%;
+    --info-foreground: 40 40% 98%;
+    --info-soft: 202 52% 92%;
+
+    /* Placings — brass, pewter, copper. Used nowhere else. */
+    --gold: 36 62% 42%;
+    --silver: 215 10% 48%;
+    --bronze: 20 50% 40%;
+
+    --border: 38 20% 87%;
+    --border-strong: 36 16% 76%;
+    --input: 38 20% 84%;
+    --ring: 214 56% 22%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Layout */
+    --shell-sidebar: 15rem;
+    --shell-header: 3.5rem;
+    --shell-tabbar: 4.25rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 218 34% 8%;
+    --foreground: 40 30% 94%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --surface: 218 30% 11%;
+    --surface-foreground: 40 30% 94%;
+    --surface-sunken: 218 34% 7%;
+    --surface-raised: 218 26% 14%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --card: 218 30% 11%;
+    --card-foreground: 40 30% 94%;
 
-    --primary: 258 90% 66%;
-    --primary-foreground: 0 0% 100%;
+    --popover: 218 30% 13%;
+    --popover-foreground: 40 30% 94%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    /* Ink cannot carry the chrome on a dark ground, so brass leads instead. */
+    --primary: 36 64% 56%;
+    --primary-foreground: 218 44% 10%;
+    --primary-soft: 36 30% 20%;
+    --primary-strong: 36 70% 66%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --secondary: 218 22% 18%;
+    --secondary-foreground: 40 26% 90%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --muted: 218 22% 17%;
+    --muted-foreground: 40 12% 66%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --accent: 36 34% 22%;
+    --accent-foreground: 36 70% 74%;
 
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 100%;
+    --success: 158 44% 44%;
+    --success-soft: 158 34% 16%;
+    --warning: 30 74% 54%;
+    --warning-soft: 30 44% 18%;
+    --destructive: 4 66% 56%;
+    --destructive-soft: 4 40% 20%;
+    --info: 202 56% 52%;
+    --info-soft: 202 40% 18%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
+    --gold: 36 66% 56%;
+    --silver: 215 12% 62%;
+    --bronze: 20 46% 52%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 258 90% 66%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --border: 218 20% 22%;
+    --border-strong: 218 16% 30%;
+    --input: 218 20% 24%;
+    --ring: 36 64% 56%;
   }
 }
 
 @layer base {
   * {
-    border-color: hsl(var(--border));
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
   }
 
   body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
+    @apply bg-background font-sans text-foreground antialiased;
+    overscroll-behavior-y: none;
+  }
+
+  /* Fraunces carries titles, brand and big numbers; Manrope does the reading. */
+  h1,
+  h2,
+  h3 {
+    @apply font-display;
+    font-variation-settings: 'SOFT' 20, 'WONK' 0;
+    letter-spacing: -0.015em;
+  }
+
+  /* Tabular figures wherever numbers are compared down a column. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Inputs below 16px make iOS Safari zoom on focus. */
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1rem);
+  }
+
+  @media (min-width: 768px) {
+    input,
+    select,
+    textarea {
+      font-size: inherit;
+    }
+  }
+}
+
+@layer components {
+  /* Respect the home indicator and notch on phones. */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border-strong;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

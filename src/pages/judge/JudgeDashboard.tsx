@@ -1,13 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { message } from 'antd';
+import { ArrowsClockwise, CaretRight, Clock, Gavel, UsersThree } from '@phosphor-icons/react';
 import { useParticipantAuth } from '@/hooks/useParticipantAuth';
 import { supabase } from '@/integrations/supabase/client';
-import Navigation from '@/components/Navigation';
-import { Layout, Card, Button, Badge, Typography, Space, Progress, Spin, message } from 'antd';
-import { Calendar, Users, Trophy, Clock, Play } from 'lucide-react';
-import { Link } from 'react-router-dom';
-
-const { Content } = Layout;
-const { Title, Text } = Typography;
+import type { FormValues } from '@/lib/types';
+import { AppShell } from '@/components/shell/AppShell';
+import {
+  Card,
+  EmptyState,
+  ProgressBar,
+  Skeleton,
+  StatusPill,
+  statusTone,
+} from '@/components/ui/primitives';
+import { SegmentedControl } from '@/components/ui/inputs';
 
 interface AssignedEvent {
   id: string;
@@ -21,98 +28,38 @@ interface AssignedEvent {
   total_criteria: number;
   level_id: string;
   age_category: string | null;
-  event_levels?: {
-    id: string;
-    name: string;
-    is_active: boolean;
-  };
+  event_levels?: { id: string; name: string; is_active: boolean };
 }
+
+type Filter = 'todo' | 'done' | 'all';
 
 const JudgeDashboard = () => {
   const { participant } = useParticipantAuth();
   const [assignedEvents, setAssignedEvents] = useState<AssignedEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [judgeId, setJudgeId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>('todo');
 
-  useEffect(() => {
-    fetchJudgeData();
-  }, [participant]);
-
-  // Set up real-time subscriptions for event updates
-  useEffect(() => {
-    if (!participant?.id) return;
-
-    // Subscribe to event_judges changes for this judge
-    const eventJudgesSubscription = supabase
-      .channel('event_judges_changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'event_judges',
-        filter: `judge_id=eq.${participant.id}`
-      }, () => {
-        fetchJudgeData();
-      })
-      .subscribe();
-
-    // Subscribe to events table changes
-    const eventsSubscription = supabase
-      .channel('events_changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'events'
-      }, () => {
-        fetchJudgeData();
-      })
-      .subscribe();
-
-    return () => {
-      eventJudgesSubscription.unsubscribe();
-      eventsSubscription.unsubscribe();
-    };
-  }, [participant?.id]);
-
-  const fetchJudgeData = async () => {
-    console.log('fetchJudgeData called with participant:', participant);
+  const fetchJudgeData = useCallback(async () => {
     if (!participant?.id) {
-      console.log('No participant ID, returning early');
       setLoading(false);
       return;
     }
 
     try {
-      console.log('Fetching data for judge ID:', participant.id);
-      // Use the judge ID from the authenticated participant data
-      setJudgeId(participant.id);
-
-      // Get assigned events with participant count and scoring progress
       const { data: eventsData, error: eventsError } = await supabase
         .from('event_judges')
-        .select(`
-          events (
-            id,
-            name,
-            type,
-            status,
-            time_limit,
-            event_order,
-            level_id,
-            age_category,
-            event_levels (
-              id,
-              name,
-              is_active
-            )
-          )
-        `)
+        .select(
+          `events (
+            id, name, type, status, time_limit, event_order, level_id, age_category,
+            event_levels ( id, name, is_active )
+          )`,
+        )
         .eq('judge_id', participant.id);
 
       if (eventsError) throw eventsError;
 
       // Score counts come from the edge function: the scores table is closed to
-      // clients, and the judge is identified by their token rather than by an
-      // id sent from the browser.
+      // clients, and the judge is identified by their token.
       const token = localStorage.getItem('participant_token');
       const { data: summary } = await supabase.functions.invoke('scores/summary', {
         body: {},
@@ -120,35 +67,30 @@ const JudgeDashboard = () => {
       });
       const scoreCounts: Record<string, number> = summary?.counts ?? {};
 
-      // For each event, get participant count, criteria count, and judge's scoring progress
       const enrichedEvents = await Promise.all(
-        eventsData.map(async (eventJudge: any) => {
+        (eventsData ?? []).map(async (eventJudge: FormValues) => {
           const event = eventJudge.events;
-          
-          // Get participant count
-          const { count: participantCount } = await supabase
-            .from('event_participants')
-            .select('*', { count: 'exact', head: true })
-            .eq('event_id', event.id);
 
-          // Get criteria count
-          const { count: criteriaCount } = await supabase
-            .from('event_criteria')
-            .select('*', { count: 'exact', head: true })
-            .eq('event_id', event.id);
-
-          const scoresCount = scoreCounts[event.id] ?? 0;
+          const [{ count: participantCount }, { count: criteriaCount }] = await Promise.all([
+            supabase
+              .from('event_participants')
+              .select('*', { count: 'exact', head: true })
+              .eq('event_id', event.id),
+            supabase
+              .from('event_criteria')
+              .select('*', { count: 'exact', head: true })
+              .eq('event_id', event.id),
+          ]);
 
           return {
             ...event,
             participants_count: participantCount || 0,
-            my_scores_count: scoresCount,
+            my_scores_count: scoreCounts[event.id] ?? 0,
             total_criteria: criteriaCount || 0,
-          };
-        })
+          } as AssignedEvent;
+        }),
       );
 
-      // Sort by event order
       enrichedEvents.sort((a, b) => {
         if (a.event_order === null && b.event_order === null) return 0;
         if (a.event_order === null) return 1;
@@ -157,245 +99,198 @@ const JudgeDashboard = () => {
       });
 
       setAssignedEvents(enrichedEvents);
-    } catch (error) {
+    } catch {
       message.error('Failed to load assigned events');
     } finally {
       setLoading(false);
     }
+  }, [participant?.id]);
+
+  useEffect(() => {
+    fetchJudgeData();
+  }, [fetchJudgeData]);
+
+  // Live updates when an admin assigns an event or flips its status.
+  useEffect(() => {
+    if (!participant?.id) return;
+
+    const channel = supabase
+      .channel(`judge-dashboard-${participant.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'event_judges',
+          filter: `judge_id=eq.${participant.id}`,
+        },
+        () => fetchJudgeData(),
+      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () =>
+        fetchJudgeData(),
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [participant?.id, fetchJudgeData]);
+
+  const progressOf = (event: AssignedEvent) => {
+    const expected = event.participants_count * event.total_criteria;
+    if (expected === 0) return 0;
+    return Math.round((event.my_scores_count / expected) * 100);
   };
 
-  const getStatusColor = (status: string): "success" | "processing" | "default" | "error" | "warning" => {
-    switch (status) {
-      case 'active':
-        return 'processing';
-      case 'completed':
-        return 'success';
-      case 'upcoming':
-        return 'default';
-      default:
-        return 'default';
-    }
-  };
-
-  const getScoringProgress = (event: AssignedEvent) => {
-    const expectedScores = event.participants_count * event.total_criteria;
-    const actualScores = event.my_scores_count;
-    
-    if (expectedScores === 0) return 0;
-    return Math.round((actualScores / expectedScores) * 100);
-  };
-
-  const isEventComplete = (event: AssignedEvent) => {
-    return getScoringProgress(event) === 100;
-  };
+  const isComplete = (event: AssignedEvent) => progressOf(event) === 100;
+  const done = assignedEvents.filter(isComplete);
+  const todo = assignedEvents.filter((event) => !isComplete(event));
+  const visible = filter === 'all' ? assignedEvents : filter === 'done' ? done : todo;
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Navigation />
-      
-      <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{ marginBottom: '8px' }}>
-              <Title level={2} style={{ margin: 0 }}>
-                Judge Dashboard
-              </Title>
-            </div>
-            <Text type="secondary">
-              Welcome back, {participant?.full_name || 'Judge'}
-            </Text>
-          </div>
+    <AppShell title="My events" subtitle={participant?.full_name ?? 'Judge'}>
+      {loading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-11 w-full" />
+          <Skeleton className="h-36 w-full" />
+          <Skeleton className="h-36 w-full" />
+        </div>
+      ) : (
+        <>
+          <SegmentedControl
+            value={filter}
+            onChange={(value) => setFilter(value as Filter)}
+            className="mb-4"
+            options={[
+              { value: 'todo', label: 'To score', count: todo.length },
+              { value: 'done', label: 'Done', count: done.length },
+              { value: 'all', label: 'All', count: assignedEvents.length },
+            ]}
+          />
 
-          {loading && (
-            <div style={{ textAlign: 'center', padding: '40px' }}>
-              <Spin size="large" />
-              <div style={{ marginTop: '16px' }}>
-                <Text>Loading assigned events...</Text>
-              </div>
-            </div>
-          )}
+          {visible.length === 0 ? (
+            <EmptyState
+              icon={<Gavel size={22} />}
+              title={
+                assignedEvents.length === 0
+                  ? 'No events assigned yet'
+                  : filter === 'done'
+                    ? 'Nothing finished yet'
+                    : 'All caught up'
+              }
+              description={
+                assignedEvents.length === 0
+                  ? 'An administrator will assign you to events before the competition starts.'
+                  : filter === 'done'
+                    ? 'Events you finish scoring will be listed here.'
+                    : 'Every event assigned to you has been fully scored.'
+              }
+            />
+          ) : (
+            <div className="space-y-3">
+              {visible.map((event) => {
+                const progress = progressOf(event);
+                const complete = isComplete(event);
+                const levelInactive = event.event_levels && !event.event_levels.is_active;
+                const scorable = event.status === 'active' && !levelInactive && !complete;
+                const expected = event.participants_count * event.total_criteria;
 
-          {!loading && !participant && (
-            <div style={{ textAlign: 'center', padding: '40px' }}>
-              <Text type="danger">Not authenticated. Please sign in again.</Text>
-            </div>
-          )}
-
-          {/* Summary Cards */}
-          {!loading && participant && (
-            <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-            <Card>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <Text strong style={{ fontSize: '14px' }}>
-                  Assigned Events
-                </Text>
-                <Calendar size={16} color="#6b7280" />
-              </div>
-              <div>
-                <Title level={2} style={{ margin: 0 }}>{assignedEvents.length}</Title>
-                <Text type="secondary" style={{ fontSize: '12px' }}>
-                  Events to judge
-                </Text>
-              </div>
-            </Card>
-
-            <Card>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <Text strong style={{ fontSize: '14px' }}>
-                  Active Events
-                </Text>
-                <Play size={16} color="#6b7280" />
-              </div>
-              <div>
-                <Title level={2} style={{ margin: 0 }}>
-                  {assignedEvents.filter(e => e.status === 'active').length}
-                </Title>
-                <Text type="secondary" style={{ fontSize: '12px' }}>
-                  Ready to score
-                </Text>
-              </div>
-            </Card>
-
-            <Card>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <Text strong style={{ fontSize: '14px' }}>
-                  Completed
-                </Text>
-                <Trophy size={16} color="#6b7280" />
-              </div>
-              <div>
-                <Title level={2} style={{ margin: 0 }}>
-                  {assignedEvents.filter(e => isEventComplete(e)).length}
-                </Title>
-                <Text type="secondary" style={{ fontSize: '12px' }}>
-                  Fully scored
-                </Text>
-              </div>
-            </Card>
-          </div>
-
-          {/* Assigned Events */}
-          <Card>
-            <div style={{ marginBottom: '16px' }}>
-              <Title level={4} style={{ margin: 0 }}>My Assigned Events</Title>
-              <Text type="secondary">
-                Events you are assigned to judge
-              </Text>
-            </div>
-            
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                <Spin size="large" />
-              </div>
-            ) : assignedEvents.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                <Text type="secondary">No events assigned yet</Text>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {assignedEvents.map((event) => {
-                  const progress = getScoringProgress(event);
-                  const isComplete = isEventComplete(event);
-                  const isInactive = event.event_levels && !event.event_levels.is_active;
-                  
-                  return (
-                    <Card 
-                      key={event.id} 
-                      size="small"
-                      style={{ 
-                        opacity: isInactive ? 0.6 : 1,
-                        backgroundColor: isInactive ? '#f5f5f5' : 'inherit'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
-                        <div style={{ flex: 1 }}>
-                          <Title level={5} style={{ margin: 0, marginBottom: '4px' }}>{event.name}</Title>
-                          <Space size={16} wrap>
-                            <Text type="secondary" style={{ textTransform: 'capitalize' }}>
-                              {event.age_category || 'All Categories'}
-                            </Text>
-                            <Space size={4}>
-                              <Users size={12} />
-                              <Text type="secondary" style={{ fontSize: '12px' }}>
-                                {event.participants_count} participants
-                              </Text>
-                            </Space>
-                            {event.time_limit && (
-                              <Space size={4}>
-                                <Clock size={12} />
-                                <Text type="secondary" style={{ fontSize: '12px' }}>
-                                  {event.time_limit} min limit
-                                </Text>
-                              </Space>
+                const body = (
+                  <Card
+                    className={
+                      levelInactive ? 'opacity-60' : scorable ? 'border-primary/40' : undefined
+                    }
+                  >
+                    <div className="p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            {event.event_order !== null && (
+                              <span className="tnum rounded-md bg-muted px-1.5 py-0.5 text-caption font-semibold text-muted-foreground">
+                                #{event.event_order}
+                              </span>
                             )}
-                          </Space>
+                            <h2 className="truncate text-title font-semibold text-foreground">
+                              {event.name}
+                            </h2>
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
+                            <span className="capitalize">
+                              {event.age_category || 'All categories'}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <UsersThree size={12} /> {event.participants_count}
+                            </span>
+                            {event.time_limit && (
+                              <span className="inline-flex items-center gap-1">
+                                <Clock size={12} /> {event.time_limit} min
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <Space>
-                          <Badge status={getStatusColor(event.status)} text={event.status} />
-                          {event.event_order && (
-                            <Badge count={`#${event.event_order}`} color="blue" />
-                          )}
-                        </Space>
-                      </div>
-                      
-                      <div style={{ marginBottom: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <Text strong style={{ fontSize: '14px' }}>Scoring Progress</Text>
-                          <Text type="secondary" style={{ fontSize: '12px' }}>
-                            {event.my_scores_count}/{event.participants_count * event.total_criteria} scores
-                          </Text>
-                        </div>
-                        <Progress 
-                          percent={progress} 
-                          status={progress === 100 ? 'success' : 'active'}
-                          showInfo={false}
-                        />
+                        <StatusPill tone={complete ? 'success' : statusTone(event.status)} dot>
+                          {complete ? 'Scored' : event.status}
+                        </StatusPill>
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          {isComplete ? (
-                            <Text type="success" strong>
-                              ✓ Scoring Complete
-                            </Text>
-                          ) : event.status === 'active' ? (
-                            <Text style={{ color: '#8b5cf6' }} strong>
-                              Ready to Score
-                            </Text>
-                          ) : (
-                            <Text type="secondary">
-                              {event.status === 'upcoming' ? 'Upcoming' : 'Not Started'}
-                            </Text>
-                          )}
+                      <div className="mt-4">
+                        <div className="mb-1.5 flex items-center justify-between text-caption">
+                          <span className="font-medium text-foreground">
+                            {complete ? 'Scoring complete' : 'Your progress'}
+                          </span>
+                          <span className="tnum text-muted-foreground">
+                            {event.my_scores_count}/{expected}
+                          </span>
                         </div>
-                        
-                        {event.status === 'active' && !isInactive ? (
-                          <Space>
-                            <Link to={`/judge/score/${event.id}`}>
-                              <Button type="primary">
-                                {progress > 0 ? 'Continue Scoring' : 'Start Scoring'}
-                              </Button>
-                            </Link>
-                            {/* Admin only feature - removed for judges */}
-                          </Space>
-                        ) : (
-                          <Button disabled>
-                            {isInactive ? 'Season Inactive' : event.status === 'completed' ? 'View Details' : 'Not Available'}
-                          </Button>
+                        <ProgressBar value={progress} tone={complete ? 'success' : 'primary'} />
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-between gap-3">
+                        <span className="text-caption text-muted-foreground">
+                          {levelInactive
+                            ? 'Event level is inactive'
+                            : complete
+                              ? 'No entrants left to score'
+                              : event.status === 'active'
+                                ? progress > 0
+                                  ? 'Continue where you left off'
+                                  : 'Ready to score'
+                                : event.status === 'upcoming'
+                                  ? 'Opens when the event starts'
+                                  : 'Not available'}
+                        </span>
+                        {scorable && (
+                          <span className="inline-flex items-center gap-1 text-body font-semibold text-primary">
+                            {progress > 0 ? 'Continue' : 'Start'}
+                            <CaretRight size={16} />
+                          </span>
                         )}
                       </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
-            </>
+                    </div>
+                  </Card>
+                );
+
+                // The whole card is the tap target when the event is scorable.
+                return scorable ? (
+                  <Link key={event.id} to={`/judge/score/${event.id}`} className="block">
+                    {body}
+                  </Link>
+                ) : (
+                  <div key={event.id}>{body}</div>
+                );
+              })}
+            </div>
           )}
-        </Content>
-      </Layout>
-    </Layout>
+
+          {assignedEvents.length > 0 && (
+            <p className="mt-5 flex items-center justify-center gap-1.5 text-caption text-muted-foreground">
+              <ArrowsClockwise size={13} />
+              Updates automatically as events change
+            </p>
+          )}
+        </>
+      )}
+    </AppShell>
   );
 };
 

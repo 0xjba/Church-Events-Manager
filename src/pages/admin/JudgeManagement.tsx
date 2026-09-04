@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Form, Input as AntInput, Modal, message } from 'antd';
+import { Gavel, PencilSimple, Plus, Trash } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
+import type { FormValues } from '@/lib/types';
 import { setPassword } from '@/utils/credentials';
-import Navigation from '@/components/Navigation';
-import ResponsiveTable from '@/components/ResponsiveTable';
-import { Layout, Card, Button, Input, Form, Modal, message, Spin, Space, Typography } from 'antd';
-import { Plus, Edit, Trash2 } from 'lucide-react';
-
-const { Content } = Layout;
-const { Title, Text } = Typography;
+import { AppShell } from '@/components/shell/AppShell';
+import { DataTable } from '@/components/admin/DataTable';
+import { Toolbar } from '@/components/admin/Toolbar';
+import { Avatar, Button, StatusPill } from '@/components/ui/primitives';
+import { SearchInput } from '@/components/ui/inputs';
+import { Sheet } from '@/components/ui/Sheet';
 
 interface Judge {
   id: string;
@@ -27,8 +29,8 @@ const JudgeManagement = () => {
   const [editingJudge, setEditingJudge] = useState<Judge | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
-  
-  // Batch selection state
+  const [search, setSearch] = useState('');
+
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [batchDeleting, setBatchDeleting] = useState(false);
 
@@ -52,25 +54,47 @@ const JudgeManagement = () => {
     }
   };
 
-  const onSubmit = async (values: any) => {
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return judges;
+    return judges.filter((judge) =>
+      [judge.full_name, judge.username, judge.email, judge.church]
+        .filter(Boolean)
+        .some((field) => field.toLowerCase().includes(query)),
+    );
+  }, [judges, search]);
+
+  const openModal = (judge?: Judge) => {
+    if (judge) {
+      setEditingJudge(judge);
+      form.setFieldsValue(judge);
+    } else {
+      setEditingJudge(null);
+      form.resetFields();
+    }
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingJudge(null);
+    form.resetFields();
+  };
+
+  const onSubmit = async (values: FormValues) => {
     try {
       setSubmitting(true);
 
+      const details = {
+        full_name: values.full_name,
+        username: values.username,
+        email: values.email,
+        church: values.church,
+        contact: values.contact || null,
+      };
+
       if (editingJudge) {
-        // Update existing judge
-        const updateData: any = {
-          full_name: values.full_name,
-          username: values.username,
-          email: values.email,
-          church: values.church,
-          contact: values.contact || null,
-        };
-
-        const { error } = await supabase
-          .from('judges')
-          .update(updateData)
-          .eq('id', editingJudge.id);
-
+        const { error } = await supabase.from('judges').update(details).eq('id', editingJudge.id);
         if (error) throw error;
 
         // Hashing happens in the edge function, not here.
@@ -78,23 +102,15 @@ const JudgeManagement = () => {
           await setPassword('judge', editingJudge.id, values.password);
         }
 
-        message.success('Judge updated successfully');
+        message.success('Judge updated');
       } else {
-        // Create new judge record
-        const { data: newJudge, error: judgeError } = await supabase
+        const { data: newJudge, error } = await supabase
           .from('judges')
-          .insert({
-            full_name: values.full_name,
-            username: values.username,
-            email: values.email,
-            church: values.church,
-            contact: values.contact || null,
-            is_active: true
-          })
+          .insert({ ...details, is_active: true })
           .select()
           .single();
 
-        if (judgeError) throw judgeError;
+        if (error) throw error;
 
         try {
           await setPassword('judge', newJudge.id, values.password);
@@ -104,294 +120,280 @@ const JudgeManagement = () => {
           throw credentialError;
         }
 
-        message.success('Judge added successfully');
+        message.success('Judge added');
       }
 
-      setIsModalOpen(false);
-      form.resetFields();
-      setEditingJudge(null);
+      closeModal();
       fetchJudges();
-    } catch (error: any) {
-      message.error(error?.message || (editingJudge ? 'Failed to update judge' : 'Failed to add judge'));
+    } catch (error) {
+      message.error(
+        error instanceof Error
+          ? error.message
+          : editingJudge
+            ? 'Failed to update judge'
+            : 'Failed to add judge',
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleEdit = (judge: Judge) => {
-    setEditingJudge(judge);
-    form.setFieldsValue(judge);
-    setIsModalOpen(true);
-  };
-
-  const handleDelete = async (id: string) => {
+  const handleDelete = (judge: Judge) => {
     Modal.confirm({
-      title: 'Are you sure you want to delete this judge?',
+      title: `Delete ${judge.full_name}?`,
+      content: 'Scores this judge submitted are deleted with the account.',
+      okText: 'Delete',
       okType: 'danger',
       onOk: async () => {
         try {
-          const { error } = await supabase
-            .from('judges')
-            .delete()
-            .eq('id', id);
-
+          const { error } = await supabase.from('judges').delete().eq('id', judge.id);
           if (error) throw error;
-          message.success('Judge deleted successfully');
+          message.success('Judge deleted');
           fetchJudges();
-        } catch (error) {
+        } catch {
           message.error('Failed to delete judge');
         }
-      }
+      },
     });
   };
 
-  const handleBatchDelete = async () => {
-    if (selectedRowKeys.length === 0) {
-      message.warning('Please select judges to delete');
-      return;
-    }
+  const handleBatchDelete = () => {
+    if (selectedRowKeys.length === 0) return;
 
     Modal.confirm({
       title: `Delete ${selectedRowKeys.length} judge(s)?`,
       content: 'This action cannot be undone.',
+      okText: 'Delete',
       okType: 'danger',
       onOk: async () => {
         try {
           setBatchDeleting(true);
-          
-          // Delete each selected judge
-          for (const judgeId of selectedRowKeys) {
-            const { error } = await supabase
-              .from('judges')
-              .delete()
-              .eq('id', judgeId);
-            
-            if (error) throw error;
-          }
+          const { error } = await supabase
+            .from('judges')
+            .delete()
+            .in('id', selectedRowKeys.map(String));
 
-          message.success(`Successfully deleted ${selectedRowKeys.length} judge(s)`);
+          if (error) throw error;
+          message.success(`Deleted ${selectedRowKeys.length} judge(s)`);
           setSelectedRowKeys([]);
           fetchJudges();
-        } catch (error: any) {
-          message.error(error.message || 'Failed to delete judges');
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : 'Failed to delete judges');
         } finally {
           setBatchDeleting(false);
         }
-      }
+      },
     });
-  };
-
-  const rowSelection = {
-    selectedRowKeys,
-    onChange: (selectedRowKeys: React.Key[]) => {
-      setSelectedRowKeys(selectedRowKeys);
-    },
   };
 
   const columns = [
     {
-      title: 'Name',
+      title: 'Judge',
       dataIndex: 'full_name',
       key: 'full_name',
+      sorter: (a: Judge, b: Judge) => a.full_name.localeCompare(b.full_name),
+      render: (fullName: string, record: Judge) => (
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar name={fullName} size={32} />
+          <div className="min-w-0">
+            <div className="truncate font-medium text-foreground">{fullName}</div>
+            <div className="truncate text-caption text-muted-foreground">@{record.username}</div>
+          </div>
+        </div>
+      ),
     },
-    {
-      title: 'Username',
-      dataIndex: 'username',
-      key: 'username',
-    },
-    {
-      title: 'Email',
-      dataIndex: 'email',
-      key: 'email',
-    },
-    {
-      title: 'Church',
-      dataIndex: 'church',
-      key: 'church',
-    },
+    { title: 'Email', dataIndex: 'email', key: 'email', ellipsis: true },
+    { title: 'Church', dataIndex: 'church', key: 'church', ellipsis: true },
     {
       title: 'Contact',
       dataIndex: 'contact',
       key: 'contact',
-      render: (contact: string | null) => contact || 'N/A',
+      render: (contact: string | null) => contact || <span className="text-muted-foreground">—</span>,
     },
     {
       title: 'Status',
       dataIndex: 'is_active',
       key: 'is_active',
-      render: (is_active: boolean) => (
-        <span style={{ 
-          color: is_active ? '#52c41a' : '#f5222d',
-          fontWeight: 'bold'
-        }}>
-          {is_active ? 'Active' : 'Inactive'}
-        </span>
+      width: 110,
+      render: (isActive: boolean) => (
+        <StatusPill tone={isActive ? 'success' : 'neutral'} dot>
+          {isActive ? 'Active' : 'Inactive'}
+        </StatusPill>
       ),
     },
     {
-      title: 'Actions',
+      title: '',
       key: 'actions',
-      width: 120,
-      render: (_: any, record: Judge) => (
-        <Space>
-          <Button
-            type="text"
-            icon={<Edit size={16} />}
-            onClick={() => handleEdit(record)}
-          />
-          <Button
-            type="text"
-            danger
-            icon={<Trash2 size={16} />}
-            onClick={() => handleDelete(record.id)}
-          />
-        </Space>
+      width: 90,
+      fixed: 'right' as const,
+      render: (_: unknown, record: Judge) => (
+        <div className="flex justify-end gap-1">
+          <button
+            type="button"
+            aria-label="PencilSimple judge"
+            title="PencilSimple judge"
+            onClick={() => openModal(record)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-sunken hover:text-foreground"
+          >
+            <PencilSimple size={15} />
+          </button>
+          <button
+            type="button"
+            aria-label="Delete judge"
+            title="Delete judge"
+            onClick={() => handleDelete(record)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive-soft hover:text-destructive"
+          >
+            <Trash size={15} />
+          </button>
+        </div>
       ),
     },
   ];
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Navigation />
-      
-      <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-              <div>
-                <Title level={2} style={{ margin: 0 }}>
-                  Judge Management
-                </Title>
-                <Text type="secondary">
-                  Manage event judges
-                </Text>
-              </div>
-              
-              <div className="flex gap-2">
+    <AppShell
+      variant="admin"
+      title="Judges"
+      subtitle={`${judges.length} accounts`}
+      maxWidth="wide"
+      actions={
+        <Button size="sm" icon={<Plus size={15} />} onClick={() => openModal()}>
+          <span className="hidden sm:inline">Add judge</span>
+        </Button>
+      }
+    >
+      <DataTable
+        columns={columns}
+        dataSource={filtered}
+        rowKey="id"
+        loading={loading}
+        scrollX={860}
+        rowSelection={{ selectedRowKeys, onChange: setSelectedRowKeys }}
+        toolbar={
+          <Toolbar
+            selectionCount={selectedRowKeys.length}
+            selectionActions={
+              <>
                 <Button
-                  type="primary"
-                  icon={<Plus size={16} />}
-                  onClick={() => {
-                    setEditingJudge(null);
-                    form.resetFields();
-                    setIsModalOpen(true);
-                  }}
-                  className="md:inline-flex hidden:flex"
+                  variant="danger"
+                  size="sm"
+                  icon={<Trash size={14} />}
+                  loading={batchDeleting}
+                  onClick={handleBatchDelete}
                 >
-                  <span className="hidden md:inline">Add Judge</span>
+                  Delete
                 </Button>
-                {selectedRowKeys.length > 0 && (
-                  <Button 
-                    danger 
-                    icon={<Trash2 size={16} />}
-                    loading={batchDeleting}
-                    onClick={handleBatchDelete}
-                    className="md:inline-flex hidden:flex"
-                  >
-                    <span className="hidden md:inline">Delete Selected ({selectedRowKeys.length})</span>
-                  </Button>
-                )}
-              </div>
-            </div>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedRowKeys([])}>
+                  Clear
+                </Button>
+              </>
+            }
+          >
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search judges"
+              className="w-full max-w-sm"
+            />
+          </Toolbar>
+        }
+        emptyIcon={<Gavel size={22} />}
+        emptyTitle={search ? 'No matching judges' : 'No judges yet'}
+        emptyDescription={
+          search
+            ? 'Try a different name, username or church.'
+            : 'Judges need an account before they can be assigned to events.'
+        }
+        emptyAction={
+          !search && (
+            <Button size="sm" icon={<Plus size={14} />} onClick={() => openModal()}>
+              Add judge
+            </Button>
+          )
+        }
+      />
+
+      <Sheet
+        open={isModalOpen}
+        onClose={closeModal}
+        dismissable={!submitting}
+        title={editingJudge ? 'PencilSimple judge' : 'Add judge'}
+        description={
+          editingJudge
+            ? 'Leave the password blank to keep the current one.'
+            : 'Creates the login this judge will use to score.'
+        }
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" size="lg" onClick={closeModal} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button size="lg" block loading={submitting} onClick={() => form.submit()}>
+              {editingJudge ? 'Save changes' : 'Add judge'}
+            </Button>
+          </div>
+        }
+      >
+        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+          <Form.Item
+            label="Full name"
+            name="full_name"
+            rules={[{ required: true, min: 2, message: 'Name must be at least 2 characters' }]}
+          >
+            <AntInput />
+          </Form.Item>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Form.Item
+              label="Username"
+              name="username"
+              rules={[{ required: true, message: 'Username is required' }]}
+            >
+              <AntInput autoComplete="off" />
+            </Form.Item>
+
+            <Form.Item
+              label="Password"
+              name="password"
+              rules={[
+                { required: !editingJudge, min: 8, message: 'Password must be at least 8 characters' },
+              ]}
+            >
+              <AntInput.Password
+                autoComplete="new-password"
+                placeholder={editingJudge ? 'Leave blank' : 'At least 8 characters'}
+              />
+            </Form.Item>
           </div>
 
-          <Card>
-            <ResponsiveTable
-              columns={columns}
-              dataSource={judges}
-              loading={loading}
-              rowKey="id"
-              rowSelection={rowSelection}
-              cardTitle={(record) => record.full_name}
-              locale={{
-                emptyText: loading ? <Spin /> : undefined
-              }}
-            />
-          </Card>
-
-          <Modal
-            title={editingJudge ? 'Edit Judge' : 'Add New Judge'}
-            open={isModalOpen}
-            onCancel={() => {
-              setIsModalOpen(false);
-              setEditingJudge(null);
-              form.resetFields();
-            }}
-            footer={null}
-            width={500}
+          <Form.Item
+            label="Email"
+            name="email"
+            rules={[
+              { required: true, message: 'Email is required' },
+              { type: 'email', message: 'Enter a valid email' },
+            ]}
           >
-            <Form
-              form={form}
-              layout="vertical"
-              onFinish={onSubmit}
+            <AntInput inputMode="email" />
+          </Form.Item>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Form.Item
+              label="Church"
+              name="church"
+              rules={[{ required: true, message: 'Church is required' }]}
             >
-              <Form.Item
-                label="Judge Name"
-                name="full_name"
-                rules={[{ required: true, message: 'Name must be at least 2 characters', min: 2 }]}
-              >
-                <Input />
-              </Form.Item>
-              
-              <Form.Item
-                label="Username"
-                name="username"
-                rules={[{ required: true, message: 'Username is required' }]}
-              >
-                <Input />
-              </Form.Item>
-              
-              <Form.Item
-                label="Email"
-                name="email"
-                rules={[
-                  { required: true, message: 'Email is required' },
-                  { type: 'email', message: 'Please enter a valid email' }
-                ]}
-              >
-                <Input />
-              </Form.Item>
-              
-              <Form.Item
-                label={editingJudge ? "Password (leave blank to keep current)" : "Password"}
-                name="password"
-                rules={[{
-                  required: !editingJudge,
-                  message: 'Password must be at least 8 characters',
-                  min: 8,
-                }]}
-              >
-                <Input.Password />
-              </Form.Item>
-              
-              <Form.Item
-                label="Church"
-                name="church"
-                rules={[{ required: true, message: 'Church is required' }]}
-              >
-                <Input />
-              </Form.Item>
-              
-              <Form.Item
-                label="Contact (Optional)"
-                name="contact"
-              >
-                <Input placeholder="Phone or email" />
-              </Form.Item>
-              
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
-                <Button onClick={() => setIsModalOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="primary" htmlType="submit" loading={submitting}>
-                  {editingJudge ? 'Update' : 'Add'} Judge
-                </Button>
-              </div>
-            </Form>
-          </Modal>
-        </Content>
-      </Layout>
-    </Layout>
+              <AntInput />
+            </Form.Item>
+
+            <Form.Item label="Contact" name="contact">
+              <AntInput placeholder="Optional phone" />
+            </Form.Item>
+          </div>
+        </Form>
+      </Sheet>
+    </AppShell>
   );
 };
 

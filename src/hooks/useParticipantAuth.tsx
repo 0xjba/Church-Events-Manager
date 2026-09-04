@@ -1,23 +1,26 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-interface ParticipantData {
+export interface ParticipantData {
   id: string;
   username: string;
   full_name: string;
   age?: number;
   chest_number?: string;
-  category?: 'individual' | 'group';
+  age_category?: string;
   church: string;
   district?: string;
+  contact?: string;
   email?: string;
-  role?: 'participant' | 'judge'; // Add role to distinguish between participant and judge
+  is_active?: boolean;
+  /** Distinguishes the two account types that share this login. */
+  role?: 'participant' | 'judge';
 }
 
 interface ParticipantAuthContextType {
   participant: ParticipantData | null;
   loading: boolean;
-  signIn: (username: string, password: string) => Promise<{ error?: any }>;
+  signIn: (username: string, password: string) => Promise<{ error?: unknown }>;
   signOut: () => void;
   isAuthenticated: boolean;
 }
@@ -76,15 +79,9 @@ export const ParticipantAuthProvider = ({ children }: { children: React.ReactNod
 
   const signIn = async (username: string, password: string) => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
-      
       const { data, error } = await supabase.functions.invoke('participant-auth/login', {
         body: { username, password },
-        signal: controller.signal
       });
-
-      clearTimeout(timeoutId);
 
       if (error || data?.error) {
         return { error: data?.error || error };
@@ -102,9 +99,6 @@ export const ParticipantAuthProvider = ({ children }: { children: React.ReactNod
       return {};
     } catch (error) {
       console.error('Auth sign in failed:', error);
-      if (error.name === 'AbortError') {
-        return { error: 'Request timed out. Please try again.' };
-      }
       return { error: 'Failed to sign in' };
     }
   };

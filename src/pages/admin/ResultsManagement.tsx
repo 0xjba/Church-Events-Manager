@@ -1,38 +1,124 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { message } from 'antd';
+import { Calculator, DownloadSimple, Eye, EyeSlash, Medal, Trophy } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
+import type { FormValues, SupabaseRow } from '@/lib/types';
 import { ResultsCalculator } from '@/utils/resultsCalculator';
-import Navigation from '@/components/Navigation';
-import ResponsiveTable from '@/components/ResponsiveTable';
-import { Layout, Card, Button, Badge, Modal, Select, Typography, Space, Spin, message } from 'antd';
-import { Calculator, Eye, EyeOff, Download, FileText, Trophy, RefreshCw } from 'lucide-react';
 import { ExportUtils, WinnersExportData } from '@/utils/exportUtils';
+import { AppShell } from '@/components/shell/AppShell';
+import { DataTable } from '@/components/admin/DataTable';
+import {
+  Button,
+  Card,
+  CardHeader,
+  Skeleton,
+  StatusPill,
+  statusTone,
+} from '@/components/ui/primitives';
+import { Sheet } from '@/components/ui/Sheet';
+import { cn, formatScore } from '@/lib/utils';
 
-const { Content } = Layout;
-const { Title, Text } = Typography;
-
-interface Event {
+interface EventRecord {
   id: string;
   name: string;
   type: string;
+  event_type: string;
   status: string;
+  age_category: string | null;
   results_published: boolean;
   event_order: number | null;
-  age_category: string | null;
 }
 
+interface JudgeScore {
+  judgeName: string;
+  judgeChurch: string;
+  score: number;
+}
+
+interface CriteriaScore {
+  id: string;
+  name: string;
+  max_score: number;
+  weight: number;
+  judgeScores: JudgeScore[];
+  averageScore: number;
+}
+
+interface DetailedResult {
+  id: string;
+  rank: number | null;
+  total_score: number;
+  average_score: number;
+  tie_breaker_reason: string | null;
+  participant?: {
+    full_name: string;
+    chest_number: string;
+    age_category: string;
+    church: string;
+  } | null;
+  group?: { name: string; description: string | null } | null;
+  criteriaScores: CriteriaScore[];
+  maxPossibleScore: number;
+}
+
+interface ChampionEntry {
+  participant: { full_name: string; chest_number: string; church: string };
+  totalPoints: number;
+}
+
+interface Champion {
+  champions: ChampionEntry[];
+  maxPoints: number;
+  isTie: boolean;
+  totalParticipants: number;
+}
+
+// Winners are grouped by age category, then by the running order the
+// organisers use on the day.
+const AGE_ORDER: Record<string, number> = {
+  'Sub Juniors': 1,
+  Juniors: 2,
+  Intermediates: 3,
+  Seniors: 4,
+};
+
+const EVENT_ORDER: Record<string, number> = {
+  'Solo Song': 1,
+  'Action Song': 2,
+  'Story Telling': 3,
+  'Solo Song Male': 1,
+  'Solo Song Female': 2,
+  Speech: 3,
+  Essay: 4,
+  Story: 5,
+  Verses: 6,
+  'Bible Quiz': 7,
+};
+
+const rankTone = (rank: number) =>
+  rank === 1
+    ? 'bg-gold/15 text-gold'
+    : rank === 2
+      ? 'bg-silver/20 text-silver'
+      : rank === 3
+        ? 'bg-bronze/15 text-bronze'
+        : 'bg-muted text-muted-foreground';
+
 const ResultsManagement = () => {
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<EventRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState<string | null>(null);
+
   const [viewingResults, setViewingResults] = useState<string | null>(null);
-  const [resultsData, setResultsData] = useState<any[]>([]);
+  const [resultsData, setResultsData] = useState<DetailedResult[]>([]);
   const [resultsLoading, setResultsLoading] = useState(false);
-  const [currentEventType, setCurrentEventType] = useState<string>('individual');
+  const [viewingEventType, setViewingEventType] = useState<string>('individual');
+
   const [exportingWinners, setExportingWinners] = useState(false);
   const [viewingWinners, setViewingWinners] = useState(false);
   const [winnersData, setWinnersData] = useState<WinnersExportData | null>(null);
   const [showScoresForEvent, setShowScoresForEvent] = useState<Record<string, boolean>>({});
-  const [individualChampion, setIndividualChampion] = useState<any>(null);
+  const [individualChampion, setIndividualChampion] = useState<Champion | null>(null);
 
   useEffect(() => {
     fetchEvents();
@@ -44,9 +130,10 @@ const ResultsManagement = () => {
         .from('events')
         .select('*')
         .order('event_order', { ascending: true, nullsFirst: false });
+
       if (error) throw error;
-      setEvents(data || []);
-    } catch (error) {
+      setEvents((data || []) as EventRecord[]);
+    } catch {
       message.error('Failed to load events');
     } finally {
       setLoading(false);
@@ -57,8 +144,7 @@ const ResultsManagement = () => {
     try {
       setCalculating(eventId);
       message.loading('Calculating results...', 0);
-      
-      // First, get the event details to determine the event type
+
       const { data: eventData, error: eventError } = await supabase
         .from('events')
         .select('event_type')
@@ -67,262 +153,176 @@ const ResultsManagement = () => {
 
       if (eventError) throw eventError;
 
-      // Check if event has participants/groups and scores based on event type
       if (eventData.event_type === 'individual') {
-        // Check for participants
-        const { data: participants, error: participantsError } = await supabase
+        const { data: entrants, error: entrantsError } = await supabase
           .from('event_participants')
           .select('participant_id')
           .eq('event_id', eventId);
 
-        if (participantsError) throw participantsError;
-        if (!participants || participants.length === 0) {
+        if (entrantsError) throw entrantsError;
+        if (!entrants || entrants.length === 0) {
           message.destroy();
-          message.warning('No participants found for this event');
+          message.warning('No participants in this event');
           return;
         }
       } else {
-        // Check for groups
-        const { data: groups, error: groupsError } = await supabase
+        const { data: entrantGroups, error: groupsError } = await supabase
           .from('event_groups')
           .select('group_id')
           .eq('event_id', eventId);
 
         if (groupsError) throw groupsError;
-        if (!groups || groups.length === 0) {
+        if (!entrantGroups || entrantGroups.length === 0) {
           message.destroy();
-          message.warning('No groups found for this event');
+          message.warning('No groups in this event');
           return;
         }
       }
 
-      const { data: scores, error: scoresError } = await supabase
+      const { data: lockedScores, error: scoresError } = await supabase
         .from('scores')
         .select('id')
         .eq('event_id', eventId)
         .eq('is_locked', true);
 
       if (scoresError) throw scoresError;
-      if (!scores || scores.length === 0) {
+      if (!lockedScores || lockedScores.length === 0) {
         message.destroy();
-        message.warning('No locked scores found for this event');
+        message.warning('No locked scores for this event');
         return;
       }
-      
-      // Calculate results using the ResultsCalculator
+
       const results = await ResultsCalculator.calculateEventResults(eventId);
-      
-      // Save results to the database for all participants/groups
-      const resultsToInsert = results.results.map(result => {
-        const baseResult = {
-          event_id: eventId,
-          total_score: result.total_score,
-          average_score: result.average_score,
-          rank: result.rank,
-          tie_breaker_reason: result.tie_breaker_reason,
-          calculated_at: new Date().toISOString()
-        };
 
-        // Add either participant_id or group_id based on event type
-        if (eventData.event_type === 'individual') {
-          return {
-            ...baseResult,
-            participant_id: result.participant_id
-          };
-        } else {
-          return {
-            ...baseResult,
-            group_id: result.group_id
-          };
-        }
-      });
+      const resultsToInsert = results.results.map((result) => ({
+        event_id: eventId,
+        total_score: result.total_score,
+        average_score: result.average_score,
+        rank: result.rank,
+        tie_breaker_reason: result.tie_breaker_reason,
+        calculated_at: new Date().toISOString(),
+        ...(eventData.event_type === 'individual'
+          ? { participant_id: result.participant_id }
+          : { group_id: result.group_id }),
+      }));
 
-      // First, delete any existing results for this event
       const { error: deleteError } = await supabase
         .from('results')
         .delete()
         .eq('event_id', eventId);
-
       if (deleteError) throw deleteError;
 
-      // Then insert the new results
-      const { error: insertError } = await supabase
-        .from('results')
-        .insert(resultsToInsert);
-
+      const { error: insertError } = await supabase.from('results').insert(resultsToInsert);
       if (insertError) throw insertError;
-      
-      // Update the event to mark results as published
+
       const { error: updateError } = await supabase
         .from('events')
         .update({ results_published: true })
         .eq('id', eventId);
-      
       if (updateError) throw updateError;
-      
+
       message.destroy();
-      const entityType = eventData.event_type === 'individual' ? 'participants' : 'groups';
-      message.success(`Results calculated successfully for ${results.results.length} ${entityType}!`);
-      
-      // Refresh events to show updated status
+      message.success(
+        `Results published for ${results.results.length} ${
+          eventData.event_type === 'individual' ? 'participants' : 'groups'
+        }`,
+      );
+
       await fetchEvents();
-      
     } catch (error) {
       message.destroy();
       console.error('Error calculating results:', error);
-      message.error('Failed to calculate results. Please check the console for details.');
+      message.error('Failed to calculate results');
     } finally {
       setCalculating(null);
     }
   };
 
-  const fetchResults = async (eventId: string) => {
+  const fetchResults = async (eventId: string, eventType: string) => {
     try {
       setResultsLoading(true);
       setViewingResults(eventId);
-      
-      // First, get the event details to determine the event type
-      const { data: eventData, error: eventError } = await supabase
-        .from('events')
-        .select('event_type')
-        .eq('id', eventId)
-        .single();
+      setViewingEventType(eventType);
 
-      if (eventError) throw eventError;
-      
-      // Store the event type for use in display logic
-      setCurrentEventType(eventData.event_type);
-      
-      // Fetch results based on event type
-      let resultsQuery;
-      if (eventData.event_type === 'individual') {
-        // Fetch individual event results with participant details
-        resultsQuery = supabase
-          .from('results')
-          .select(`
-            *,
-            participant:participants(
-              full_name,
-              chest_number,
-              age_category,
-              church
-            )
-          `)
-          .eq('event_id', eventId)
-          .not('participant_id', 'is', null)
-          .order('rank', { ascending: true });
-      } else {
-        // Fetch group event results with group details
-        resultsQuery = supabase
-          .from('results')
-          .select(`
-            *,
-            group:groups(
-              name,
-              description
-            )
-          `)
-          .eq('event_id', eventId)
-          .not('group_id', 'is', null)
-          .order('rank', { ascending: true });
-      }
-      
+      const resultsQuery =
+        eventType === 'individual'
+          ? supabase
+              .from('results')
+              .select(
+                `*, participant:participants( full_name, chest_number, age_category, church )`,
+              )
+              .eq('event_id', eventId)
+              .not('participant_id', 'is', null)
+              .order('rank', { ascending: true })
+          : supabase
+              .from('results')
+              .select(`*, group:groups( name, description )`)
+              .eq('event_id', eventId)
+              .not('group_id', 'is', null)
+              .order('rank', { ascending: true });
+
       const { data: results, error: resultsError } = await resultsQuery;
-      
       if (resultsError) throw resultsError;
-      
-      // Fetch criteria for this event
+
       const { data: criteria, error: criteriaError } = await supabase
         .from('event_criteria')
         .select('*')
         .eq('event_id', eventId)
         .order('created_at');
-      
       if (criteriaError) throw criteriaError;
-      
-      // Fetch detailed scores based on event type
-      let scores;
-      let scoresError;
-      
-      if (currentEventType === 'individual') {
-        // For individual events, fetch only participant scores
-        const { data, error } = await supabase
-          .from('scores')
-          .select(`
-            *,
-            judge:judges(
-              full_name,
-              church
-            )
-          `)
-          .eq('event_id', eventId)
-          .eq('is_locked', true)
-          .not('participant_id', 'is', null);
-        
-        scores = data;
-        scoresError = error;
-      } else {
-        // For group events, fetch only group scores
-        const { data, error } = await supabase
-          .from('scores')
-          .select(`
-            *,
-            judge:judges(
-              full_name,
-              church
-            )
-          `)
-          .eq('event_id', eventId)
-          .eq('is_locked', true)
-          .not('group_id', 'is', null);
-        
-        scores = data;
-        scoresError = error;
-      }
-      
+
+      const scoresQuery = supabase
+        .from('scores')
+        .select(`*, judge:judges( full_name, church )`)
+        .eq('event_id', eventId)
+        .eq('is_locked', true);
+
+      const { data: scores, error: scoresError } = await (eventType === 'individual'
+        ? scoresQuery.not('participant_id', 'is', null)
+        : scoresQuery.not('group_id', 'is', null));
+
       if (scoresError) throw scoresError;
-      
-      // Combine all data with detailed judge scores
-      const detailedResults = results?.map(result => {
-        // Get scores for this specific entity
-        let entityScores;
-        if (currentEventType === 'individual') {
-          entityScores = scores?.filter(s => s.participant_id === result.participant_id) || [];
-        } else {
-          entityScores = scores?.filter(s => s.group_id === result.group_id) || [];
-        }
-        
-        // Group scores by criteria with judge details
-        const criteriaScores = criteria?.map(criterion => {
-          const criteriaScores = entityScores.filter(s => s.criteria_id === criterion.id);
-          const judgeScores = criteriaScores.map(score => ({
-            judgeName: score.judge?.full_name || 'Unknown Judge',
-            judgeChurch: score.judge?.church || 'Unknown Church',
-            score: score.score
-          }));
-          
-          // Calculate average score
-          const averageScore = criteriaScores.length > 0 
-            ? criteriaScores.reduce((sum, s) => sum + s.score, 0) / criteriaScores.length
-            : 0;
-          
+
+      const detailed = (results ?? []).map((result: FormValues) => {
+        const entityScores = (scores ?? []).filter((score: FormValues) =>
+          eventType === 'individual'
+            ? score.participant_id === result.participant_id
+            : score.group_id === result.group_id,
+        );
+
+        const criteriaScores = (criteria ?? []).map((criterion) => {
+          const forCriterion = entityScores.filter(
+            (score: FormValues) => score.criteria_id === criterion.id,
+          );
+
           return {
             ...criterion,
-            judgeScores,
-            averageScore,
-            maxPossibleScore: criterion.max_score
+            judgeScores: forCriterion.map((score: FormValues) => ({
+              judgeName: score.judge?.full_name || 'Unknown judge',
+              judgeChurch: score.judge?.church || '',
+              score: score.score,
+            })),
+            averageScore:
+              forCriterion.length > 0
+                ? forCriterion.reduce(
+                    (total: number, score: FormValues) => total + score.score,
+                    0,
+                  ) / forCriterion.length
+                : 0,
           };
-        }) || [];
-        
+        });
+
         return {
           ...result,
           criteriaScores,
-          maxPossibleScore: criteria?.reduce((total, c) => total + c.max_score, 0) || 0
-        };
-      }) || [];
-      
-      setResultsData(detailedResults);
-      
+          maxPossibleScore: (criteria ?? []).reduce(
+            (total, criterion) => total + criterion.max_score,
+            0,
+          ),
+        } as unknown as DetailedResult;
+      });
+
+      setResultsData(detailed);
     } catch (error) {
       console.error('Error fetching results:', error);
       message.error('Failed to fetch results');
@@ -331,40 +331,42 @@ const ResultsManagement = () => {
     }
   };
 
-  // Custom ordering function for events in winners modal
-  const getEventOrder = (ageCategory: string | null, eventName: string): number => {
-    const ageOrder = {
-      'Sub Juniors': 1,
-      'Juniors': 2,
-      'Intermediates': 3,
-      'Seniors': 4
+  const eventSortKey = (ageCategory: string | null, eventName: string) =>
+    (AGE_ORDER[ageCategory ?? ''] ?? 999) * 1000 + (EVENT_ORDER[eventName] ?? 999);
+
+  const calculateIndividualChampion = (
+    winnerEvents: WinnersExportData['events'],
+  ): Champion | null => {
+    const points: Record<string, ChampionEntry> = {};
+
+    winnerEvents.forEach((event) => {
+      event.winners.forEach((winner) => {
+        const key = winner.participant.full_name;
+        if (!points[key]) points[key] = { participant: winner.participant, totalPoints: 0 };
+        if (winner.rank === 1) points[key].totalPoints += 5;
+        else if (winner.rank === 2) points[key].totalPoints += 3;
+      });
+    });
+
+    const entries = Object.values(points);
+    if (entries.length === 0) return null;
+
+    const maxPoints = Math.max(...entries.map((entry) => entry.totalPoints));
+    const champions = entries.filter((entry) => entry.totalPoints === maxPoints);
+
+    return {
+      champions,
+      maxPoints,
+      isTie: champions.length > 1,
+      totalParticipants: entries.length,
     };
-
-    const eventOrder = {
-      'Solo Song': 1,
-      'Action Song': 2,
-      'Story Telling': 3,
-      'Solo Song Male': 1,
-      'Solo Song Female': 2,
-      'Speech': 3,
-      'Essay': 4,
-      'Story': 5,
-      'Verses': 6,
-      'Bible Quiz': 7
-    };
-
-    const agePriority = ageOrder[ageCategory as keyof typeof ageOrder] || 999;
-    const eventPriority = eventOrder[eventName as keyof typeof eventOrder] || 999;
-
-    return agePriority * 1000 + eventPriority;
   };
 
   const fetchWinners = async () => {
     try {
       setExportingWinners(true);
-      message.loading('Loading winners data...', 0);
+      message.loading('Loading winners...', 0);
 
-      // Get all completed events with published results
       const { data: completedEvents, error: eventsError } = await supabase
         .from('events')
         .select('*')
@@ -376,34 +378,21 @@ const ResultsManagement = () => {
 
       if (!completedEvents || completedEvents.length === 0) {
         message.destroy();
-        message.warning('No completed events with published results found');
+        message.warning('No completed events with published results');
         return;
       }
 
-      // Sort events according to the specified order
-      const sortedEvents = completedEvents.sort((a, b) => {
-        return getEventOrder(a.age_category, a.name) - getEventOrder(b.age_category, b.name);
-      });
+      const sortedEvents = [...completedEvents].sort(
+        (a, b) =>
+          eventSortKey(a.age_category, a.name) - eventSortKey(b.age_category, b.name),
+      );
 
-      // Fetch winners (top 3) for each event
-      const winnersData: WinnersExportData = {
-        events: [],
-        generated_at: new Date().toISOString()
-      };
+      const winners: WinnersExportData = { events: [], generated_at: new Date().toISOString() };
 
       for (const event of sortedEvents) {
-        // Get top 3 results for this event
         const { data: eventResults, error: resultsError } = await supabase
           .from('results')
-          .select(`
-            *,
-            participant:participants(
-              full_name,
-              chest_number,
-              church,
-              district
-            )
-          `)
+          .select(`*, participant:participants( full_name, chest_number, church, district )`)
           .eq('event_id', event.id)
           .not('participant_id', 'is', null)
           .order('rank', { ascending: true })
@@ -412,12 +401,12 @@ const ResultsManagement = () => {
         if (resultsError) throw resultsError;
 
         if (eventResults && eventResults.length > 0) {
-          winnersData.events.push({
+          winners.events.push({
             event_id: event.id,
             event_name: event.name,
             event_type: event.event_type,
             age_category: event.age_category,
-            winners: eventResults.map(result => ({
+            winners: eventResults.map((result: FormValues) => ({
               rank: result.rank || 0,
               total_score: result.total_score,
               average_score: result.average_score,
@@ -426,643 +415,374 @@ const ResultsManagement = () => {
                 full_name: result.participant?.full_name || 'Unknown',
                 chest_number: result.participant?.chest_number || 'N/A',
                 church: result.participant?.church || 'Unknown',
-                district: result.participant?.district || 'Unknown'
-              }
-            }))
+                district: result.participant?.district || 'Unknown',
+              },
+            })),
           });
         }
       }
 
       message.destroy();
-      
-      if (winnersData.events.length === 0) {
-        message.warning('No winners found in completed events');
+
+      if (winners.events.length === 0) {
+        message.warning('No winners found');
         return;
       }
 
-      setWinnersData(winnersData);
-      
-      // Calculate Individual Champion
-      const champion = calculateIndividualChampion(winnersData.events);
-      setIndividualChampion(champion);
-      
+      setWinnersData(winners);
+      setIndividualChampion(calculateIndividualChampion(winners.events));
+      setShowScoresForEvent({});
       setViewingWinners(true);
-      setShowScoresForEvent({}); // Reset score visibility for all events when opening modal
-
     } catch (error) {
       message.destroy();
       console.error('Error fetching winners:', error);
-      message.error('Failed to fetch winners. Please check the console for details.');
+      message.error('Failed to fetch winners');
     } finally {
       setExportingWinners(false);
     }
   };
 
   const exportWinners = () => {
-    if (winnersData) {
-      ExportUtils.downloadWinnersCSV(winnersData);
-      message.success(`Winners export completed! Exported ${winnersData.events.length} events with winners.`);
-    }
-  };
-
-  const calculateIndividualChampion = (events: any[]) => {
-    const participantPoints: Record<string, any> = {};
-
-    // Calculate points for each participant
-    events.forEach(event => {
-      event.winners.forEach((winner: any) => {
-        const participantId = winner.participant.full_name;
-        
-        if (!participantPoints[participantId]) {
-          participantPoints[participantId] = {
-            participant: winner.participant,
-            totalPoints: 0
-          };
-        }
-
-        // Add points based on rank
-        if (winner.rank === 1) {
-          participantPoints[participantId].totalPoints += 5;
-        } else if (winner.rank === 2) {
-          participantPoints[participantId].totalPoints += 3;
-        }
-      });
-    });
-
-    // Find participants with highest points (handle ties)
-    const participants = Object.values(participantPoints);
-    if (participants.length === 0) {
-      return null;
-    }
-
-    const maxPoints = Math.max(...participants.map((p: any) => p.totalPoints));
-    const champions = participants.filter((p: any) => p.totalPoints === maxPoints);
-
-    return {
-      champions: champions,
-      maxPoints: maxPoints,
-      isTie: champions.length > 1,
-      totalParticipants: participants.length
-    };
+    if (!winnersData) return;
+    ExportUtils.downloadWinnersCSV(winnersData);
+    message.success(`Exported winners for ${winnersData.events.length} events`);
   };
 
   const columns = [
-    { title: 'Event', dataIndex: 'name', key: 'name' },
-    { title: 'Age Category', dataIndex: 'age_category', key: 'age_category', render: (age_category: string | null) => age_category || 'All Categories' },
-    { title: 'Status', dataIndex: 'status', key: 'status', render: (status: string) => <Badge color="blue" text={status} /> },
-    { title: 'Results', dataIndex: 'results_published', key: 'results_published', render: (published: boolean) => <Badge color={published ? 'green' : 'orange'} text={published ? 'Published' : 'Draft'} /> },
-    { 
-      title: 'Actions', 
-      key: 'actions', 
-      render: (_, record: Event) => (
-        <Space>
-          {!record.results_published ? (
-            <Button 
-              type="primary" 
-              icon={<Calculator size={16} />}
-              onClick={() => calculateResults(record.id)}
+    {
+      title: 'Event',
+      dataIndex: 'name',
+      key: 'name',
+      render: (name: string, record: EventRecord) => (
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {record.event_order !== null && (
+              <span className="tnum rounded bg-muted px-1.5 text-caption font-semibold text-muted-foreground">
+                #{record.event_order}
+              </span>
+            )}
+            <span className="truncate font-medium text-foreground">{name}</span>
+          </div>
+          <div className="truncate text-caption capitalize text-muted-foreground">
+            {record.age_category || 'All categories'} · {record.event_type}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: 'Event status',
+      dataIndex: 'status',
+      key: 'status',
+      width: 140,
+      render: (status: string) => (
+        <StatusPill tone={statusTone(status)} dot>
+          {status}
+        </StatusPill>
+      ),
+    },
+    {
+      title: 'Results',
+      dataIndex: 'results_published',
+      key: 'results_published',
+      width: 140,
+      render: (published: boolean) => (
+        <StatusPill tone={published ? 'success' : 'warning'}>
+          {published ? 'Published' : 'Not published'}
+        </StatusPill>
+      ),
+    },
+    {
+      title: '',
+      key: 'actions',
+      width: 190,
+      fixed: 'right' as const,
+      render: (_: unknown, record: EventRecord) =>
+        record.results_published ? (
+          <div className="flex justify-end">
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<Eye size={14} />}
+              onClick={() => fetchResults(record.id, record.event_type)}
+            >
+              View results
+            </Button>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              icon={<Calculator size={14} />}
               loading={calculating === record.id}
               disabled={calculating !== null || record.status !== 'completed'}
-              title={record.status !== 'completed' ? 'Event must be completed to calculate results' : 'Calculate results'}
+              title={
+                record.status !== 'completed'
+                  ? 'Mark the event completed before calculating'
+                  : 'Calculate and publish results'
+              }
+              onClick={() => calculateResults(record.id)}
             >
               Calculate
             </Button>
-          ) : (
-            <Button 
-              type="default" 
-              icon={<Eye size={16} />}
-              onClick={() => fetchResults(record.id)}
-              title="View calculated results"
-            >
-              View Results
-            </Button>
-          )}
-        </Space>
-      )
+          </div>
+        ),
     },
   ];
 
+  const published = events.filter((event) => event.results_published).length;
+
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Navigation />
-      <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <Title level={2} style={{ margin: 0 }}>Results Management</Title>
-              <Button 
-                type="primary" 
-                icon={<Trophy size={16} />}
-                onClick={fetchWinners}
-                loading={exportingWinners}
-                disabled={exportingWinners}
-              >
-                View Winners
-              </Button>
-            </div>
-            <Text type="secondary">Calculate and publish event results</Text>
+    <AppShell
+      variant="admin"
+      title="Results"
+      subtitle={`${published} of ${events.length} events published`}
+      maxWidth="wide"
+      actions={
+        <Button
+          size="sm"
+          icon={<Trophy size={15} />}
+          loading={exportingWinners}
+          onClick={fetchWinners}
+        >
+          <span className="hidden sm:inline">Winners</span>
+        </Button>
+      }
+    >
+      <DataTable
+        columns={columns}
+        dataSource={events}
+        rowKey="id"
+        loading={loading}
+        scrollX={820}
+        toolbar={
+          <span className="text-caption text-muted-foreground">
+            Calculating publishes results and makes them public on the leaderboard
+          </span>
+        }
+        emptyIcon={<Trophy size={22} />}
+        emptyTitle="No events yet"
+        emptyDescription="Create events and score them before results can be calculated."
+      />
+
+      {/* ------------------------------------------- results detail */}
+      <Sheet
+        open={Boolean(viewingResults)}
+        onClose={() => {
+          setViewingResults(null);
+          setResultsData([]);
+        }}
+        size="lg"
+        title="Event results"
+        description="Rankings with each judge's scores"
+      >
+        {resultsLoading ? (
+          <div className="space-y-3 py-2">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
           </div>
-          <Card>
-            <ResponsiveTable
-              columns={columns}
-              dataSource={events}
-              loading={loading}
-              rowKey="id"
-              cardTitle={(record) => record.name}
-            />
-          </Card>
-
-          {/* Results Modal */}
-          <Modal
-            title="Event Results"
-            open={!!viewingResults}
-            onCancel={() => {
-              setViewingResults(null);
-              setResultsData([]);
-            }}
-            footer={null}
-            width={1000}
-          >
-            {resultsLoading ? (
-              <div style={{ textAlign: 'center', padding: '40px' }}>
-                <Spin size="large" />
-                <div style={{ marginTop: '16px' }}>Loading results...</div>
-              </div>
-            ) : (
-              <div>
-                <div style={{ marginBottom: '20px' }}>
-                  <Text strong style={{ fontSize: '16px' }}>Detailed Rankings and Scores</Text>
-                </div>
-                <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                  {resultsData.map((result, index) => (
-                    <div
-                      key={result.id}
-                      style={{
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '12px',
-                        marginBottom: '16px',
-                        backgroundColor: index < 3 ? '#f8fafc' : '#f9fafb',
-                        overflow: 'hidden'
-                      }}
-                    >
-                      {/* Participant Header */}
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '16px',
-                        backgroundColor: index < 3 ? '#8b5cf6' : '#6b7280',
-                        color: 'white'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{
-                            width: '36px',
-                            height: '36px',
-                            borderRadius: '50%',
-                            backgroundColor: 'white',
-                            color: index < 3 ? '#8b5cf6' : '#6b7280',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '16px',
-                            fontWeight: 'bold'
-                          }}>
-                            {result.rank}
-                          </div>
-                          <div>
-                            <Text strong style={{ fontSize: '16px', color: 'white' }}>
-                              {currentEventType === 'individual' 
-                                ? `${result.participant?.full_name} (#${result.participant?.chest_number})`
-                                : `${result.group?.name} (Group)`
-                              }
-                            </Text>
-                            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)' }}>
-                              {currentEventType === 'individual'
-                                ? `${result.participant?.age_category} • ${result.participant?.church}`
-                                : result.group?.description || 'Group Performance'
-                              }
-                            </div>
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <Text strong style={{ fontSize: '20px', color: 'white' }}>
-                            {result.total_score.toFixed(1)} / {result.maxPossibleScore}
-                          </Text>
-                          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)' }}>
-                            Final Score
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Criteria Scores */}
-                      <div style={{ padding: '16px' }}>
-                        <div style={{ marginBottom: '12px' }}>
-                          <Text strong style={{ fontSize: '14px', color: '#374151' }}>Detailed Scoring Breakdown:</Text>
-                        </div>
-                        <div style={{ display: 'grid', gap: '12px' }}>
-                          {result.criteriaScores?.map((criteria, criteriaIndex) => (
-                            <div
-                              key={criteriaIndex}
-                              style={{
-                                border: '1px solid #e2e8f0',
-                                borderRadius: '8px',
-                                overflow: 'hidden'
-                              }}
-                            >
-                              {/* Criteria Header */}
-                              <div style={{
-                                padding: '10px 12px',
-                                backgroundColor: '#f1f5f9',
-                                borderBottom: '1px solid #e2e8f0'
-                              }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text strong style={{ fontSize: '14px', color: '#1e293b' }}>
-                                    {criteria.name}
-                                  </Text>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Text style={{ fontSize: '14px', color: '#8b5cf6', fontWeight: 600 }}>
-                                      Avg: {criteria.averageScore.toFixed(1)}
-                                    </Text>
-                                    <Text style={{ fontSize: '12px', color: '#6b7280' }}>
-                                      / {criteria.maxPossibleScore}
-                                    </Text>
-                                  </div>
-                                </div>
-                              </div>
-                              
-                              {/* Individual Judge Scores */}
-                              <div style={{ padding: '8px 12px' }}>
-                                {criteria.judgeScores?.map((judgeScore, judgeIndex) => (
-                                  <div
-                                    key={judgeIndex}
-                                    style={{
-                                      display: 'flex',
-                                      justifyContent: 'space-between',
-                                      alignItems: 'center',
-                                      padding: '6px 0',
-                                      borderBottom: judgeIndex < criteria.judgeScores.length - 1 ? '1px solid #f1f5f9' : 'none'
-                                    }}
-                                  >
-                                    <div style={{ flex: 1 }}>
-                                      <Text style={{ fontSize: '12px', color: '#475569' }}>
-                                        {judgeScore.judgeName} ({judgeScore.judgeChurch})
-                                      </Text>
-                                    </div>
-                                    <div style={{ 
-                                      display: 'flex', 
-                                      alignItems: 'center', 
-                                      gap: '6px',
-                                      minWidth: '80px',
-                                      justifyContent: 'flex-end'
-                                    }}>
-                                      <Text style={{ fontSize: '12px', color: '#059669', fontWeight: 500 }}>
-                                        {judgeScore.score.toFixed(1)}
-                                      </Text>
-                                      <Text style={{ fontSize: '11px', color: '#94a3b8' }}>
-                                        / {criteria.maxPossibleScore}
-                                      </Text>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </Modal>
-
-          {/* Winners Modal */}
-          <Modal
-            title={
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Trophy size={20} />
-                <span>Winners Overview</span>
-              </div>
-            }
-            open={viewingWinners}
-            onCancel={() => {
-              setViewingWinners(false);
-              setWinnersData(null);
-              setShowScoresForEvent({});
-              setIndividualChampion(null);
-            }}
-            footer={[
-              <Button key="cancel" onClick={() => {
-                setViewingWinners(false);
-                setWinnersData(null);
-                setShowScoresForEvent({});
-                setIndividualChampion(null);
-              }}>
-                Close
-              </Button>,
-              <Button 
-                key="export" 
-                type="primary" 
-                icon={<Download size={16} />}
-                onClick={exportWinners}
-              >
-                Export CSV
-              </Button>
-            ]}
-            width={1200}
-          >
-            {winnersData && (
-              <div>
-                <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-                  <Text strong style={{ fontSize: '16px', color: '#1e293b' }}>
-                    Summary: {winnersData.events.length} Events • {winnersData.events.reduce((total, event) => total + event.winners.filter(w => w.rank <= 2).length, 0)} Winners
-                  </Text>
-                  {individualChampion && (
-                    <div style={{ marginTop: '8px', fontSize: '14px', color: '#1890ff', fontWeight: 600 }}>
-                      {individualChampion.isTie ? (
-                        <div>
-                          <div>Individual Champions (Tie): {individualChampion.champions.length} participants tied with {individualChampion.maxPoints} Points</div>
-                          <div style={{ fontSize: '12px', marginTop: '4px', color: '#64748b' }}>
-                            {individualChampion.champions.map((champion: any, index: number) => (
-                              <span key={champion.participant.full_name}>
-                                {champion.participant.full_name} (#{champion.participant.chest_number}) - {champion.participant.church}
-                                {index < individualChampion.champions.length - 1 ? ', ' : ''}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div>
-                          Individual Champion: {individualChampion.champions[0].participant.full_name} (#{individualChampion.champions[0].participant.chest_number}) - {individualChampion.champions[0].participant.church} - {individualChampion.maxPoints} Points
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div style={{ marginTop: '8px', fontSize: '14px', color: '#64748b' }}>
-                    Generated on {new Date(winnersData.generated_at).toLocaleString()}
+        ) : resultsData.length === 0 ? (
+          <p className="py-8 text-center text-body text-muted-foreground">
+            No results recorded for this event.
+          </p>
+        ) : (
+          <ol className="space-y-3 pb-2">
+            {resultsData.map((result) => (
+              <li key={result.id} className="overflow-hidden rounded-xl border border-border">
+                <div className="flex items-center gap-3 bg-surface-sunken px-3 py-2.5">
+                  <span
+                    className={cn(
+                      'tnum flex h-9 w-9 items-center justify-center rounded-lg font-semibold',
+                      rankTone(result.rank ?? 0),
+                    )}
+                  >
+                    {result.rank ?? '—'}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-body font-medium text-foreground">
+                      {viewingEventType === 'individual'
+                        ? result.participant?.full_name
+                        : result.group?.name}
+                    </p>
+                    <p className="truncate text-caption text-muted-foreground">
+                      {viewingEventType === 'individual'
+                        ? `#${result.participant?.chest_number} · ${result.participant?.church}`
+                        : result.group?.description || 'Group'}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="tnum text-title font-semibold text-foreground">
+                      {formatScore(result.total_score)}
+                    </p>
+                    <p className="tnum text-caption text-muted-foreground">
+                      avg {formatScore(result.average_score)}
+                    </p>
                   </div>
                 </div>
 
-                <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-                  {winnersData.events.map((event, eventIndex) => {
-                    // Check if this is the first event of a new age category
-                    const isFirstOfCategory = eventIndex === 0 || 
-                      winnersData.events[eventIndex - 1].age_category !== event.age_category;
-                    
-                    return (
-                      <div key={event.event_id}>
-                        {/* Age Category Header */}
-                        {isFirstOfCategory && (
-                          <div style={{
-                            marginTop: eventIndex > 0 ? '32px' : '0',
-                            marginBottom: '16px',
-                            padding: '12px 16px',
-                            backgroundColor: '#1e293b',
-                            color: 'white',
-                            borderRadius: '8px',
-                            textAlign: 'center'
-                          }}>
-                            <Text strong style={{ fontSize: '18px', color: 'white' }}>
-                              {event.age_category || 'All Categories'} Age Category
-                            </Text>
-                          </div>
-                        )}
-                    <div
-                      key={event.event_id}
-                      style={{
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '12px',
-                        marginBottom: '20px',
-                        overflow: 'hidden',
-                        backgroundColor: '#ffffff'
-                      }}
-                    >
-                      {/* Event Header */}
-                      <div style={{
-                        padding: '16px',
-                        backgroundColor: '#f1f5f9',
-                        borderBottom: '1px solid #e2e8f0'
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <Text strong style={{ fontSize: '16px', color: '#1e293b' }}>
-                              {event.event_name}
-                            </Text>
-                            <div style={{ fontSize: '14px', color: '#64748b', marginTop: '4px' }}>
-                              {event.event_type} • {event.age_category || 'All Categories'} • {event.winners.filter(w => w.rank <= 2).length} Winners
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <Button
-                              type="text"
-                              size="small"
-                              icon={showScoresForEvent[event.event_id] ? <EyeOff size={14} /> : <Eye size={14} />}
-                              onClick={() => setShowScoresForEvent(prev => ({
-                                ...prev,
-                                [event.event_id]: !prev[event.event_id]
-                              }))}
-                              style={{ 
-                                color: showScoresForEvent[event.event_id] ? '#1890ff' : '#6b7280',
-                                fontSize: '12px',
-                                padding: '4px 8px',
-                                height: 'auto'
-                              }}
+                <div className="divide-y divide-border">
+                  {result.criteriaScores.map((criterion) => (
+                    <div key={criterion.id} className="px-3 py-2">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-caption font-medium text-foreground">
+                          {criterion.name}
+                        </span>
+                        <span className="tnum text-caption text-muted-foreground">
+                          avg {criterion.averageScore.toFixed(1)} / {criterion.max_score}
+                        </span>
+                      </div>
+                      {criterion.judgeScores.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {criterion.judgeScores.map((judgeScore, index) => (
+                            <span
+                              key={`${judgeScore.judgeName}-${index}`}
+                              className="tnum rounded-md bg-surface-sunken px-2 py-0.5 text-caption text-muted-foreground"
                             >
-                              {showScoresForEvent[event.event_id] ? 'Hide Scores' : 'Show Scores'}
-                            </Button>
-                          </div>
+                              {judgeScore.judgeName}: {judgeScore.score}
+                            </span>
+                          ))}
                         </div>
-                      </div>
-
-                      {/* Winners Table */}
-                      <div style={{ padding: '16px' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr style={{ backgroundColor: '#f8fafc' }}>
-                              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 600, color: '#374151' }}>Rank</th>
-                              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 600, color: '#374151' }}>Participant</th>
-                              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 600, color: '#374151' }}>Chest #</th>
-                              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 600, color: '#374151' }}>Church</th>
-                              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 600, color: '#374151' }}>District</th>
-                              <th style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 600, color: '#374151' }}>Total Score</th>
-                              <th style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 600, color: '#374151' }}>Average</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {event.winners.filter(winner => winner.rank <= 2).map((winner, winnerIndex) => (
-                              <tr 
-                                key={winnerIndex}
-                                style={{ 
-                                  backgroundColor: winnerIndex < 3 ? '#fefce8' : '#ffffff',
-                                  borderBottom: winnerIndex < event.winners.length - 1 ? '1px solid #f1f5f9' : 'none'
-                                }}
-                              >
-                                <td style={{ padding: '12px', textAlign: 'center' }}>
-                                  <div style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    width: '32px',
-                                    height: '32px',
-                                    borderRadius: '50%',
-                                    backgroundColor: winner.rank === 1 ? '#fbbf24' : winner.rank === 2 ? '#e5e7eb' : winner.rank === 3 ? '#f59e0b' : '#f3f4f6',
-                                    color: winner.rank <= 3 ? '#1f2937' : '#6b7280',
-                                    fontSize: '14px',
-                                    fontWeight: 'bold'
-                                  }}>
-                                    {winner.rank}
-                                  </div>
-                                </td>
-                                <td style={{ padding: '12px' }}>
-                                  <div>
-                                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#1f2937' }}>
-                                      {winner.participant.full_name}
-                                    </div>
-                                    {winner.tie_breaker_reason && (
-                                      <div style={{ fontSize: '12px', color: '#f59e0b', marginTop: '2px' }}>
-                                        Tie: {winner.tie_breaker_reason}
-                                      </div>
-                                    )}
-                                  </div>
-                                </td>
-                                <td style={{ padding: '12px', fontSize: '14px', color: '#6b7280' }}>
-                                  #{winner.participant.chest_number}
-                                </td>
-                                <td style={{ padding: '12px', fontSize: '14px', color: '#374151' }}>
-                                  {winner.participant.church}
-                                </td>
-                                <td style={{ padding: '12px', fontSize: '14px', color: '#374151' }}>
-                                  {winner.participant.district}
-                                </td>
-                                <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: 600, color: '#1890ff' }}>
-                                  {showScoresForEvent[event.event_id] ? winner.total_score.toFixed(1) : '***'}
-                                </td>
-                                <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: 600, color: '#1890ff' }}>
-                                  {showScoresForEvent[event.event_id] ? winner.average_score.toFixed(1) : '***'}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                      )}
                     </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Individual Champion Table */}
-                  {individualChampion && (
-                    <div
-                      style={{
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '12px',
-                        marginTop: '20px',
-                        overflow: 'hidden',
-                        backgroundColor: '#ffffff'
-                      }}
-                    >
-                      {/* Champion Header */}
-                      <div style={{
-                        padding: '16px',
-                        backgroundColor: '#f1f5f9',
-                        borderBottom: '1px solid #e2e8f0'
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <Text strong style={{ fontSize: '16px', color: '#1e293b' }}>
-                              Individual Championship
-                            </Text>
-                            <div style={{ fontSize: '14px', color: '#64748b', marginTop: '4px' }}>
-                              {individualChampion.isTie ? `Overall Champions (Tie) • ${individualChampion.champions.length} Winners` : 'Overall Champion • 1 Winner'}
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <Button
-                              type="text"
-                              size="small"
-                              icon={showScoresForEvent['champion'] ? <EyeOff size={14} /> : <Eye size={14} />}
-                              onClick={() => setShowScoresForEvent(prev => ({
-                                ...prev,
-                                'champion': !prev['champion']
-                              }))}
-                              style={{ 
-                                color: showScoresForEvent['champion'] ? '#1890ff' : '#6b7280',
-                                fontSize: '12px',
-                                padding: '4px 8px',
-                                height: 'auto'
-                              }}
-                            >
-                              {showScoresForEvent['champion'] ? 'Hide Scores' : 'Show Scores'}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Champion Table */}
-                      <div style={{ padding: '16px' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr style={{ backgroundColor: '#f8fafc' }}>
-                              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 600, color: '#374151' }}>Rank</th>
-                              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 600, color: '#374151' }}>Participant</th>
-                              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 600, color: '#374151' }}>Chest #</th>
-                              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 600, color: '#374151' }}>Church</th>
-                              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 600, color: '#374151' }}>District</th>
-                              <th style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 600, color: '#374151' }}>Total Points</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {individualChampion.champions.map((champion: any, index: number) => (
-                              <tr key={champion.participant.full_name} style={{ backgroundColor: '#fefce8' }}>
-                                <td style={{ padding: '12px', textAlign: 'center' }}>
-                                  <div style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    width: '32px',
-                                    height: '32px',
-                                    borderRadius: '50%',
-                                    backgroundColor: '#fbbf24',
-                                    color: '#1f2937',
-                                    fontSize: '14px',
-                                    fontWeight: 'bold'
-                                  }}>
-                                    1
-                                  </div>
-                                </td>
-                                <td style={{ padding: '12px' }}>
-                                  <div>
-                                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#1f2937' }}>
-                                      {champion.participant.full_name}
-                                    </div>
-                                  </div>
-                                </td>
-                                <td style={{ padding: '12px', fontSize: '14px', color: '#6b7280' }}>
-                                  #{champion.participant.chest_number}
-                                </td>
-                                <td style={{ padding: '12px', fontSize: '14px', color: '#374151' }}>
-                                  {champion.participant.church}
-                                </td>
-                                <td style={{ padding: '12px', fontSize: '14px', color: '#374151' }}>
-                                  {champion.participant.district}
-                                </td>
-                                <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: 600, color: '#1890ff' }}>
-                                  {showScoresForEvent['champion'] ? champion.totalPoints : '***'}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
+                  ))}
                 </div>
-              </div>
+
+                {result.tie_breaker_reason && (
+                  <p className="bg-warning-soft px-3 py-1.5 text-caption text-warning">
+                    {result.tie_breaker_reason}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
+      </Sheet>
+
+      {/* -------------------------------------------------- winners */}
+      <Sheet
+        open={viewingWinners}
+        onClose={() => setViewingWinners(false)}
+        size="lg"
+        title="Winners"
+        description={
+          winnersData ? `${winnersData.events.length} events with published results` : undefined
+        }
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" size="lg" onClick={() => setViewingWinners(false)}>
+              Close
+            </Button>
+            <Button size="lg" block icon={<DownloadSimple size={15} />} onClick={exportWinners}>
+              Export CSV
+            </Button>
+          </div>
+        }
+      >
+        {winnersData && (
+          <div className="space-y-4 pb-2">
+            {individualChampion && individualChampion.champions.length > 0 && (
+              <Card className="border-primary/30 bg-primary-soft/40">
+                <CardHeader
+                  title={
+                    individualChampion.isTie
+                      ? `Individual champions (tie) — ${individualChampion.maxPoints} points`
+                      : 'Individual champion'
+                  }
+                  subtitle={`${individualChampion.totalParticipants} participants placed across all events`}
+                />
+                <ul className="divide-y divide-border px-4 pb-4 md:px-5">
+                  {individualChampion.champions.map((champion) => (
+                    <li
+                      key={champion.participant.full_name}
+                      className="flex items-center gap-3 py-2.5"
+                    >
+                      <Medal size={16} className="shrink-0 text-gold" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-body font-medium text-foreground">
+                          {champion.participant.full_name}
+                        </span>
+                        <span className="block truncate text-caption text-muted-foreground">
+                          #{champion.participant.chest_number} · {champion.participant.church}
+                        </span>
+                      </span>
+                      <span className="tnum shrink-0 text-body font-semibold text-primary">
+                        {individualChampion.maxPoints} pts
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
             )}
-          </Modal>
-        </Content>
-      </Layout>
-    </Layout>
+
+            {winnersData.events.map((event, index) => {
+              const previous = winnersData.events[index - 1];
+              const newCategory = index === 0 || previous.age_category !== event.age_category;
+              const showScores = showScoresForEvent[event.event_id];
+
+              return (
+                <div key={event.event_id}>
+                  {newCategory && (
+                    <h3 className="mb-2 mt-4 rounded-lg bg-foreground px-3 py-2 text-center text-body font-semibold text-background first:mt-0">
+                      {event.age_category || 'All categories'}
+                    </h3>
+                  )}
+
+                  <div className="overflow-hidden rounded-xl border border-border">
+                    <div className="flex items-center justify-between gap-2 bg-surface-sunken px-3 py-2">
+                      <p className="min-w-0 truncate text-body font-medium text-foreground">
+                        {event.event_name}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowScoresForEvent((current) => ({
+                            ...current,
+                            [event.event_id]: !current[event.event_id],
+                          }))
+                        }
+                        className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-caption text-muted-foreground hover:bg-surface hover:text-foreground"
+                      >
+                        {showScores ? <EyeSlash size={14} /> : <Eye size={14} />}
+                        {showScores ? 'Hide scores' : 'Show scores'}
+                      </button>
+                    </div>
+
+                    <ul className="divide-y divide-border">
+                      {event.winners.map((winner) => (
+                        <li
+                          key={`${event.event_id}-${winner.participant.chest_number}-${winner.rank}`}
+                          className="flex items-center gap-3 px-3 py-2.5"
+                        >
+                          <span
+                            className={cn(
+                              'tnum flex h-8 w-8 items-center justify-center rounded-lg text-caption font-bold',
+                              rankTone(winner.rank),
+                            )}
+                          >
+                            {winner.rank}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-body font-medium text-foreground">
+                              {winner.participant.full_name}
+                            </span>
+                            <span className="block truncate text-caption text-muted-foreground">
+                              #{winner.participant.chest_number} · {winner.participant.church} ·{' '}
+                              {winner.participant.district}
+                            </span>
+                          </span>
+                          <span className="tnum shrink-0 text-body font-semibold text-foreground">
+                            {showScores ? formatScore(winner.total_score) : '•••'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Sheet>
+    </AppShell>
   );
 };
 

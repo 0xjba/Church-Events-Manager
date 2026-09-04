@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { SupabaseRow } from '@/lib/types';
 
 export interface ScoreData {
   id: string;
@@ -21,7 +22,7 @@ export interface ParticipantData {
   id: string;
   full_name: string;
   chest_number: string;
-  category: string;
+  age_category?: string | null;
   church: string;
   district: string;
 }
@@ -70,7 +71,7 @@ export class ResultsCalculator {
         this.getEventData(eventId)
       ]);
 
-      let results: ResultData[] = [];
+      const results: ResultData[] = [];
 
       if (eventData.event_type === 'individual') {
         // Individual event - calculate results for each participant
@@ -341,7 +342,7 @@ export class ResultsCalculator {
               id,
               full_name,
               chest_number,
-              category,
+              age_category,
               church,
               district
             )
@@ -378,7 +379,7 @@ export class ResultsCalculator {
       }
 
       // Convert to array and calculate championship standings
-      const standings = Object.values(allResults).map((participantData: any) => ({
+      const standings = Object.values(allResults).map((participantData: SupabaseRow) => ({
         participant: participantData.participant,
         events_participated: participantData.events.length,
         total_championship_points: participantData.total_points,
