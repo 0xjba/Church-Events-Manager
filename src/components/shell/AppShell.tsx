@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { CalendarBlank, ChartBar, Gavel, List, SignOut, SquaresFour, Trophy, User, UsersThree, X } from '@phosphor-icons/react';
 import { useAuth } from '@/hooks/useAuth';
 import { useParticipantAuth } from '@/hooks/useParticipantAuth';
+import { useEventLevel } from '@/hooks/useEventLevel';
 import { Avatar, Button, Separator } from '@/components/ui/primitives';
 import { Sheet } from '@/components/ui/Sheet';
 import { cn } from '@/lib/utils';
@@ -66,6 +67,7 @@ export const AppShell = ({
 }) => {
   const { profile, signOut: adminSignOut } = useAuth();
   const { participant, signOut: participantSignOut } = useParticipantAuth();
+  const { levels, levelId, setLevelId } = useEventLevel();
   const location = useLocation();
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
@@ -192,6 +194,22 @@ export const AppShell = ({
                   <p className="truncate text-caption text-muted-foreground">{subtitle}</p>
                 )}
               </div>
+              {role === 'admin' && levels.length > 0 && (
+                <label className="hidden shrink-0 items-center gap-2 sm:flex">
+                  <span className="text-caption text-muted-foreground">Event level</span>
+                  <select
+                    value={levelId}
+                    onChange={(changeEvent) => setLevelId(changeEvent.target.value)}
+                    className="h-9 rounded-lg border border-input bg-surface px-2 text-caption text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/25"
+                  >
+                    {levels.map((level) => (
+                      <option key={level.id} value={level.id}>
+                        {level.name} {level.year}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
               <button
                 type="button"

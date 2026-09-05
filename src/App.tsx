@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from '@/hooks/useAuth';
 import { ParticipantAuthProvider } from '@/hooks/useParticipantAuth';
+import { EventLevelProvider } from '@/hooks/useEventLevel';
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ParticipantProtectedRoute from "@/components/ParticipantProtectedRoute";
 import JudgeProtectedRoute from "@/components/JudgeProtectedRoute";
@@ -41,6 +42,7 @@ const App = () => (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ParticipantAuthProvider>
+          <EventLevelProvider>
           <ConfigProvider theme={antdTheme}>
             <AntApp>
               <BrowserRouter>
@@ -132,6 +134,7 @@ const App = () => (
               </BrowserRouter>
             </AntApp>
           </ConfigProvider>
+          </EventLevelProvider>
         </ParticipantAuthProvider>
       </AuthProvider>
     </QueryClientProvider>

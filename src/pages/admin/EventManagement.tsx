@@ -4,6 +4,7 @@ import { Form, Input as AntInput, InputNumber, Modal, Select, message } from 'an
 import { CalendarBlank, Copy, Eye, FileCsv, PencilSimple, Plus, Trash, UploadSimple, X } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import type { FormValues } from '@/lib/types';
+import { useEventLevel } from '@/hooks/useEventLevel';
 import { AppShell } from '@/components/shell/AppShell';
 import { DataTable } from '@/components/admin/DataTable';
 import { Toolbar } from '@/components/admin/Toolbar';
@@ -55,8 +56,8 @@ const STATUSES = ['upcoming', 'active', 'completed'];
 const EventManagement = () => {
   const navigate = useNavigate();
   const [events, setEvents] = useState<EventRecord[]>([]);
-  const [eventLevels, setEventLevels] = useState<EventLevel[]>([]);
-  const [selectedLevelId, setSelectedLevelId] = useState<string>('all');
+  // The level comes from the top bar; this screen shows only its events.
+  const { levelId, level } = useEventLevel();
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -71,7 +72,6 @@ const EventManagement = () => {
   const [batchDeleting, setBatchDeleting] = useState(false);
 
   const [isEventImportOpen, setIsEventImportOpen] = useState(false);
-  const [eventImportLevel, setEventImportLevel] = useState<string>('');
   const [eventImportFile, setEventImportFile] = useState<File | null>(null);
   const [parsedEvents, setParsedEvents] = useState<ParsedEvent[]>([]);
   const [eventImportErrors, setEventImportErrors] = useState<string[]>([]);
@@ -88,35 +88,20 @@ const EventManagement = () => {
 
   useEffect(() => {
     fetchEvents();
-    fetchEventLevels();
-  }, []);
-
-  const fetchEventLevels = async () => {
-    try {
-      // An inactive level is put away: it and everything under it disappear
-      // from every screen except the event levels page itself.
-      const { data, error } = await supabase
-        .from('event_levels')
-        .select('id, name, year, is_active')
-        .eq('is_active', true)
-        .order('year', { ascending: false });
-
-      if (error) throw error;
-      setEventLevels(data || []);
-    } catch (error) {
-      console.error('Error fetching event levels:', error);
-    }
-  };
+  }, [levelId]);
 
   const fetchEvents = async () => {
+    if (!levelId) {
+      setEvents([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('events')
-        .select(
-          `*, event_levels!inner (id, name, year, is_active),
-           event_criteria (id, name, max_score, weight)`,
-        )
-        .eq('event_levels.is_active', true)
+        .select(`*, event_levels (id, name, year), event_criteria (id, name, max_score, weight)`)
+        .eq('level_id', levelId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -128,22 +113,15 @@ const EventManagement = () => {
     }
   };
 
-  const levelOf = (event: EventRecord) => eventLevels.find((level) => level.id === event.level_id);
-
   const visibleEvents = useMemo(() => {
-    const byLevel =
-      selectedLevelId === 'all'
-        ? events
-        : events.filter((event) => event.level_id === selectedLevelId);
-
     const query = search.trim().toLowerCase();
-    if (!query) return byLevel;
-    return byLevel.filter((event) =>
+    if (!query) return events;
+    return events.filter((event) =>
       [event.name, event.age_category, event.type].filter(Boolean).some((field) =>
         String(field).toLowerCase().includes(query),
       ),
     );
-  }, [events, selectedLevelId, search]);
+  }, [events, search]);
 
   /* ------------------------------------------------------- event form */
 
@@ -223,19 +201,11 @@ const EventManagement = () => {
         return;
       }
 
-      if (!editingEvent) {
-        const level = eventLevels.find((candidate) => candidate.id === values.level_id);
-        if (level && !level.is_active) {
-          message.error('Cannot create events in an inactive event level');
-          return;
-        }
-      }
-
       const payload = {
         name: values.name,
         type: values.type,
         event_type: values.event_type,
-        level_id: values.level_id,
+        level_id: levelId,
         age_category: values.age_category || null,
         rules: values.rules || null,
         time_limit: values.time_limit || null,
@@ -351,11 +321,6 @@ const EventManagement = () => {
   };
 
   const openEventImport = () => {
-    setEventImportLevel(
-      selectedLevelId !== 'all'
-        ? selectedLevelId
-        : eventLevels.find((level) => level.is_active)?.id ?? eventLevels[0]?.id ?? '',
-    );
     resetEventImport();
     setIsEventImportOpen(true);
   };
@@ -369,9 +334,7 @@ const EventManagement = () => {
       ]);
 
       // Only events already in the target level count as duplicates.
-      const existing = events
-        .filter((event) => event.level_id === eventImportLevel)
-        .map((event) => ({ name: event.name, age_category: event.age_category }));
+      const existing = events.map((event) => ({ name: event.name, age_category: event.age_category }));
 
       const { events: parsedList, errors } = parseEventRows(parsed.rows, existing);
 
@@ -398,7 +361,7 @@ const EventManagement = () => {
           name: event.name,
           type: event.type,
           event_type: event.event_type,
-          level_id: eventImportLevel,
+          level_id: levelId,
           age_category: event.age_category as AgeCategory | null,
           rules: event.rules,
           time_limit: event.time_limit,
@@ -693,7 +656,7 @@ const EventManagement = () => {
     <AppShell
       variant="admin"
       title="Events"
-      subtitle={`${events.length} events across ${eventLevels.length} levels`}
+      subtitle={level ? `${events.length} events in ${level.name} ${level.year}` : 'No active event level'}
       maxWidth="wide"
       actions={
         <>
@@ -752,26 +715,14 @@ const EventManagement = () => {
               placeholder="Search events"
               className="w-full max-w-xs"
             />
-            <Select
-              value={selectedLevelId}
-              onChange={setSelectedLevelId}
-              className="w-48"
-              options={[
-                { value: 'all', label: 'All event levels' },
-                ...eventLevels.map((level) => ({
-                  value: level.id,
-                  label: `${level.name} ${level.year}`,
-                })),
-              ]}
-            />
           </Toolbar>
         }
         emptyIcon={<CalendarBlank size={22} />}
-        emptyTitle={search || selectedLevelId !== 'all' ? 'No matching events' : 'No events yet'}
+        emptyTitle={search ? 'No matching events' : 'No events in this level yet'}
         emptyDescription={
-          search || selectedLevelId !== 'all'
-            ? 'Try a different search or event level.'
-            : 'Create an event and give it scoring criteria.'
+          search
+            ? 'Try a different search.'
+            : 'Create an event and give it scoring criteria, or import a sheet of them.'
         }
         emptyAction={
           <Button size="sm" icon={<Plus size={14} />} onClick={() => openModal()}>
@@ -832,20 +783,6 @@ const EventManagement = () => {
                   { value: 'individual', label: 'Individual' },
                   { value: 'group', label: 'Group' },
                 ]}
-              />
-            </Form.Item>
-
-            <Form.Item
-              label="Event level"
-              name="level_id"
-              rules={[{ required: true, message: 'Event level is required' }]}
-            >
-              <Select
-                placeholder="Select level"
-                options={eventLevels.map((level) => ({
-                  value: level.id,
-                  label: `${level.name} ${level.year}`,
-                }))}
               />
             </Form.Item>
 
@@ -958,7 +895,7 @@ const EventManagement = () => {
         dismissable={!importingEvents}
         size="lg"
         title="Import events"
-        description="One row per criterion; rows sharing an event name and age category build one event."
+        description={`Into ${level?.name ?? 'this level'}. One row per criterion; rows sharing an event name and age category build one event.`}
         footer={
           eventImportFile ? (
             <div className="flex gap-2">
@@ -978,29 +915,8 @@ const EventManagement = () => {
           ) : undefined
         }
       >
-        <div className="mb-3">
-          <label className="mb-1.5 block text-caption font-medium text-foreground">Event level</label>
-          <Select
-            value={eventImportLevel || undefined}
-            onChange={(value) => {
-              setEventImportLevel(value);
-              resetEventImport();
-            }}
-            className="w-full"
-            placeholder="Which level do these events belong to?"
-            options={eventLevels.map((level) => ({
-              value: level.id,
-              label: `${level.name} ${level.year}`,
-            }))}
-          />
-        </div>
-
         {!eventImportFile ? (
-          <ImportPanel
-            template="events"
-            onFile={handleEventImportFile}
-            disabled={importingEvents || !eventImportLevel}
-          />
+          <ImportPanel template="events" onFile={handleEventImportFile} disabled={importingEvents} />
         ) : (
           <div className="space-y-3">
             <ImportSummary file={eventImportFile} rows={parsedEvents.length} label="events" />

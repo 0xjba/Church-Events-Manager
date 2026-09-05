@@ -16,6 +16,7 @@ import {
   type PlacedResult,
   type Standing,
 } from '@/utils/championship';
+import { useEventLevel } from '@/hooks/useEventLevel';
 import { AppShell } from '@/components/shell/AppShell';
 import { DataTable } from '@/components/admin/DataTable';
 import {
@@ -172,6 +173,8 @@ const ChampionBoard = ({
 const ResultsManagement = () => {
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [levels, setLevels] = useState<LevelRecord[]>([]);
+  // The level being worked in, from the top bar.
+  const { levelId } = useEventLevel();
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState<string | null>(null);
   const [publishing, setPublishing] = useState<string | null>(null);
@@ -194,28 +197,33 @@ const ResultsManagement = () => {
   } | null>(null);
 
   const [isScoreImportOpen, setIsScoreImportOpen] = useState(false);
-  const [scoreImportLevel, setScoreImportLevel] = useState<string>('');
   const [scoreImportFile, setScoreImportFile] = useState<File | null>(null);
   const [scorePlan, setScorePlan] = useState<ScoreImportPlan | null>(null);
   const [importingScores, setImportingScores] = useState(false);
 
   useEffect(() => {
     fetchEvents();
-  }, []);
+  }, [levelId]);
 
   const fetchEvents = async () => {
     try {
+      if (!levelId) {
+        setEvents([]);
+        setLevels([]);
+        setLoading(false);
+        return;
+      }
+
       const [eventsResponse, levelsResponse, resultsResponse] = await Promise.all([
         supabase
           .from('events')
-          .select('*, event_levels!inner(is_active)')
-          .eq('event_levels.is_active', true)
+          .select('*')
+          .eq('level_id', levelId)
           .order('event_order', { ascending: true, nullsFirst: false }),
         supabase
           .from('event_levels')
           .select('id, name, year, is_active, results_published, scope')
-          .eq('is_active', true)
-          .order('year', { ascending: false }),
+          .eq('id', levelId),
         supabase.from('results').select('event_id'),
       ]);
 
@@ -525,6 +533,7 @@ const ResultsManagement = () => {
       const { data: completedEvents, error: eventsError } = await supabase
         .from('events')
         .select('*')
+        .eq('level_id', levelId)
         .eq('status', 'completed')
         .eq('results_published', true)
         .order('event_order', { ascending: true, nullsFirst: false });
@@ -650,7 +659,6 @@ const ResultsManagement = () => {
   };
 
   const openScoreImport = () => {
-    setScoreImportLevel(levels.find((level) => level.is_active)?.id ?? levels[0]?.id ?? '');
     resetScoreImport();
     setIsScoreImportOpen(true);
   };
@@ -707,7 +715,7 @@ const ResultsManagement = () => {
         'event_name', 'age_category', 'judge_username', 'criterion_name', 'score',
       ]);
 
-      const plan = prepareScoreImport(parsed.rows, await buildScoreContext(scoreImportLevel));
+      const plan = prepareScoreImport(parsed.rows, await buildScoreContext(levelId));
 
       setScoreImportFile(file);
       setScorePlan(plan);
@@ -1039,7 +1047,7 @@ const ResultsManagement = () => {
         dismissable={!importingScores}
         size="lg"
         title="Import scores from an off-app event"
-        description="One row per judge, per entrant, per criterion — the sheet a judge would have filled in."
+        description={`Into ${levels[0]?.name ?? 'this level'}. One row per judge, per entrant, per criterion — the sheet a judge would have filled in.`}
         footer={
           scoreImportFile && scorePlan ? (
             <div className="flex gap-2">
@@ -1059,28 +1067,11 @@ const ResultsManagement = () => {
           ) : undefined
         }
       >
-        <div className="mb-3">
-          <label className="mb-1.5 block text-caption font-medium text-foreground">Event level</label>
-          <Select
-            value={scoreImportLevel || undefined}
-            onChange={(value) => {
-              setScoreImportLevel(value);
-              resetScoreImport();
-            }}
-            className="w-full"
-            placeholder="Which level were these events part of?"
-            options={levels.map((level) => ({
-              value: level.id,
-              label: `${level.name} ${level.year}`,
-            }))}
-          />
-        </div>
-
         {!scoreImportFile || !scorePlan ? (
           <ImportPanel
             template="offlineScores"
             onFile={handleScoreImportFile}
-            disabled={importingScores || !scoreImportLevel}
+            disabled={importingScores}
           />
         ) : (
           <div className="space-y-3">

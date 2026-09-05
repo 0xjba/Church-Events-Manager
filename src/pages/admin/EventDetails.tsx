@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Checkbox, Form, InputNumber, Modal, message } from 'antd';
 import { ArrowLeft, CheckCircle, Gavel, PencilSimple, Plus, Pulse, Target, Trash, UsersThree, XCircle } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
+import { useEventLevel } from '@/hooks/useEventLevel';
 import { AppShell } from '@/components/shell/AppShell';
 import { DataTable } from '@/components/admin/DataTable';
 import { Toolbar } from '@/components/admin/Toolbar';
@@ -95,6 +96,7 @@ type Tab = 'entrants' | 'judges' | 'criteria';
 const EventDetails = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
+  const { levels, levelId, setLevelId } = useEventLevel();
 
   const [event, setEvent] = useState<EventRecord | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -138,12 +140,17 @@ const EventDetails = () => {
 
       if (error) throw error;
 
-      // Reachable by URL even when its level has been put away.
+      // Reachable by URL even when its level has been put away, or when a
+      // different level is selected.
       const level = data?.level as { id: string; name: string; is_active?: boolean } | null;
       if (level && level.is_active === false) {
         message.warning(`${data.name} belongs to an inactive event level`);
         navigate('/admin/events');
         return;
+      }
+
+      if (level && level.id !== levelId && levels.some((option) => option.id === level.id)) {
+        setLevelId(level.id);
       }
 
       setEvent(data as unknown as EventRecord);
@@ -153,7 +160,7 @@ const EventDetails = () => {
     } finally {
       setLoading(false);
     }
-  }, [eventId, navigate]);
+  }, [eventId, navigate, levelId, levels, setLevelId]);
 
   const fetchAllParticipants = useCallback(async () => {
     try {

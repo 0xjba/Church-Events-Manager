@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useEventLevel } from '@/hooks/useEventLevel';
 
 export interface AdminStats {
   totalParticipants: number;
@@ -12,6 +13,9 @@ export interface AdminStats {
 }
 
 export const useAdminStats = () => {
+  // Counts belong to the event level being worked in; judges are the exception,
+  // since a judge account is not tied to one.
+  const { levelId } = useEventLevel();
   const [stats, setStats] = useState<AdminStats>({
     totalParticipants: 0,
     activeEvents: 0,
@@ -32,7 +36,8 @@ export const useAdminStats = () => {
       // Fetch total participants
       const { count: participantsCount, error: participantsError } = await supabase
         .from('participants')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('level_id', levelId);
 
       if (participantsError) throw participantsError;
 
@@ -47,6 +52,7 @@ export const useAdminStats = () => {
       const { count: activeEventsCount, error: activeEventsError } = await supabase
         .from('events')
         .select('*', { count: 'exact', head: true })
+        .eq('level_id', levelId)
         .neq('status', 'completed');
 
       if (activeEventsError) throw activeEventsError;
@@ -55,6 +61,7 @@ export const useAdminStats = () => {
       const { count: completedEventsCount, error: completedEventsError } = await supabase
         .from('events')
         .select('*', { count: 'exact', head: true })
+        .eq('level_id', levelId)
         .eq('status', 'completed');
 
       if (completedEventsError) throw completedEventsError;
@@ -62,7 +69,8 @@ export const useAdminStats = () => {
       // Fetch total events
       const { count: totalEventsCount, error: totalEventsError } = await supabase
         .from('events')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('level_id', levelId);
 
       if (totalEventsError) throw totalEventsError;
 
@@ -134,7 +142,7 @@ export const useAdminStats = () => {
       judgesSubscription.unsubscribe();
       scoresSubscription.unsubscribe();
     };
-  }, []);
+  }, [levelId]);
 
   return { stats, loading, error, refetch: fetchStats };
 };
