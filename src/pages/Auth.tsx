@@ -129,17 +129,16 @@ const Auth = () => {
           </h2>
           <p className="mb-4 mt-0.5 text-caption text-muted-foreground">
             {role === 'admin'
-              ? 'Use the email and password for your admin account.'
+              ? 'Sign in with your admin email address or username.'
               : 'Use the username and password your administrator gave you.'}
           </p>
 
           <div className="space-y-3">
-            <Field label={role === 'admin' ? 'Email' : 'Username'} required>
+            <Field label={role === 'admin' ? 'Email or username' : 'Username'} required>
               <Input
                 value={username}
                 onChange={(changeEvent) => setUsername(changeEvent.target.value)}
-                type={role === 'admin' ? 'email' : 'text'}
-                inputMode={role === 'admin' ? 'email' : 'text'}
+                type="text"
                 autoComplete="username"
                 autoCapitalize="none"
                 autoCorrect="off"

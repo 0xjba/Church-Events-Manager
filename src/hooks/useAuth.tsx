@@ -107,7 +107,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async (username: string, password: string) => {
+  const signIn = async (identifier: string, password: string) => {
     try {
       // Clean up existing state
       cleanupAuthState();
@@ -119,20 +119,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Continue even if this fails
       }
 
-      // Try to find user by username and get their email
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles')
-        .select('email')
-        .eq('username', username)
-        .limit(1);
+      // Admins may type either their email address or their username. The
+      // username path goes through a function because the profiles table is no
+      // longer readable without a session.
+      let email = identifier;
 
-      if (profileError) throw profileError;
-      
-      if (!profiles || profiles.length === 0) {
-        throw new Error('User not found');
+      if (!identifier.includes('@')) {
+        const { data: resolved, error: lookupError } = await supabase.rpc('email_for_username', {
+          p_username: identifier,
+        });
+
+        if (lookupError) throw lookupError;
+        if (!resolved) throw new Error('User not found');
+
+        email = resolved as string;
       }
-
-      const email = profiles[0].email;
 
       // Sign in with email and password
       const { data, error } = await supabase.auth.signInWithPassword({

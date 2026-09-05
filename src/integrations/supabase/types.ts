@@ -610,6 +610,10 @@ export type Database = {
         Args: { user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      email_for_username: {
+        Args: { p_username: string }
+        Returns: string
+      }
     }
     Enums: {
       age_category: "Sub Juniors" | "Juniors" | "Intermediates" | "Seniors"
