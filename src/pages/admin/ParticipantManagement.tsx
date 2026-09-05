@@ -22,6 +22,14 @@ interface Participant {
   district: string;
   created_at: string;
   username?: string;
+  level_id: string | null;
+}
+
+interface EventLevel {
+  id: string;
+  name: string;
+  year: number;
+  is_active: boolean;
 }
 
 interface Group {
@@ -41,6 +49,9 @@ const AGE_CATEGORIES = ['Sub Juniors', 'Juniors', 'Intermediates', 'Seniors'];
 const ParticipantManagement = () => {
   const navigate = useNavigate();
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [levels, setLevels] = useState<EventLevel[]>([]);
+  // Chest numbers are issued per level, so the screen always works within one.
+  const [levelId, setLevelId] = useState<string>('');
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'people' | 'groups'>('people');
@@ -72,20 +83,43 @@ const ParticipantManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
+    fetchLevels();
     fetchParticipants();
     fetchGroups();
   }, []);
 
+  const fetchLevels = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('event_levels')
+        .select('id, name, year, is_active')
+        .order('year', { ascending: false });
+
+      if (error) throw error;
+
+      const rows = (data || []) as EventLevel[];
+      setLevels(rows);
+      setLevelId((current) => current || rows.find((level) => level.is_active)?.id || rows[0]?.id || '');
+    } catch (error) {
+      console.error('Error fetching event levels:', error);
+    }
+  };
+
+  const levelParticipants = useMemo(
+    () => (levelId ? participants.filter((participant) => participant.level_id === levelId) : participants),
+    [participants, levelId],
+  );
+
   const filteredParticipants = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
-    if (!query) return participants;
-    return participants.filter(
+    if (!query) return levelParticipants;
+    return levelParticipants.filter(
       (participant) =>
         participant.full_name.toLowerCase().includes(query) ||
         participant.chest_number.toLowerCase().includes(query) ||
         participant.church?.toLowerCase().includes(query),
     );
-  }, [participants, searchTerm]);
+  }, [levelParticipants, searchTerm]);
 
   const fetchParticipants = async () => {
     try {
@@ -159,6 +193,7 @@ const ParticipantManagement = () => {
             church: values.church,
             district: values.district,
             username: values.username,
+            level_id: levelId,
             is_active: true,
             created_by: user.id,
           })
@@ -461,14 +496,18 @@ const ParticipantManagement = () => {
 
   const checkConflicts = async (data: FormValues[]) => {
     try {
-      const { data: existingParticipants, error } = await supabase
-        .from('participants')
-        .select('chest_number, username');
+      // A chest number only clashes inside its own level; a username is the
+      // login, so it clashes everywhere.
+      const [chestResponse, usernameResponse] = await Promise.all([
+        supabase.from('participants').select('chest_number').eq('level_id', levelId),
+        supabase.from('participants').select('username'),
+      ]);
 
-      if (error) throw error;
+      if (chestResponse.error) throw chestResponse.error;
+      if (usernameResponse.error) throw usernameResponse.error;
 
-      const existingChestNumbers = new Set(existingParticipants?.map((p) => p.chest_number) || []);
-      const existingUsernames = new Set(existingParticipants?.map((p) => p.username) || []);
+      const existingChestNumbers = new Set(chestResponse.data?.map((p) => p.chest_number) || []);
+      const existingUsernames = new Set(usernameResponse.data?.map((p) => p.username) || []);
 
       const detected: Array<{ row: number; name: string; changes: string[] }> = [];
       const resolved: FormValues[] = [];
@@ -572,6 +611,7 @@ const ParticipantManagement = () => {
         church: row.church,
         district: row.district,
         username: row.username,
+        level_id: levelId,
         is_active: true,
         created_by: user.id,
       }));
@@ -734,14 +774,26 @@ const ParticipantManagement = () => {
     <AppShell
       variant="admin"
       title="Participants"
-      subtitle={`${participants.length} registered · ${groups.length} groups`}
+      subtitle={`${levelParticipants.length} registered in this level · ${groups.length} groups`}
       maxWidth="wide"
       actions={
         <>
+          <Select
+            value={levelId || undefined}
+            onChange={setLevelId}
+            className="w-44"
+            size="small"
+            placeholder="Event level"
+            options={levels.map((level) => ({
+              value: level.id,
+              label: `${level.name} ${level.year}`,
+            }))}
+          />
           <Button
             variant="secondary"
             size="sm"
             icon={<UploadSimple size={15} />}
+            disabled={!levelId}
             onClick={() => setIsBulkImportOpen(true)}
           >
             <span className="hidden sm:inline">Import</span>
@@ -749,6 +801,7 @@ const ParticipantManagement = () => {
           <Button
             size="sm"
             icon={<Plus size={15} />}
+            disabled={tab === 'people' && !levelId}
             onClick={() => (tab === 'people' ? openParticipantModal() : openGroupModal())}
           >
             <span className="hidden sm:inline">
@@ -813,11 +866,11 @@ const ParticipantManagement = () => {
             </Toolbar>
           }
           emptyIcon={<UserPlus size={22} />}
-          emptyTitle={searchTerm ? 'No matching participants' : 'No participants yet'}
+          emptyTitle={searchTerm ? 'No matching participants' : 'No participants in this level yet'}
           emptyDescription={
             searchTerm
               ? 'Try a different name or chest number.'
-              : 'Add participants one at a time, or import a CSV.'
+              : 'Add participants one at a time, or import a CSV. Chest numbers restart in every event level.'
           }
           emptyAction={
             !searchTerm && (
@@ -883,7 +936,7 @@ const ParticipantManagement = () => {
         description={
           editingParticipant
             ? 'Leave the password blank to keep the current one.'
-            : 'Creates the login the participant will use.'
+            : `Registered in ${levels.find((level) => level.id === levelId)?.name ?? 'this level'} — the chest number only has to be unique there.`
         }
         footer={
           <div className="flex gap-2">
@@ -1049,7 +1102,7 @@ const ParticipantManagement = () => {
         dismissable={!isValidating}
         size="lg"
         title="Import participants"
-        description="One CSV, one participant per row."
+        description={`One CSV, one participant per row, into ${levels.find((level) => level.id === levelId)?.name ?? 'this level'}.`}
         footer={
           csvFile ? (
             <div className="flex gap-2">

@@ -11,16 +11,19 @@ Age categories are always one of: `Sub Juniors`, `Juniors`, `Intermediates`,
 ## 1. Participants
 
 **Where:** Participants → Import
-**Creates:** participant records and their logins.
+**Creates:** participant records and their logins **in the event level selected
+on that screen**. Chest numbers are issued per level, so the same number can be
+reused at the next level, and an entrant who moves up is registered again there
+with a new number.
 
 | Column | Required | Notes |
 | --- | --- | --- |
 | `full_name` | yes | |
 | `age_category` | yes | one of the four categories |
-| `chest_number` | yes | unique; a clash is auto-renumbered and reported |
+| `chest_number` | yes | unique **within the event level**; a clash is auto-renumbered and reported |
 | `church` | yes | used for the champion church standing |
 | `district` | yes | used for the champion district standing |
-| `username` | yes | unique, 3+ characters; a clash gets `.1`, `.2` appended |
+| `username` | yes | unique across the whole system, since it is the login; a clash gets `.1`, `.2` appended |
 | `password` | yes | 8+ characters; hashed server-side on import |
 
 ```csv

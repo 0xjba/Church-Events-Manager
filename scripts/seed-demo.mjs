@@ -327,7 +327,12 @@ const main = async () => {
 
   const participants = check('create participants', await supabase
     .from('participants')
-    .insert(PARTICIPANTS.map((participant) => ({ ...participant, is_active: true, created_by: auth.user.id })))
+    .insert(PARTICIPANTS.map((participant) => ({
+      ...participant,
+      level_id: level.id,
+      is_active: true,
+      created_by: auth.user.id,
+    })))
     .select());
   await setPasswords(token, 'participant', participants.map((participant) => participant.id));
   console.log(`✓ ${participants.length} participants across ${CATEGORIES.length} age categories`);

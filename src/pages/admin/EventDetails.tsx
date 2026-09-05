@@ -153,6 +153,12 @@ const EventDetails = () => {
     try {
       let query = supabase.from('participants').select('*').eq('is_active', true);
 
+      // Participants are registered per event level, and chest numbers restart
+      // in each, so only this level's entrants may be added.
+      if (event?.level?.id) {
+        query = query.eq('level_id', event.level.id);
+      }
+
       // Only entrants of the event's own age category can be added.
       if (event?.age_category) {
         query = query.eq(
@@ -167,7 +173,7 @@ const EventDetails = () => {
     } catch {
       message.error('Failed to load participants');
     }
-  }, [event?.age_category]);
+  }, [event?.age_category, event?.level?.id]);
 
   const fetchEventParticipants = useCallback(async () => {
     try {
