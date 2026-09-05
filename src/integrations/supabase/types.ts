@@ -367,6 +367,7 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean | null
+          level_id: string | null
           last_login: string | null
           login_count: number | null
           updated_at: string
@@ -381,6 +382,7 @@ export type Database = {
           full_name: string
           id?: string
           is_active?: boolean | null
+          level_id?: string | null
           last_login?: string | null
           login_count?: number | null
           updated_at?: string
@@ -395,6 +397,7 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean | null
+          level_id?: string | null
           last_login?: string | null
           login_count?: number | null
           updated_at?: string

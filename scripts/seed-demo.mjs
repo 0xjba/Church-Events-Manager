@@ -342,7 +342,10 @@ const main = async () => {
     .single());
   console.log(`✓ Event level: ${level.name} ${level.year}`);
 
-  const judges = check('create judges', await supabase.from('judges').insert(JUDGES).select());
+  const judges = check('create judges', await supabase
+    .from('judges')
+    .insert(JUDGES.map((judge) => ({ ...judge, level_id: level.id })))
+    .select());
   const panel = judges.filter((judge) => judge.is_active);
   await setPasswords(token, 'judge', judges.map((judge) => judge.id));
   console.log(`✓ ${judges.length} judges (${panel.length} active, 1 inactive)`);

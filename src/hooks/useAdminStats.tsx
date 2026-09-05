@@ -29,6 +29,13 @@ export const useAdminStats = () => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchStats = async () => {
+    // The level arrives a moment after mount; filtering on an empty id would
+    // fail every count and flash an error the first retry then cleared.
+    if (!levelId) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);

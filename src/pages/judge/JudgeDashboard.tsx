@@ -46,6 +46,15 @@ const JudgeDashboard = () => {
     }
 
     try {
+      // Which levels are still running; anything else is put away.
+      const { data: activeLevels, error: levelsError } = await supabase
+        .from('event_levels')
+        .select('id')
+        .eq('is_active', true);
+
+      if (levelsError) throw levelsError;
+      const runningLevels = new Set((activeLevels ?? []).map((level) => level.id));
+
       const { data: eventsData, error: eventsError } = await supabase
         .from('event_judges')
         .select(

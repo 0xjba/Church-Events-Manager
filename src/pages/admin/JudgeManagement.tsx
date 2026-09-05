@@ -7,6 +7,7 @@ import { setPassword, setPasswords } from '@/utils/credentials';
 import { cell, parseCsv, type CsvRow } from '@/utils/csv';
 import { TEMPLATES } from '@/utils/importTemplates';
 import { ImportIssues, ImportPanel, ImportSummary } from '@/components/admin/ImportPanel';
+import { useEventLevel } from '@/hooks/useEventLevel';
 import { AppShell } from '@/components/shell/AppShell';
 import { DataTable } from '@/components/admin/DataTable';
 import { Toolbar } from '@/components/admin/Toolbar';
@@ -16,6 +17,7 @@ import { Sheet } from '@/components/ui/Sheet';
 
 interface Judge {
   id: string;
+  level_id: string | null;
   full_name: string;
   username: string;
   email: string;
@@ -27,6 +29,9 @@ interface Judge {
 
 const JudgeManagement = () => {
   const [judges, setJudges] = useState<Judge[]>([]);
+  // A panel is assembled for one competition, so this screen works within the
+  // event level chosen in the top bar.
+  const { levelId, level } = useEventLevel();
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJudge, setEditingJudge] = useState<Judge | null>(null);
@@ -45,13 +50,20 @@ const JudgeManagement = () => {
 
   useEffect(() => {
     fetchJudges();
-  }, []);
+  }, [levelId]);
 
   const fetchJudges = async () => {
+    if (!levelId) {
+      setJudges([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('judges')
         .select('*')
+        .eq('level_id', levelId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -100,6 +112,7 @@ const JudgeManagement = () => {
         email: values.email,
         church: values.church,
         contact: values.contact || null,
+        level_id: levelId,
       };
 
       if (editingJudge) {
@@ -153,9 +166,9 @@ const JudgeManagement = () => {
     setImportErrors([]);
   };
 
-  const validateJudgeRows = (rows: CsvRow[]) => {
+  const validateJudgeRows = (rows: CsvRow[], existingUsernames: string[]) => {
     const errors: string[] = [];
-    const seenUsernames = new Set(judges.map((judge) => judge.username));
+    const seenUsernames = new Set(existingUsernames);
     const seenEmails = new Set(judges.map((judge) => judge.email));
 
     rows.forEach((row) => {
@@ -192,7 +205,13 @@ const JudgeManagement = () => {
     try {
       setImporting(true);
       const parsed = parseCsv(await file.text(), TEMPLATES.judges.headers.filter((header) => header !== 'contact'));
-      const errors = validateJudgeRows(parsed.rows);
+
+      // A username is a login, so it has to be unique across every level.
+      const { data: takenUsernames } = await supabase.from('judges').select('username');
+      const errors = validateJudgeRows(
+        parsed.rows,
+        (takenUsernames ?? []).map((judge) => judge.username as string),
+      );
 
       setImportFile(file);
       setImportRows(parsed.rows);
@@ -219,6 +238,7 @@ const JudgeManagement = () => {
           email: cell(row, 'email'),
           church: cell(row, 'church'),
           contact: cell(row, 'contact') || null,
+          level_id: levelId,
           is_active: true,
         })))
         .select();
@@ -365,7 +385,7 @@ const JudgeManagement = () => {
     <AppShell
       variant="admin"
       title="Judges"
-      subtitle={`${judges.length} accounts`}
+      subtitle={level ? `${judges.length} on the panel for ${level.name} ${level.year}` : 'No active event level'}
       maxWidth="wide"
       actions={
         <>
@@ -419,11 +439,11 @@ const JudgeManagement = () => {
           </Toolbar>
         }
         emptyIcon={<Gavel size={22} />}
-        emptyTitle={search ? 'No matching judges' : 'No judges yet'}
+        emptyTitle={search ? 'No matching judges' : 'No judges on this panel yet'}
         emptyDescription={
           search
             ? 'Try a different name, username or church.'
-            : 'Judges need an account before they can be assigned to events.'
+            : 'Judges are added per event level, then assigned to its events.'
         }
         emptyAction={
           !search && (
@@ -523,7 +543,7 @@ const JudgeManagement = () => {
         dismissable={!importing}
         size="lg"
         title="Import judges"
-        description="One row per judge, with the login they will use."
+        description={`Onto the panel for ${level?.name ?? 'this level'}. One row per judge, with the login they will use.`}
         footer={
           importFile ? (
             <div className="flex gap-2">

@@ -266,6 +266,7 @@ const EventDetails = () => {
         .from('judges')
         .select('id, full_name, church')
         .eq('is_active', true)
+        .eq('level_id', event?.level?.id ?? '')
         .order('full_name');
 
       if (error) throw error;
@@ -273,7 +274,7 @@ const EventDetails = () => {
     } catch {
       message.error('Failed to load judges');
     }
-  }, []);
+  }, [event?.level?.id]);
 
   const fetchScores = useCallback(async () => {
     try {

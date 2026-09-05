@@ -40,7 +40,9 @@ Jerry Thomas,Seniors,102,"Hope Church, Kottayam",South District,jerry.thomas,cha
 ## 2. Judges
 
 **Where:** Judges → Import
-**Creates:** judge records and their logins.
+**Creates:** judge records and their logins **on the panel for the event level
+selected in the top bar**. A judge who serves at two levels is added to each,
+with a distinct username, since the username is a login.
 
 | Column | Required | Notes |
 | --- | --- | --- |

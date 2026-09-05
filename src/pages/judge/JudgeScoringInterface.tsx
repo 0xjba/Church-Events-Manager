@@ -130,11 +130,22 @@ const JudgeScoringInterface = () => {
 
       const { data: eventData, error: eventError } = await supabase
         .from('events')
-        .select('*')
+        .select('*, event_levels ( id, is_active )')
         .eq('id', eventId)
         .single();
 
       if (eventError) throw eventError;
+
+      // A judge can still hold the link to an event whose level was put away.
+      const level = (eventData as Record<string, any>).event_levels;
+      const levelActive = Array.isArray(level) ? level[0]?.is_active : level?.is_active;
+
+      if (levelActive === false) {
+        message.info('This event is no longer open for scoring');
+        navigate('/judge');
+        return;
+      }
+
       setEvent(eventData as EventRecord);
 
       if (eventData.event_type === 'individual') {

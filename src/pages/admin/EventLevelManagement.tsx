@@ -161,23 +161,9 @@ const EventLevelManagement = () => {
       dataIndex: 'scope',
       key: 'scope',
       width: 150,
-      render: (scope: LevelScope) => {
-        const allows = scopeAllows(scope);
-        return (
-          <div className="min-w-0">
-            <div className="truncate text-foreground">{SCOPE_LABELS[scope] ?? 'District'}</div>
-            <div className="truncate text-caption text-muted-foreground">
-              {[
-                'individual',
-                allows.church ? 'church' : null,
-                allows.district ? 'district' : null,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </div>
-          </div>
-        );
-      },
+      render: (scope: LevelScope) => (
+        <span className="truncate text-foreground">{SCOPE_LABELS[scope] ?? 'District'}</span>
+      ),
     },
     {
       title: 'Year',
