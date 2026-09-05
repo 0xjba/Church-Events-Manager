@@ -48,10 +48,13 @@ export const useAdminStats = () => {
 
       if (participantsError) throw participantsError;
 
-      // Fetch total judges
+      // Judges belong to a level exactly as participants do, so an unscoped
+      // count here reported every judge in the database against whichever
+      // level happened to be selected.
       const { count: judgesCount, error: judgesError } = await supabase
         .from('judges')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('level_id', levelId);
 
       if (judgesError) throw judgesError;
 
@@ -81,16 +84,32 @@ export const useAdminStats = () => {
 
       if (totalEventsError) throw totalEventsError;
 
-      // Fetch total scores and average score
-      const { data: scoresData, error: scoresError } = await supabase
-        .from('scores')
-        .select('score');
+      // Scores reach a level only through their event, and they were counted
+      // across every level too. With no events there is nothing to ask for,
+      // and an empty `in` list would match everything.
+      const { data: levelEvents, error: levelEventsError } = await supabase
+        .from('events')
+        .select('id')
+        .eq('level_id', levelId);
 
-      if (scoresError) throw scoresError;
+      if (levelEventsError) throw levelEventsError;
 
-      const totalScores = scoresData?.length || 0;
-      const averageScore = scoresData && scoresData.length > 0 
-        ? scoresData.reduce((sum, item) => sum + item.score, 0) / scoresData.length 
+      const eventIds = (levelEvents ?? []).map((event) => event.id);
+
+      let scoresData: { score: number }[] = [];
+      if (eventIds.length > 0) {
+        const { data, error: scoresError } = await supabase
+          .from('scores')
+          .select('score')
+          .in('event_id', eventIds);
+
+        if (scoresError) throw scoresError;
+        scoresData = data ?? [];
+      }
+
+      const totalScores = scoresData.length;
+      const averageScore = scoresData.length > 0
+        ? scoresData.reduce((sum, item) => sum + item.score, 0) / scoresData.length
         : 0;
 
       setStats({

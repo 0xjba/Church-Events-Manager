@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useEventLevel } from '@/hooks/useEventLevel';
 
 export interface RecentActivity {
   id: string;
@@ -11,11 +12,21 @@ export interface RecentActivity {
 }
 
 export const useRecentActivity = () => {
+  const { levelId } = useEventLevel();
   const [activities, setActivities] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchRecentActivity = async () => {
+    // Every screen reports on the level chosen in the top bar, and this feed
+    // read the whole database: it only looked right while the newest rows
+    // happened to belong to the selected level.
+    if (!levelId) {
+      setActivities([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -26,6 +37,7 @@ export const useRecentActivity = () => {
       const { data: recentEvents, error: eventsError } = await supabase
         .from('events')
         .select('id, name, created_at, status')
+        .eq('level_id', levelId)
         .order('created_at', { ascending: false })
         .limit(3);
 
@@ -46,6 +58,7 @@ export const useRecentActivity = () => {
       const { data: recentParticipants, error: participantsError } = await supabase
         .from('participants')
         .select('id, full_name, created_at')
+        .eq('level_id', levelId)
         .order('created_at', { ascending: false })
         .limit(2);
 
@@ -62,14 +75,29 @@ export const useRecentActivity = () => {
         });
       });
 
-      // Fetch recent scores
-      const { data: recentScores, error: scoresError } = await supabase
-        .from('scores')
-        .select('id, created_at, score')
-        .order('created_at', { ascending: false })
-        .limit(2);
+      // Scores belong to a level only through their event. An empty `in` list
+      // matches every row, so with no events there is nothing to ask for.
+      const { data: levelEvents, error: levelEventsError } = await supabase
+        .from('events')
+        .select('id')
+        .eq('level_id', levelId);
 
-      if (scoresError) throw scoresError;
+      if (levelEventsError) throw levelEventsError;
+
+      const eventIds = (levelEvents ?? []).map((event) => event.id);
+      let recentScores: { id: string; created_at: string; score: number }[] = [];
+
+      if (eventIds.length > 0) {
+        const { data, error: scoresError } = await supabase
+          .from('scores')
+          .select('id, created_at, score')
+          .in('event_id', eventIds)
+          .order('created_at', { ascending: false })
+          .limit(2);
+
+        if (scoresError) throw scoresError;
+        recentScores = data ?? [];
+      }
 
       recentScores?.forEach(score => {
         allActivities.push({
@@ -127,7 +155,7 @@ export const useRecentActivity = () => {
       participantsSubscription.unsubscribe();
       scoresSubscription.unsubscribe();
     };
-  }, []);
+  }, [levelId]);
 
   return { activities, loading, error, refetch: fetchRecentActivity };
 };
