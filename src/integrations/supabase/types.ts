@@ -623,6 +623,10 @@ export type Database = {
         Args: { p_username: string }
         Returns: string
       }
+      replace_event_results: {
+        Args: { p_event_id: string; p_results: Json }
+        Returns: number
+      }
     }
     Enums: {
       age_category: "Sub Juniors" | "Juniors" | "Intermediates" | "Seniors"

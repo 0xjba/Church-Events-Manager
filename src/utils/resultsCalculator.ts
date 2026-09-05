@@ -59,6 +59,10 @@ export interface EventResults {
   total_participants: number;
   criteria: CriteriaData[];
   last_calculated: Date;
+  /** Entered but never scored by anyone — they did not compete. */
+  absentees: Array<{ id: string; label: string }>;
+  /** Scored by only part of the panel, which is worth a look before publishing. */
+  partiallyJudged: Array<{ id: string; label: string; judges: number; expected: number }>;
 }
 
 export class ResultsCalculator {
@@ -72,24 +76,56 @@ export class ResultsCalculator {
       ]);
 
       const results: ResultData[] = [];
+      const absentees: Array<{ id: string; label: string }> = [];
+      const partiallyJudged: Array<{ id: string; label: string; judges: number; expected: number }> = [];
+
+      const panelSize = await this.getEventJudgeCount(eventId);
+
+      // An entrant nobody scored did not compete. Ranking them at zero would
+      // put an absentee on the results sheet ahead of nobody and below
+      // everybody, which is not a placing.
+      const record = (
+        id: string,
+        label: string,
+        entrantScores: ScoreData[],
+        build: () => ResultData,
+      ) => {
+        if (entrantScores.length === 0) {
+          absentees.push({ id, label });
+          return;
+        }
+
+        const judges = new Set(entrantScores.map((score) => score.judge_id)).size;
+        if (panelSize > 0 && judges < panelSize) {
+          partiallyJudged.push({ id, label, judges, expected: panelSize });
+        }
+
+        results.push(build());
+      };
 
       if (eventData.event_type === 'individual') {
-        // Individual event - calculate results for each participant
         const participantsData = await this.getEventParticipants(eventId);
-        
+
         for (const participant of participantsData) {
           const participantScores = scoresData.filter(s => s.participant_id === participant.id);
-          const result = this.calculateParticipantResult(participant, participantScores, criteriaData);
-          results.push(result);
+          record(
+            participant.id,
+            `#${participant.chest_number} ${participant.full_name}`,
+            participantScores,
+            () => this.calculateParticipantResult(participant, participantScores, criteriaData),
+          );
         }
       } else {
-        // Group event - calculate results for each group
         const groupsData = await this.getEventGroups(eventId);
-        
+
         for (const group of groupsData) {
           const groupScores = scoresData.filter(s => s.group_id === group.id);
-          const result = this.calculateGroupResult(group, groupScores, criteriaData);
-          results.push(result);
+          record(
+            group.id,
+            group.name,
+            groupScores,
+            () => this.calculateGroupResult(group, groupScores, criteriaData),
+          );
         }
       }
 
@@ -104,7 +140,9 @@ export class ResultsCalculator {
         results,
         total_participants: results.length,
         criteria: criteriaData,
-        last_calculated: new Date()
+        last_calculated: new Date(),
+        absentees,
+        partiallyJudged,
       };
     } catch (error) {
       console.error('Error calculating event results:', error);
@@ -121,6 +159,17 @@ export class ResultsCalculator {
 
     if (error) throw error;
     return data || [];
+  }
+
+  /** How many judges the event expects, so partial panels can be spotted. */
+  private static async getEventJudgeCount(eventId: string): Promise<number> {
+    const { count, error } = await supabase
+      .from('event_judges')
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId);
+
+    if (error) throw error;
+    return count ?? 0;
   }
 
   private static async getEventCriteria(eventId: string): Promise<CriteriaData[]> {
@@ -282,27 +331,20 @@ export class ResultsCalculator {
 
   static async saveEventResults(eventResults: EventResults): Promise<void> {
     try {
-      // Delete existing results for this event
-      await supabase
-        .from('results')
-        .delete()
-        .eq('event_id', eventResults.event_id);
-
-      // Insert new results
-      const resultsToInsert = eventResults.results.map(result => ({
-        event_id: eventResults.event_id,
-        participant_id: result.participant_id || null,
-        group_id: result.group_id || null,
-        total_score: result.total_score,
-        average_score: result.average_score,
-        rank: result.rank,
-        tie_breaker_reason: result.tie_breaker_reason,
-        calculated_at: eventResults.last_calculated.toISOString()
-      }));
-
-      const { error } = await supabase
-        .from('results')
-        .insert(resultsToInsert);
+      // One transaction on the server: the old results only disappear if the
+      // new ones land. Two separate requests could leave an event with scores
+      // but no placings.
+      const { error } = await supabase.rpc('replace_event_results', {
+        p_event_id: eventResults.event_id,
+        p_results: eventResults.results.map(result => ({
+          participant_id: result.participant_id ?? '',
+          group_id: result.group_id ?? '',
+          total_score: result.total_score,
+          average_score: result.average_score,
+          rank: result.rank,
+          tie_breaker_reason: result.tie_breaker_reason ?? '',
+        })),
+      });
 
       if (error) throw error;
     } catch (error) {

@@ -272,26 +272,14 @@ const ResultsManagement = () => {
 
       const results = await ResultsCalculator.calculateEventResults(eventId);
 
-      const resultsToInsert = results.results.map((result) => ({
-        event_id: eventId,
-        total_score: result.total_score,
-        average_score: result.average_score,
-        rank: result.rank,
-        tie_breaker_reason: result.tie_breaker_reason,
-        calculated_at: new Date().toISOString(),
-        ...(eventData.event_type === 'individual'
-          ? { participant_id: result.participant_id }
-          : { group_id: result.group_id }),
-      }));
+      if (results.results.length === 0) {
+        message.destroy();
+        message.warning('Nobody in this event has been scored yet');
+        return;
+      }
 
-      const { error: deleteError } = await supabase
-        .from('results')
-        .delete()
-        .eq('event_id', eventId);
-      if (deleteError) throw deleteError;
-
-      const { error: insertError } = await supabase.from('results').insert(resultsToInsert);
-      if (insertError) throw insertError;
+      // Delete and insert happen inside one transaction on the server.
+      await ResultsCalculator.saveEventResults(results);
 
       message.destroy();
       message.success(
@@ -299,6 +287,26 @@ const ResultsManagement = () => {
           eventData.event_type === 'individual' ? 'participants' : 'groups'
         } — publish when you are ready to release them`,
       );
+
+      // Worth saying out loud rather than burying: who did not compete, and
+      // who only part of the panel scored.
+      if (results.absentees.length > 0) {
+        message.info(
+          `Left out of the results, unscored: ${results.absentees
+            .map((entrant) => entrant.label)
+            .join(', ')}`,
+          8,
+        );
+      }
+
+      if (results.partiallyJudged.length > 0) {
+        message.warning(
+          `Scored by only part of the panel: ${results.partiallyJudged
+            .map((entrant) => `${entrant.label} (${entrant.judges} of ${entrant.expected} judges)`)
+            .join(', ')}`,
+          10,
+        );
+      }
 
       await fetchEvents();
     } catch (error) {
