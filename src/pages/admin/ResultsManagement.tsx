@@ -531,11 +531,15 @@ const ResultsManagement = () => {
       const winners: WinnersExportData = { events: [], generated_at: new Date().toISOString() };
 
       for (const event of sortedEvents) {
+        // Groups are entrants too: a group event has winners, and its placings
+        // count towards the champion church.
         const { data: eventResults, error: resultsError } = await supabase
           .from('results')
-          .select(`*, participant:participants( full_name, chest_number, church, district )`)
+          .select(
+            `*, participant:participants( full_name, chest_number, church, district ),
+             group:groups( name, chest_number, church, district )`,
+          )
           .eq('event_id', event.id)
-          .not('participant_id', 'is', null)
           .order('rank', { ascending: true })
           .limit(3);
 
@@ -553,10 +557,11 @@ const ResultsManagement = () => {
               average_score: result.average_score,
               tie_breaker_reason: result.tie_breaker_reason,
               participant: {
-                full_name: result.participant?.full_name || 'Unknown',
-                chest_number: result.participant?.chest_number || 'N/A',
-                church: result.participant?.church || 'Unknown',
-                district: result.participant?.district || 'Unknown',
+                full_name: result.group?.name || result.participant?.full_name || 'Unknown',
+                chest_number:
+                  result.group?.chest_number || result.participant?.chest_number || 'N/A',
+                church: result.group?.church || result.participant?.church || 'Unknown',
+                district: result.group?.district || result.participant?.district || 'Unknown',
               },
             })),
           });
@@ -1273,8 +1278,9 @@ const ResultsManagement = () => {
               return (
                 <div key={event.event_id}>
                   {newCategory && (
-                    <h3 className="mb-2 mt-4 rounded-lg bg-foreground px-3 py-2 text-center text-body font-semibold text-background first:mt-0">
+                    <h3 className="mb-2 mt-5 flex items-center gap-3 text-caption font-semibold uppercase tracking-wide text-muted-foreground first:mt-0">
                       {event.age_category || 'All categories'}
+                      <span className="h-px flex-1 bg-border" />
                     </h3>
                   )}
 
@@ -1282,6 +1288,11 @@ const ResultsManagement = () => {
                     <div className="flex items-center justify-between gap-2 bg-surface-sunken px-3 py-2">
                       <p className="min-w-0 truncate text-body font-medium text-foreground">
                         {event.event_name}
+                        {event.event_type === 'group' && (
+                          <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-caption font-normal text-muted-foreground">
+                            group
+                          </span>
+                        )}
                       </p>
                       <button
                         type="button"
