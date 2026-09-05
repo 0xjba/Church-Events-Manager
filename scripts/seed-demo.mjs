@@ -56,8 +56,33 @@ if (!DRY_RUN && (!ADMIN_EMAIL || !ADMIN_PASSWORD)) {
   process.exit(1);
 }
 
+// Seeding is hundreds of requests in a row, and the gateway occasionally drops
+// one ("upstream connect error", 502, timeout). Retrying at the transport layer
+// keeps a single blip from ending a run half-finished.
+const retryingFetch = async (input, init) => {
+  let lastError;
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** (attempt - 1)));
+    }
+
+    try {
+      const response = await fetch(input, init);
+      // 5xx from the gateway is worth another go; anything else is an answer.
+      if (response.status < 500 || response.status === 501) return response;
+      lastError = new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
+};
+
 const supabase = createClient(SUPABASE_URL, ANON_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
+  global: { fetch: retryingFetch },
 });
 
 const check = (label, { data, error }) => {
