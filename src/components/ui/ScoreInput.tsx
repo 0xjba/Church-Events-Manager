@@ -66,12 +66,15 @@ export const ScoreInput = ({
         value === null ? 'border-border' : 'border-primary/30 bg-primary-soft/30',
       )}
     >
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-body font-medium text-foreground">{label}</p>
-          {hint && <p className="text-caption text-muted-foreground">{hint}</p>}
-        </div>
-        <span className="tnum shrink-0 text-caption text-muted-foreground">max {max}</span>
+      {/* The maximum is shown once, beside the value, rather than repeated in
+          a corner label at a third type size. */}
+      <div className="mb-3 flex items-center gap-2">
+        <p className="min-w-0 flex-1 truncate text-body font-medium text-foreground">{label}</p>
+        {hint && (
+          <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-caption text-muted-foreground">
+            {hint}
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-3">
@@ -86,24 +89,49 @@ export const ScoreInput = ({
         </button>
 
         <div className="flex-1">
-          <div className="flex items-baseline justify-center gap-1">
+          {/* A bordered field, because a bare number does not look typable.
+              Value and maximum share one size and one family so the pair reads
+              as a single figure. */}
+          <div className="flex items-center justify-center gap-1.5">
             <input
               type="text"
               inputMode="decimal"
               disabled={disabled}
               value={draft}
-              placeholder="—"
-              aria-label={label}
-              onChange={(event) => setDraft(event.target.value.replace(/[^0-9.]/g, ''))}
+              placeholder="–"
+              aria-label={`${label}, out of ${max}`}
+              onChange={(event) => {
+                const next = event.target.value.replace(/[^0-9.]/g, '');
+                setDraft(next);
+
+                // Commit while typing so the running total keeps up, but only
+                // once the number is in range: "85" on the way to "8.5" would
+                // otherwise be clamped to the maximum mid-keystroke.
+                const parsed = Number(next);
+                if (next !== '' && Number.isFinite(parsed) && parsed >= 0 && parsed <= max) {
+                  commit(parsed);
+                }
+              }}
+              onFocus={(event) => event.target.select()}
               onBlur={commitDraft}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') (event.target as HTMLInputElement).blur();
               }}
-              className="tnum w-20 border-none bg-transparent p-0 text-center text-metric font-semibold text-foreground placeholder:text-muted-foreground focus:outline-none"
+              className={cn(
+                'tnum h-12 w-[4.5rem] rounded-lg border bg-surface text-center text-[1.375rem] font-semibold leading-none',
+                'text-foreground placeholder:font-normal placeholder:text-muted-foreground',
+                'focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/25',
+                'disabled:bg-surface-sunken disabled:text-muted-foreground',
+                value === null ? 'border-border-strong' : 'border-primary/40',
+              )}
             />
-            <span className="tnum text-body text-muted-foreground">/ {max}</span>
+            {/* Fixed width so a "/ 5" row and a "/ 10" row keep their fields
+                on the same vertical line down the sheet. */}
+            <span className="tnum w-[3.25rem] text-left text-[1.375rem] font-medium leading-none text-muted-foreground">
+              / {max}
+            </span>
           </div>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-primary transition-[width] duration-200"
               style={{ width: `${filled}%` }}
