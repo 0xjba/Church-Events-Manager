@@ -308,6 +308,40 @@ const main = async () => {
   const token = auth.session.access_token;
   console.log(`✓ Signed in as ${ADMIN_EMAIL}`);
 
+  // Check the schema before deleting anything: a missing migration used to be
+  // discovered after the previous demo had already been cleared away.
+  const schemaProbe = await supabase.from('judges').select('level_id').limit(1);
+  if (schemaProbe.error?.message?.includes('level_id')) {
+    console.error(
+      '\n✗ The database is behind this script: judges.level_id is missing.\n' +
+      '  Run `supabase db push` first — nothing has been changed.',
+    );
+    process.exit(1);
+  }
+
+  // Check the schema before deleting anything: a seeder that clears the old
+  // demo and then fails on a missing column leaves nothing behind at all.
+  const required = [
+    ['participants', 'level_id'],
+    ['judges', 'level_id'],
+    ['groups', 'chest_number'],
+    ['groups', 'level_id'],
+    ['event_levels', 'scope'],
+    ['event_levels', 'results_published'],
+  ];
+
+  const missing = [];
+  for (const [table, column] of required) {
+    const { error } = await supabase.from(table).select(column).limit(1);
+    if (error?.code === '42703') missing.push(`${table}.${column}`);
+  }
+
+  if (missing.length > 0) {
+    console.error(`\n✗ The database is behind this script: ${missing.join(', ')} missing.`);
+    console.error('  Run `supabase db push` first. Nothing has been changed.');
+    process.exit(1);
+  }
+
   if (RESET) {
     // Everything cascades from the level; accounts are matched by their
     // demo. username prefix.
