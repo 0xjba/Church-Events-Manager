@@ -163,24 +163,28 @@ const EventDetails = () => {
   }, [eventId, navigate, levelId, levels, setLevelId]);
 
   const fetchAllParticipants = useCallback(async () => {
-    try {
-      let query = supabase.from('participants').select('*').eq('is_active', true);
+    // Wait for the event: an unfiltered read would briefly offer entrants from
+    // every other level.
+    if (!event?.level?.id) return;
 
-      // Participants are registered per event level, and chest numbers restart
-      // in each, so only this level's entrants may be added.
-      if (event?.level?.id) {
-        query = query.eq('level_id', event.level.id);
-      }
+    try {
+      const query = supabase
+        .from('participants')
+        .select('*')
+        .eq('is_active', true)
+        // Participants are registered per event level, and chest numbers restart
+        // in each, so only this level's entrants may be added.
+        .eq('level_id', event.level.id);
 
       // Only entrants of the event's own age category can be added.
-      if (event?.age_category) {
-        query = query.eq(
-          'age_category',
-          event.age_category as 'Sub Juniors' | 'Juniors' | 'Intermediates' | 'Seniors',
-        );
-      }
+      const scoped = event.age_category
+        ? query.eq(
+            'age_category',
+            event.age_category as 'Sub Juniors' | 'Juniors' | 'Intermediates' | 'Seniors',
+          )
+        : query;
 
-      const { data, error } = await query.order('full_name');
+      const { data, error } = await scoped.order('full_name');
       if (error) throw error;
       setParticipants((data || []) as Participant[]);
     } catch {
@@ -218,11 +222,14 @@ const EventDetails = () => {
   }, [eventId]);
 
   const fetchGroups = useCallback(async () => {
+    const levelId = event?.level?.id;
+    if (!levelId) return;
+
     try {
       const { data, error } = await supabase
         .from('groups')
         .select('*')
-        .eq('level_id', event?.level?.id ?? '')
+        .eq('level_id', levelId)
         .order('chest_number');
 
       if (error) throw error;
@@ -230,7 +237,7 @@ const EventDetails = () => {
     } catch {
       message.error('Failed to load groups');
     }
-  }, []);
+  }, [event?.level?.id]);
 
   const fetchEventGroups = useCallback(async () => {
     try {
@@ -261,12 +268,15 @@ const EventDetails = () => {
   }, [eventId]);
 
   const fetchJudges = useCallback(async () => {
+    const levelId = event?.level?.id;
+    if (!levelId) return;
+
     try {
       const { data, error } = await supabase
         .from('judges')
         .select('id, full_name, church')
         .eq('is_active', true)
-        .eq('level_id', event?.level?.id ?? '')
+        .eq('level_id', levelId)
         .order('full_name');
 
       if (error) throw error;
@@ -1053,6 +1063,7 @@ const EventDetails = () => {
                     checked ? [...current, id] : current.filter((value) => value !== id),
                   )
                 }
+                emptyText="No groups in this event level yet — add them under Groups first."
               />
             </Sheet>
 
@@ -1090,6 +1101,7 @@ const EventDetails = () => {
                     checked ? [...current, id] : current.filter((value) => value !== id),
                   )
                 }
+                emptyText="No judges in this event level yet — add them under Judges first."
               />
             </Sheet>
 
@@ -1204,6 +1216,7 @@ const PickerList = ({
   items,
   selected,
   onToggle,
+  emptyText = 'Nothing to show',
 }: {
   items: Array<{
     id: string;
@@ -1214,10 +1227,11 @@ const PickerList = ({
   }>;
   selected: string[];
   onToggle: (id: string, checked: boolean) => void;
+  emptyText?: string;
 }) => (
   <div className="scrollbar-thin max-h-[55vh] overflow-y-auto rounded-xl border border-border">
     {items.length === 0 ? (
-      <p className="px-3 py-8 text-center text-caption text-muted-foreground">Nothing to show</p>
+      <p className="px-3 py-8 text-center text-caption text-muted-foreground">{emptyText}</p>
     ) : (
       items.map((item) => (
         <label
