@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Form, Input as AntInput, InputNumber, Switch, message } from 'antd';
+import { Form, Input as AntInput, InputNumber, Select, Switch, message } from 'antd';
 import { CalendarBlank, PencilSimple, Plus, Trash } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import type { FormValues } from '@/lib/types';
@@ -7,6 +7,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { DataTable } from '@/components/admin/DataTable';
 import { Button, StatusPill } from '@/components/ui/primitives';
 import { Sheet } from '@/components/ui/Sheet';
+import { SCOPE_LABELS, scopeAllows, type LevelScope } from '@/utils/championship';
 
 interface EventLevel {
   id: string;
@@ -14,6 +15,7 @@ interface EventLevel {
   year: number;
   description: string | null;
   is_active: boolean;
+  scope: LevelScope;
   created_at: string;
   updated_at: string;
   event_count?: number;
@@ -72,11 +74,12 @@ const EventLevelManagement = () => {
         year: level.year,
         description: level.description || '',
         is_active: level.is_active,
+        scope: level.scope ?? 'district',
       });
     } else {
       setEditingLevel(null);
       form.resetFields();
-      form.setFieldsValue({ year: new Date().getFullYear(), is_active: true });
+      form.setFieldsValue({ year: new Date().getFullYear(), is_active: true, scope: 'district' });
     }
     setIsModalOpen(true);
   };
@@ -96,6 +99,7 @@ const EventLevelManagement = () => {
         year: values.year,
         description: values.description || null,
         is_active: values.is_active,
+        scope: values.scope ?? 'district',
       };
 
       if (editingLevel) {
@@ -151,6 +155,29 @@ const EventLevelManagement = () => {
           )}
         </div>
       ),
+    },
+    {
+      title: 'Level',
+      dataIndex: 'scope',
+      key: 'scope',
+      width: 150,
+      render: (scope: LevelScope) => {
+        const allows = scopeAllows(scope);
+        return (
+          <div className="min-w-0">
+            <div className="truncate text-foreground">{SCOPE_LABELS[scope] ?? 'District'}</div>
+            <div className="truncate text-caption text-muted-foreground">
+              {[
+                'individual',
+                allows.church ? 'church' : null,
+                allows.district ? 'district' : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </div>
+          </div>
+        );
+      },
     },
     {
       title: 'Year',
@@ -268,13 +295,29 @@ const EventLevelManagement = () => {
             <AntInput placeholder="District level" />
           </Form.Item>
 
-          <Form.Item
-            label="Year"
-            name="year"
-            rules={[{ required: true, message: 'Year is required' }]}
-          >
-            <InputNumber className="w-full" min={2000} max={2100} />
-          </Form.Item>
+          <div className="grid grid-cols-2 gap-3">
+            <Form.Item
+              label="Year"
+              name="year"
+              rules={[{ required: true, message: 'Year is required' }]}
+            >
+              <InputNumber className="w-full" min={2000} max={2100} />
+            </Form.Item>
+
+            <Form.Item
+              label="What is this level?"
+              name="scope"
+              rules={[{ required: true, message: 'Choose the level' }]}
+              extra="Decides which champions are crowned"
+            >
+              <Select
+                options={(['church', 'district', 'state'] as LevelScope[]).map((scope) => ({
+                  value: scope,
+                  label: SCOPE_LABELS[scope],
+                }))}
+              />
+            </Form.Item>
+          </div>
 
           <Form.Item label="Description" name="description">
             <AntInput.TextArea rows={2} placeholder="Optional" />
@@ -282,6 +325,32 @@ const EventLevelManagement = () => {
 
           <Form.Item label="Active" name="is_active" valuePropName="checked">
             <Switch />
+          </Form.Item>
+
+          <Form.Item noStyle shouldUpdate>
+            {({ getFieldValue }) => {
+              const allows = scopeAllows(getFieldValue('scope'));
+              return (
+                <p className="mb-2 rounded-lg bg-surface-sunken p-3 text-caption text-muted-foreground">
+                  Crowns an <span className="font-medium text-foreground">individual champion</span>
+                  {allows.church && (
+                    <>
+                      {' '}and a <span className="font-medium text-foreground">champion church</span>
+                    </>
+                  )}
+                  {allows.district && (
+                    <>
+                      {' '}and a <span className="font-medium text-foreground">champion district</span>
+                    </>
+                  )}
+                  .
+                  {!allows.church &&
+                    ' Every entrant comes from the same church, so there is nothing to compare above the individual.'}
+                  {allows.church && !allows.district &&
+                    ' Churches are compared against each other; districts only matter at state level.'}
+                </p>
+              );
+            }}
           </Form.Item>
         </Form>
       </Sheet>

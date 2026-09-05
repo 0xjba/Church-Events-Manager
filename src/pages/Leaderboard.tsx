@@ -6,6 +6,9 @@ import {
   churchStandings,
   districtStandings,
   individualStandings,
+  scopeAllows,
+  widestScope,
+  type LevelScope,
   type PlacedResult,
   type Standing,
 } from '@/utils/championship';
@@ -29,6 +32,7 @@ interface EventSummary {
   status: string;
   age_category: string | null;
   results_published: boolean;
+  event_levels: { id: string; name: string; scope: LevelScope } | null;
 }
 
 interface EventResult {
@@ -87,17 +91,29 @@ const Leaderboard = () => {
   const [loading, setLoading] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
 
+  // A local church level has no church table worth showing, and districts only
+  // matter once the competition is state-wide.
+  const allows = scopeAllows(widestScope(events.map((event) => event.event_levels?.scope)));
+
+  useEffect(() => {
+    if (championshipView === 'church' && !allows.church) setChampionshipView('individual');
+    if (championshipView === 'district' && !allows.district) setChampionshipView('individual');
+  }, [allows.church, allows.district, championshipView]);
+
   const fetchPublishedEvents = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('events')
-        .select('id, name, type, event_type, status, age_category, results_published')
+        .select(
+          `id, name, type, event_type, status, age_category, results_published,
+           event_levels ( id, name, scope )`,
+        )
         .eq('results_published', true)
         .order('event_order', { ascending: true, nullsFirst: false });
 
       if (error) throw error;
 
-      setEvents(data ?? []);
+      setEvents((data ?? []) as unknown as EventSummary[]);
       if (data && data.length > 0) setSelectedEvent((current) => current || data[0].id);
     } catch {
       message.error('Failed to load published events');
@@ -330,7 +346,7 @@ const Leaderboard = () => {
                 <>
                   {/* Church and district standings only mean something once the
                       competition is bigger than one church. */}
-                  {(championship.churches.length > 1 || championship.districts.length > 1) && (
+                  {(allows.church || allows.district) && (
                     <SegmentedControl
                       value={championshipView}
                       onChange={(value) =>
@@ -339,8 +355,8 @@ const Leaderboard = () => {
                       className="mb-3"
                       options={[
                         { value: 'individual', label: 'Individual' },
-                        { value: 'church', label: 'Church' },
-                        { value: 'district', label: 'District' },
+                        ...(allows.church ? [{ value: 'church', label: 'Church' }] : []),
+                        ...(allows.district ? [{ value: 'district', label: 'District' }] : []),
                       ]}
                     />
                   )}

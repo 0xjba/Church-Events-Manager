@@ -329,7 +329,15 @@ const main = async () => {
 
   const level = check('create level', await supabase
     .from('event_levels')
-    .insert({ name: LEVEL_NAME, year: LEVEL_YEAR, description: 'Sample data for demonstrations', is_active: true })
+    .insert({
+      name: LEVEL_NAME,
+      year: LEVEL_YEAR,
+      description: 'Sample data for demonstrations',
+      is_active: true,
+      // District level, so the demo crowns an individual champion and a
+      // champion church, but not a champion district.
+      scope: 'district',
+    })
     .select()
     .single());
   console.log(`✓ Event level: ${level.name} ${level.year}`);

@@ -137,3 +137,40 @@ export const churchStandings = (results: PlacedResult[]) =>
 
 export const districtStandings = (results: PlacedResult[]) =>
   tally(results, (result) => affiliation(result, 'district'), (_, key) => key);
+
+/*
+ * What an event level crowns.
+ *
+ * At a local church level every entrant is from that church, so a champion
+ * church would be a table of one. A district level crowns the best church in
+ * it. Only at state level is there more than one district to compare.
+ */
+export type LevelScope = 'church' | 'district' | 'state';
+
+export interface ChampionshipScope {
+  individual: boolean;
+  church: boolean;
+  district: boolean;
+}
+
+export const scopeAllows = (scope: LevelScope | null | undefined): ChampionshipScope => ({
+  individual: true,
+  church: scope === 'district' || scope === 'state',
+  district: scope === 'state',
+});
+
+const ORDER: LevelScope[] = ['church', 'district', 'state'];
+
+/** The widest scope among the levels in play decides what can be shown. */
+export const widestScope = (scopes: Array<LevelScope | null | undefined>): LevelScope =>
+  scopes.reduce<LevelScope>(
+    (widest, scope) =>
+      scope && ORDER.indexOf(scope) > ORDER.indexOf(widest) ? scope : widest,
+    'church',
+  );
+
+export const SCOPE_LABELS: Record<LevelScope, string> = {
+  church: 'Local church',
+  district: 'District',
+  state: 'State',
+};

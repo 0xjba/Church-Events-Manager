@@ -9,6 +9,10 @@ import {
   churchStandings,
   districtStandings,
   individualStandings,
+  SCOPE_LABELS,
+  scopeAllows,
+  widestScope,
+  type LevelScope,
   type PlacedResult,
   type Standing,
 } from '@/utils/championship';
@@ -47,6 +51,7 @@ interface LevelRecord {
   year: number;
   is_active: boolean;
   results_published: boolean;
+  scope: LevelScope;
 }
 
 interface JudgeScore {
@@ -183,6 +188,7 @@ const ResultsManagement = () => {
   const [showScoresForEvent, setShowScoresForEvent] = useState<Record<string, boolean>>({});
   const [individualChampion, setIndividualChampion] = useState<Champion | null>(null);
   const [affiliationChampions, setAffiliationChampions] = useState<{
+    scope: LevelScope;
     churches: Array<Standing<string>>;
     districts: Array<Standing<string>>;
   } | null>(null);
@@ -201,7 +207,10 @@ const ResultsManagement = () => {
     try {
       const [eventsResponse, levelsResponse, resultsResponse] = await Promise.all([
         supabase.from('events').select('*').order('event_order', { ascending: true, nullsFirst: false }),
-        supabase.from('event_levels').select('id, name, year, is_active, results_published').order('year', { ascending: false }),
+        supabase
+          .from('event_levels')
+          .select('id, name, year, is_active, results_published, scope')
+          .order('year', { ascending: false }),
         supabase.from('results').select('event_id'),
       ]);
 
@@ -599,9 +608,17 @@ const ResultsManagement = () => {
         })),
       );
 
+      const scope = widestScope(
+        winners.events
+          .map((event) => events.find((candidate) => candidate.id === event.event_id)?.level_id)
+          .map((levelId) => levels.find((level) => level.id === levelId)?.scope),
+      );
+      const allows = scopeAllows(scope);
+
       setAffiliationChampions({
-        churches: churchStandings(placed),
-        districts: districtStandings(placed),
+        scope,
+        churches: allows.church ? churchStandings(placed) : [],
+        districts: allows.district ? districtStandings(placed) : [],
       });
       setShowScoresForEvent({});
       setViewingWinners(true);
@@ -1223,13 +1240,13 @@ const ResultsManagement = () => {
               <div className="grid gap-3 md:grid-cols-2">
                 <ChampionBoard
                   title="Champion church"
-                  subtitle="Individual and group placings combined"
+                  subtitle={`${SCOPE_LABELS[affiliationChampions.scope]} level · individual and group placings`}
                   standings={affiliationChampions.churches.slice(0, 5)}
                 />
-                {affiliationChampions.districts.length > 1 && (
+                {affiliationChampions.districts.length > 0 && (
                   <ChampionBoard
                     title="Champion district"
-                    subtitle="Every church in the district"
+                    subtitle="Every church in the district, added together"
                     standings={affiliationChampions.districts.slice(0, 5)}
                   />
                 )}
