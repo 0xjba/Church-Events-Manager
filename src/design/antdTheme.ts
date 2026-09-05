@@ -44,6 +44,10 @@ export const antdTheme: ThemeConfig = {
     fontFamily:
       "'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
     wireframe: false,
+    // Selects, date pickers and the rest open in their own portal. The default
+    // base of 1050 puts them behind our sheets at 1100, so a dropdown inside a
+    // sheet looked empty — you saw the chosen value and no list.
+    zIndexPopupBase: 1200,
   },
   components: {
     Button: {
