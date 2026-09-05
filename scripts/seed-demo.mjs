@@ -9,8 +9,8 @@
  * backend works end to end.
  *
  *   ADMIN_EMAIL=you@example.org ADMIN_PASSWORD=... node scripts/seed-demo.mjs
- *   ... node scripts/seed-demo.mjs --reset    # delete the demo season first
  *   ... node scripts/seed-demo.mjs --dry-run  # print the plan, write nothing
+ *   ... node scripts/seed-demo.mjs --keep     # leave any existing demo in place
  *
  * Everything it creates hangs off one event level, so removing the demo is a
  * single delete of that level.
@@ -24,7 +24,10 @@ const LEVEL_YEAR = 2026;
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? 'demo1234';
 
 const args = new Set(process.argv.slice(2));
-const RESET = args.has('--reset');
+// Re-seeding is the normal case, and a half-finished run leaves accounts that
+// would collide on their unique usernames, so the previous demo is cleared
+// unless --keep is passed.
+const RESET = !args.has('--keep');
 const DRY_RUN = args.has('--dry-run');
 
 /* ----------------------------------------------------------------- setup */
@@ -217,13 +220,25 @@ const insertAll = async (table, rows, label) => {
   return rows.length;
 };
 
-const setPassword = async (token, userType, userId) => {
-  const { data, error } = await supabase.functions.invoke('participant-auth/set-password', {
-    body: { user_type: userType, user_id: userId, password: DEMO_PASSWORD },
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (error) throw new Error(`set-password failed for ${userType} ${userId}: ${error.message}`);
-  if (data?.error) throw new Error(`set-password failed for ${userType} ${userId}: ${data.error}`);
+// One call per account meant 53 round trips, each hashing at 210k rounds; the
+// function takes a batch, so send them together.
+const setPasswords = async (token, userType, ids) => {
+  for (let index = 0; index < ids.length; index += 25) {
+    const slice = ids.slice(index, index + 25);
+
+    const { data, error } = await supabase.functions.invoke('participant-auth/set-password', {
+      body: {
+        credentials: slice.map((id) => ({ user_type: userType, user_id: id, password: DEMO_PASSWORD })),
+      },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (error) throw new Error(`set-password failed for ${userType}s: ${error.message}`);
+    if (data?.error) throw new Error(`set-password failed for ${userType}s: ${data.error}`);
+
+    process.stdout.write(`  … passwords set: ${Math.min(index + slice.length, ids.length)}/${ids.length}\r`);
+  }
+  process.stdout.write('\n');
 };
 
 // Ranks share a position when totals match, and the tied rows carry the same
@@ -251,7 +266,7 @@ const rank = (standings) => {
 const main = async () => {
   console.log(`Project : ${SUPABASE_URL}`);
   console.log(`Demo    : ${LEVEL_NAME} ${LEVEL_YEAR}`);
-  console.log(`Mode    : ${DRY_RUN ? 'dry run' : RESET ? 'reset and seed' : 'seed'}\n`);
+  console.log(`Mode    : ${DRY_RUN ? 'dry run' : RESET ? 'clear previous demo, then seed' : 'seed alongside existing'}\n`);
 
   if (DRY_RUN) {
     const published = EVENTS.filter((event) => event.scoring === 'full');
@@ -307,14 +322,14 @@ const main = async () => {
 
   const judges = check('create judges', await supabase.from('judges').insert(JUDGES).select());
   const panel = judges.filter((judge) => judge.is_active);
-  for (const judge of judges) await setPassword(token, 'judge', judge.id);
+  await setPasswords(token, 'judge', judges.map((judge) => judge.id));
   console.log(`✓ ${judges.length} judges (${panel.length} active, 1 inactive)`);
 
   const participants = check('create participants', await supabase
     .from('participants')
     .insert(PARTICIPANTS.map((participant) => ({ ...participant, is_active: true, created_by: auth.user.id })))
     .select());
-  for (const participant of participants) await setPassword(token, 'participant', participant.id);
+  await setPasswords(token, 'participant', participants.map((participant) => participant.id));
   console.log(`✓ ${participants.length} participants across ${CATEGORIES.length} age categories`);
 
   const byChest = new Map(participants.map((participant) => [participant.chest_number, participant]));
@@ -457,7 +472,7 @@ const main = async () => {
   console.log('\nDemo accounts — password for all of them:', DEMO_PASSWORD);
   console.log(`  judges       : demo.judge1 … demo.judge${JUDGES.length}  (judge${JUDGES.length} is inactive)`);
   console.log(`  participants : demo.p1 … demo.p${PARTICIPANTS.length}  (chest 901–${900 + PARTICIPANTS.length})`);
-  console.log('\nRe-seed or remove later: node scripts/seed-demo.mjs --reset');
+  console.log('\nRe-run any time to rebuild the demo from scratch.');
 };
 
 main().catch((error) => {
