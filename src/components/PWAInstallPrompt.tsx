@@ -1,70 +1,51 @@
-import { useState, useEffect } from 'react';
-import { Button, Card, Space, Typography } from 'antd';
-import { Download, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { DownloadSimple, X } from '@phosphor-icons/react';
 import { usePWA } from '@/hooks/usePWA';
-
-const { Title, Text } = Typography;
+import { Button } from '@/components/ui/primitives';
 
 export function PWAInstallPrompt() {
   const { isInstallable, installApp, isInstalled } = usePWA();
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    // Check if user has already dismissed this session
-    const dismissed = sessionStorage.getItem('pwa-install-dismissed');
-    if (dismissed) {
-      setDismissed(true);
-    }
+    if (sessionStorage.getItem('pwa-install-dismissed')) setDismissed(true);
   }, []);
 
-  const handleDismiss = () => {
+  if (!isInstallable || isInstalled || dismissed) return null;
+
+  const dismiss = () => {
     setDismissed(true);
     sessionStorage.setItem('pwa-install-dismissed', 'true');
   };
 
-  const handleInstall = async () => {
-    const success = await installApp();
-    if (success) {
-      setDismissed(true);
-    }
-  };
-
-  // Don't show if already installed, not installable, or dismissed
-  if (!isInstallable || isInstalled || dismissed) {
-    return null;
-  }
-
   return (
-    <Card 
-      style={{ 
-        marginBottom: '24px', 
-        borderColor: '#8b5cf6', 
-        backgroundColor: '#f3f0ff' 
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-        <Space>
-          <Download size={20} color="#8b5cf6" />
-          <Title level={4} style={{ margin: 0 }}>Install App</Title>
-        </Space>
-        <Button
-          type="text"
-          size="small"
-          icon={<X size={16} />}
-          onClick={handleDismiss}
-        />
+    <div className="mb-4 flex items-center gap-3 rounded-xl border border-primary/25 bg-primary-soft p-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+        <DownloadSimple size={16} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-body font-medium text-foreground">Install PYPA</p>
+        <p className="text-caption text-muted-foreground">
+          Faster launch and offline access on this device.
+        </p>
       </div>
-      <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
-        Install Devotional Events Pro for offline access and better performance
-      </Text>
-      <Space>
-        <Button type="primary" onClick={handleInstall} icon={<Download size={16} />}>
-          Install Now
-        </Button>
-        <Button onClick={handleDismiss}>
-          Later
-        </Button>
-      </Space>
-    </Card>
+      <Button
+        size="sm"
+        onClick={async () => {
+          const installed = await installApp();
+          if (installed) setDismissed(true);
+        }}
+      >
+        Install
+      </Button>
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface"
+      >
+        <X size={16} />
+      </button>
+    </div>
   );
 }

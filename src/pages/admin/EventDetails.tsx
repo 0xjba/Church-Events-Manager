@@ -1,45 +1,52 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Checkbox, Form, InputNumber, Modal, message } from 'antd';
+import { ArrowLeft, CheckCircle, Gavel, PencilSimple, Plus, Pulse, Target, Trash, UsersThree, XCircle } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
-import Navigation from '@/components/Navigation';
-import { Layout, Card, Button, Checkbox, Table, message, Spin, Space, Typography, Badge, Divider, Modal, Input, InputNumber, Form } from 'antd';
-import { ArrowLeft, Users, Plus, Minus, Search, Trash2, Edit3, CheckCircle, XCircle } from 'lucide-react';
+import { AppShell } from '@/components/shell/AppShell';
+import { DataTable } from '@/components/admin/DataTable';
+import { Toolbar } from '@/components/admin/Toolbar';
+import {
+  Button,
+  Card,
+  CardHeader,
+  ProgressBar,
+  Skeleton,
+  StatTile,
+  StatusPill,
+  statusTone,
+} from '@/components/ui/primitives';
+import { SearchInput, SegmentedControl } from '@/components/ui/inputs';
+import { Sheet } from '@/components/ui/Sheet';
 
-const { Content } = Layout;
-const { Title, Text } = Typography;
-
-interface Event {
+interface EventRecord {
   id: string;
   name: string;
   type: string;
   event_type: string;
+  age_category: string | null;
+  rules: string | null;
+  time_limit: number | null;
+  max_participants: number | null;
   status: string;
-  age_category?: string | null;
-  rules?: string;
-  time_limit?: number;
-  max_participants?: number;
-  event_order?: number;
-  season?: {
-    id: string;
-    name: string;
-  };
-  created_at: string;
+  event_order: number | null;
+  results_published: boolean;
+  level?: { id: string; name: string };
 }
 
 interface Participant {
   id: string;
   full_name: string;
-  age_category: string;
   chest_number: string;
+  age_category: string;
   church: string;
   district: string;
-  username: string;
 }
 
 interface EventParticipant {
   id: string;
+  event_id: string;
   participant_id: string;
-  registered_at: string;
   participant: Participant;
 }
 
@@ -47,34 +54,24 @@ interface Group {
   id: string;
   name: string;
   description: string | null;
-  created_at: string;
-  members?: Array<{
-    id: string;
-    participant_id: string;
-    participant: {
-      full_name: string;
-      chest_number: string;
-      church: string;
-    };
-  }>;
+  chest_number: string | null;
+  church: string | null;
+  district: string | null;
+  level_id: string | null;
 }
 
 interface EventGroup {
   id: string;
+  event_id: string;
   group_id: string;
-  registered_at: string;
   group: Group;
 }
 
 interface EventJudge {
   id: string;
+  event_id: string;
   judge_id: string;
-  assigned_at: string;
-  judge: {
-    id: string;
-    full_name: string;
-    church: string;
-  };
+  judge: { id: string; full_name: string; church: string };
 }
 
 interface Criteria {
@@ -86,84 +83,62 @@ interface Criteria {
 
 interface Score {
   id: string;
-  event_id: string;
-  participant_id: string;
+  participant_id: string | null;
+  group_id: string | null;
   judge_id: string;
   criteria_id: string;
   score: number;
-  is_locked: boolean;
-  created_at: string;
-  updated_at: string;
-  judge?: {
-    id: string;
-    full_name: string;
-    church: string;
-  };
-  criteria?: {
-    id: string;
-    name: string;
-    max_score: number;
-    weight: number;
-  };
 }
+
+type Tab = 'entrants' | 'judges' | 'criteria';
 
 const EventDetails = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
-  
-  console.log('EventDetails component rendered with eventId:', eventId);
-  const [event, setEvent] = useState<Event | null>(null);
+
+  const [event, setEvent] = useState<EventRecord | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [eventParticipants, setEventParticipants] = useState<EventParticipant[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [eventGroups, setEventGroups] = useState<EventGroup[]>([]);
+  const [judges, setJudges] = useState<Array<{ id: string; full_name: string; church: string }>>([]);
   const [eventJudges, setEventJudges] = useState<EventJudge[]>([]);
   const [criteria, setCriteria] = useState<Criteria[]>([]);
+  const [scores, setScores] = useState<Score[]>([]);
+
   const [loading, setLoading] = useState(true);
-  const [participantsLoading, setParticipantsLoading] = useState(false);
-  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
-  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
-  
-  // Batch selection state for event participants
-  const [selectedEventParticipantKeys, setSelectedEventParticipantKeys] = useState<React.Key[]>([]);
-  const [batchDeletingParticipants, setBatchDeletingParticipants] = useState(false);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [judges, setJudges] = useState<Array<{ id: string; full_name: string; church: string }>>([]);
-  
-  // Modal states
+  const [working, setWorking] = useState(false);
+  const [tab, setTab] = useState<Tab>('entrants');
+
   const [isParticipantModalOpen, setIsParticipantModalOpen] = useState(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [isJudgeModalOpen, setIsJudgeModalOpen] = useState(false);
-  const [isScoreModalOpen, setIsScoreModalOpen] = useState(false);
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [selectedJudges, setSelectedJudges] = useState<string[]>([]);
-  
-  // Score management states
-  const [scores, setScores] = useState<Score[]>([]);
-  const [selectedParticipantForScoring, setSelectedParticipantForScoring] = useState<Participant | null>(null);
+  const [pickerSearch, setPickerSearch] = useState('');
+
+  const [selectedEventParticipantKeys, setSelectedEventParticipantKeys] = useState<React.Key[]>([]);
+  const [batchDeletingParticipants, setBatchDeletingParticipants] = useState(false);
+
+  const [isScoreModalOpen, setIsScoreModalOpen] = useState(false);
+  const [scoringParticipant, setScoringParticipant] = useState<Participant | null>(null);
   const [scoreForm] = Form.useForm();
   const [savingScores, setSavingScores] = useState(false);
 
-  // Filtered lists for search
-  const [filteredParticipants, setFilteredParticipants] = useState<Participant[]>([]);
-  const [filteredGroups, setFilteredGroups] = useState<Group[]>([]);
-  const [filteredJudges, setFilteredJudges] = useState<Array<{ id: string; full_name: string; church: string }>>([]);
+  /* ---------------------------------------------------------- fetch */
 
   const fetchEventDetails = useCallback(async () => {
     try {
-      console.log('Fetching event details for ID:', eventId);
       const { data, error } = await supabase
         .from('events')
-        .select(`
-          *,
-          level:event_levels(id, name)
-        `)
+        .select(`*, level:event_levels(id, name)`)
         .eq('id', eventId)
         .single();
 
       if (error) throw error;
-      console.log('Event details loaded:', data);
-      setEvent(data);
-    } catch (error: unknown) {
-      console.error('Error fetching event details:', error);
+      setEvent(data as unknown as EventRecord);
+    } catch {
       message.error('Failed to load event details');
       navigate('/admin/events');
     } finally {
@@ -173,42 +148,40 @@ const EventDetails = () => {
 
   const fetchAllParticipants = useCallback(async () => {
     try {
-      let query = supabase
-        .from('participants')
-        .select('*')
-        .eq('is_active', true);
+      let query = supabase.from('participants').select('*').eq('is_active', true);
 
-      // Filter by event's age category if it exists
+      // Participants are registered per event level, and chest numbers restart
+      // in each, so only this level's entrants may be added.
+      if (event?.level?.id) {
+        query = query.eq('level_id', event.level.id);
+      }
+
+      // Only entrants of the event's own age category can be added.
       if (event?.age_category) {
-        query = query.eq('age_category', event.age_category as 'Sub Juniors' | 'Juniors' | 'Intermediates' | 'Seniors');
+        query = query.eq(
+          'age_category',
+          event.age_category as 'Sub Juniors' | 'Juniors' | 'Intermediates' | 'Seniors',
+        );
       }
 
       const { data, error } = await query.order('full_name');
-
       if (error) throw error;
-      setParticipants(data || []);
-    } catch (error: unknown) {
+      setParticipants((data || []) as Participant[]);
+    } catch {
       message.error('Failed to load participants');
     }
-  }, [event?.age_category]);
+  }, [event?.age_category, event?.level?.id]);
 
   const fetchEventParticipants = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('event_participants')
-        .select(`
-          *,
-          participant:participants(*)
-        `)
+        .select(`*, participant:participants(*)`)
         .eq('event_id', eventId);
 
       if (error) throw error;
-      
-      // Debug: Log the data to see what we're getting
-      console.log('Event participants data:', data);
-      
-      setEventParticipants(data || []);
-    } catch (error: unknown) {
+      setEventParticipants((data || []) as unknown as EventParticipant[]);
+    } catch {
       message.error('Failed to load event participants');
     }
   }, [eventId]);
@@ -222,8 +195,8 @@ const EventDetails = () => {
         .order('created_at');
 
       if (error) throw error;
-      setCriteria(data || []);
-    } catch (error: unknown) {
+      setCriteria((data || []) as Criteria[]);
+    } catch {
       message.error('Failed to load event criteria');
     }
   }, [eventId]);
@@ -232,23 +205,13 @@ const EventDetails = () => {
     try {
       const { data, error } = await supabase
         .from('groups')
-        .select(`
-          *,
-          members:group_members(
-            id,
-            participant_id,
-            participant:participants(
-              full_name,
-              chest_number,
-              church
-            )
-          )
-        `)
-        .order('created_at', { ascending: false });
+        .select('*')
+        .eq('level_id', event?.level?.id ?? '')
+        .order('chest_number');
 
       if (error) throw error;
-      setGroups(data || []);
-    } catch (error: unknown) {
+      setGroups((data || []) as unknown as Group[]);
+    } catch {
       message.error('Failed to load groups');
     }
   }, []);
@@ -257,26 +220,12 @@ const EventDetails = () => {
     try {
       const { data, error } = await supabase
         .from('event_groups')
-        .select(`
-          *,
-          group:groups(
-            *,
-            members:group_members(
-              id,
-              participant_id,
-              participant:participants(
-                full_name,
-                chest_number,
-                church
-              )
-            )
-          )
-        `)
+        .select('*, group:groups(*)')
         .eq('event_id', eventId);
 
       if (error) throw error;
-      setEventGroups(data || []);
-    } catch (error: unknown) {
+      setEventGroups((data || []) as unknown as EventGroup[]);
+    } catch {
       message.error('Failed to load event groups');
     }
   }, [eventId]);
@@ -285,19 +234,12 @@ const EventDetails = () => {
     try {
       const { data, error } = await supabase
         .from('event_judges')
-        .select(`
-          *,
-          judge:judges(
-            id,
-            full_name,
-            church
-          )
-        `)
+        .select(`*, judge:judges( id, full_name, church )`)
         .eq('event_id', eventId);
 
       if (error) throw error;
-      setEventJudges(data || []);
-    } catch (error: unknown) {
+      setEventJudges((data || []) as unknown as EventJudge[]);
+    } catch {
       message.error('Failed to load event judges');
     }
   }, [eventId]);
@@ -312,81 +254,102 @@ const EventDetails = () => {
 
       if (error) throw error;
       setJudges(data || []);
-    } catch (error: unknown) {
+    } catch {
       message.error('Failed to load judges');
     }
   }, []);
 
   const fetchScores = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('scores')
-        .select(`
-          *,
-          judge:judges(
-            id,
-            full_name,
-            church
-          ),
-          criteria:event_criteria(
-            id,
-            name,
-            max_score,
-            weight
-          )
-        `)
-        .eq('event_id', eventId);
-
+      const { data, error } = await supabase.from('scores').select('*').eq('event_id', eventId);
       if (error) throw error;
-      setScores(data || []);
-    } catch (error: unknown) {
+      setScores((data || []) as Score[]);
+    } catch {
       message.error('Failed to load scores');
     }
   }, [eventId]);
 
-  const addParticipantsToEvent = useCallback(async () => {
-    if (selectedParticipants.length === 0) {
-      message.warning('Please select participants to add');
-      return;
-    }
+  useEffect(() => {
+    if (!eventId) return;
+    fetchEventDetails();
+    fetchEventParticipants();
+    fetchEventCriteria();
+    fetchGroups();
+    fetchEventGroups();
+    fetchEventJudges();
+    fetchJudges();
+    fetchScores();
+  }, [
+    eventId,
+    fetchEventDetails,
+    fetchEventParticipants,
+    fetchEventCriteria,
+    fetchGroups,
+    fetchEventGroups,
+    fetchEventJudges,
+    fetchJudges,
+    fetchScores,
+  ]);
+
+  useEffect(() => {
+    fetchAllParticipants();
+  }, [fetchAllParticipants]);
+
+  /* -------------------------------------------------------- helpers */
+
+  const isParticipantRegistered = (participantId: string) =>
+    eventParticipants.some((entry) => entry.participant_id === participantId);
+
+  const isGroupRegistered = (groupId: string) =>
+    eventGroups.some((entry) => entry.group_id === groupId);
+
+  const hasScoresSubmitted = (participantId: string) =>
+    scores.some((score) => score.participant_id === participantId);
+
+  const registeredParticipants = eventParticipants
+    .map((entry) => entry.participant)
+    .filter(Boolean) as Participant[];
+
+  const expectedScores =
+    (event?.event_type === 'group' ? eventGroups.length : eventParticipants.length) *
+    criteria.length *
+    eventJudges.length;
+  const scoringProgress =
+    expectedScores === 0 ? 0 : Math.round((scores.length / expectedScores) * 100);
+
+  /* -------------------------------------------------------- actions */
+
+  const addParticipantsToEvent = async () => {
+    if (selectedParticipants.length === 0) return;
 
     try {
-      setParticipantsLoading(true);
+      setWorking(true);
+      const existing = eventParticipants.map((entry) => entry.participant_id);
+      const toAdd = selectedParticipants.filter((id) => !existing.includes(id));
 
-      // Check if participants are already registered
-      const existingParticipantIds = eventParticipants.map(ep => ep.participant_id);
-      const newParticipantIds = selectedParticipants.filter(id => !existingParticipantIds.includes(id));
-
-      if (newParticipantIds.length === 0) {
-        message.info('All selected participants are already registered for this event');
-        setSelectedParticipants([]);
+      if (toAdd.length === 0) {
+        message.info('Those participants are already in this event');
         return;
       }
 
-      // Add new participants
       const { error } = await supabase
         .from('event_participants')
-        .insert(
-          newParticipantIds.map(participantId => ({
-            event_id: eventId,
-            participant_id: participantId
-          }))
-        );
+        .insert(toAdd.map((participantId) => ({ event_id: eventId, participant_id: participantId })));
 
       if (error) throw error;
 
-      message.success(`Successfully added ${newParticipantIds.length} participant(s) to the event`);
+      message.success(`Added ${toAdd.length} participant(s)`);
       setSelectedParticipants([]);
+      setIsParticipantModalOpen(false);
       fetchEventParticipants();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to add participants to event';
-      message.error(errorMessage);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to add participants');
     } finally {
-      setParticipantsLoading(false);
+      setWorking(false);
     }
-  }, [selectedParticipants, eventParticipants, eventId, fetchEventParticipants]);
+  };
 
-  const removeParticipantFromEvent = useCallback(async (participantId: string) => {
+  const removeParticipantFromEvent = async (participantId: string) => {
     try {
       const { error } = await supabase
         .from('event_participants')
@@ -395,107 +358,74 @@ const EventDetails = () => {
         .eq('participant_id', participantId);
 
       if (error) throw error;
-
-      message.success('Participant removed from event');
+      message.success('Participant removed');
       fetchEventParticipants();
-    } catch (error: unknown) {
-      message.error('Failed to remove participant from event');
+    } catch {
+      message.error('Failed to remove participant');
     }
-  }, [eventId, fetchEventParticipants]);
+  };
 
-  const handleBatchDeleteParticipants = useCallback(async () => {
-    if (selectedEventParticipantKeys.length === 0) {
-      message.warning('Please select participants to remove');
-      return;
-    }
+  const handleBatchDeleteParticipants = () => {
+    if (selectedEventParticipantKeys.length === 0) return;
+
+    Modal.confirm({
+      title: `Remove ${selectedEventParticipantKeys.length} participant(s)?`,
+      content: 'They stay registered in the system, just not in this event.',
+      okText: 'Remove',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          setBatchDeletingParticipants(true);
+          const { error } = await supabase
+            .from('event_participants')
+            .delete()
+            .eq('event_id', eventId)
+            .in('participant_id', selectedEventParticipantKeys.map(String));
+
+          if (error) throw error;
+          message.success(`Removed ${selectedEventParticipantKeys.length} participant(s)`);
+          setSelectedEventParticipantKeys([]);
+          fetchEventParticipants();
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : 'Failed to remove participants');
+        } finally {
+          setBatchDeletingParticipants(false);
+        }
+      },
+    });
+  };
+
+  const addGroupsToEvent = async () => {
+    if (selectedGroups.length === 0) return;
 
     try {
-      setBatchDeletingParticipants(true);
-      
-      // Delete each selected participant from the event
-      for (const participantId of selectedEventParticipantKeys) {
-        const { error } = await supabase
-          .from('event_participants')
-          .delete()
-          .eq('event_id', eventId)
-          .eq('participant_id', String(participantId));
-        
-        if (error) throw error;
-      }
+      setWorking(true);
+      const existing = eventGroups.map((entry) => entry.group_id);
+      const toAdd = selectedGroups.filter((id) => !existing.includes(id));
 
-      message.success(`Successfully removed ${selectedEventParticipantKeys.length} participant(s) from the event`);
-      setSelectedEventParticipantKeys([]);
-      fetchEventParticipants();
-    } catch (error: any) {
-      message.error(error.message || 'Failed to remove participants from event');
-    } finally {
-      setBatchDeletingParticipants(false);
-    }
-  }, [selectedEventParticipantKeys, eventId, fetchEventParticipants]);
-
-  const handleParticipantSelection = useCallback((participantId: string, checked: boolean) => {
-    if (checked) {
-      setSelectedParticipants([...selectedParticipants, participantId]);
-    } else {
-      setSelectedParticipants(selectedParticipants.filter(id => id !== participantId));
-    }
-  }, [selectedParticipants]);
-
-  const isParticipantRegistered = useCallback((participantId: string) => {
-    return eventParticipants.some(ep => ep.participant_id === participantId);
-  }, [eventParticipants]);
-
-  const isGroupRegistered = useCallback((groupId: string) => {
-    return eventGroups.some(eg => eg.group_id === groupId);
-  }, [eventGroups]);
-
-  const hasScoresSubmitted = useCallback((participantId: string) => {
-    return scores.some(s => s.participant_id === participantId);
-  }, [scores]);
-
-  const addGroupsToEvent = useCallback(async () => {
-    if (selectedGroups.length === 0) {
-      message.warning('Please select groups to add');
-      return;
-    }
-
-    try {
-      setParticipantsLoading(true);
-
-      // Check if groups are already registered
-      const existingGroupIds = eventGroups.map(eg => eg.group_id);
-      const newGroupIds = selectedGroups.filter(id => !existingGroupIds.includes(id));
-
-      if (newGroupIds.length === 0) {
-        message.info('All selected groups are already registered for this event');
-        setSelectedGroups([]);
+      if (toAdd.length === 0) {
+        message.info('Those groups are already in this event');
         return;
       }
 
-      // Add new groups
       const { error } = await supabase
         .from('event_groups')
-        .insert(
-          newGroupIds.map(groupId => ({
-            event_id: eventId,
-            group_id: groupId
-          }))
-        );
+        .insert(toAdd.map((groupId) => ({ event_id: eventId, group_id: groupId })));
 
       if (error) throw error;
 
-      message.success(`Successfully added ${newGroupIds.length} group(s) to the event`);
+      message.success(`Added ${toAdd.length} group(s)`);
       setSelectedGroups([]);
+      setIsGroupModalOpen(false);
       fetchEventGroups();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to add groups to event';
-      message.error(errorMessage);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to add groups');
     } finally {
-      setParticipantsLoading(false);
+      setWorking(false);
     }
-  }, [selectedGroups, eventGroups, eventId, fetchEventGroups]);
+  };
 
-  const removeGroupFromEvent = useCallback(async (groupId: string) => {
+  const removeGroupFromEvent = async (groupId: string) => {
     try {
       const { error } = await supabase
         .from('event_groups')
@@ -504,15 +434,44 @@ const EventDetails = () => {
         .eq('group_id', groupId);
 
       if (error) throw error;
-
-      message.success('Group removed from event');
+      message.success('Group removed');
       fetchEventGroups();
-    } catch (error: unknown) {
-      message.error('Failed to remove group from event');
+    } catch {
+      message.error('Failed to remove group');
     }
-  }, [eventId, fetchEventGroups]);
+  };
 
-  const removeJudgeFromEvent = useCallback(async (judgeId: string) => {
+  const addJudgesToEvent = async () => {
+    if (selectedJudges.length === 0) return;
+
+    try {
+      setWorking(true);
+      const existing = eventJudges.map((entry) => entry.judge_id);
+      const toAdd = selectedJudges.filter((id) => !existing.includes(id));
+
+      if (toAdd.length === 0) {
+        message.info('Those judges are already assigned');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('event_judges')
+        .insert(toAdd.map((judgeId) => ({ event_id: eventId, judge_id: judgeId })));
+
+      if (error) throw error;
+
+      message.success(`Assigned ${toAdd.length} judge(s)`);
+      setSelectedJudges([]);
+      setIsJudgeModalOpen(false);
+      fetchEventJudges();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to assign judges');
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const removeJudgeFromEvent = async (judgeId: string) => {
     try {
       const { error } = await supabase
         .from('event_judges')
@@ -521,910 +480,751 @@ const EventDetails = () => {
         .eq('judge_id', judgeId);
 
       if (error) throw error;
-
-      message.success('Judge removed from event');
+      message.success('Judge removed');
       fetchEventJudges();
-    } catch (error: unknown) {
-      message.error('Failed to remove judge from event');
+    } catch {
+      message.error('Failed to remove judge');
     }
-  }, [eventId, fetchEventJudges]);
+  };
 
-  const addJudgesToEvent = useCallback(async () => {
-    if (selectedJudges.length === 0) {
-      message.warning('Please select judges to add');
-      return;
-    }
+  const openScoreModal = (participant: Participant) => {
+    setScoringParticipant(participant);
 
-    try {
-      setParticipantsLoading(true);
+    const values: Record<string, number> = {};
+    scores
+      .filter((score) => score.participant_id === participant.id)
+      .forEach((score) => {
+        values[`${score.judge_id}_${score.criteria_id}`] = score.score;
+      });
 
-      // Check if judges are already assigned
-      const existingJudgeIds = eventJudges.map(ej => ej.judge_id);
-      const newJudgeIds = selectedJudges.filter(id => !existingJudgeIds.includes(id));
-
-      if (newJudgeIds.length === 0) {
-        message.info('All selected judges are already assigned to this event');
-        setSelectedJudges([]);
-        return;
-      }
-
-      // Add new judges
-      const { error } = await supabase
-        .from('event_judges')
-        .insert(
-          newJudgeIds.map(judgeId => ({
-            event_id: eventId,
-            judge_id: judgeId
-          }))
-        );
-
-      if (error) throw error;
-
-      message.success(`Successfully added ${newJudgeIds.length} judge(s) to the event`);
-      setSelectedJudges([]);
-      fetchEventJudges();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to add judges to event';
-      message.error(errorMessage);
-    } finally {
-      setParticipantsLoading(false);
-    }
-  }, [selectedJudges, eventJudges, eventId, fetchEventJudges]);
-
-  const openScoreModal = useCallback((participant: Participant) => {
-    setSelectedParticipantForScoring(participant);
-    
-    // Get existing scores for this participant
-    const participantScores = scores.filter(s => s.participant_id === participant.id);
-    
-    // Prepare form data with existing scores
-    const formData: Record<string, number> = {};
-    participantScores.forEach(score => {
-      formData[`${score.judge_id}_${score.criteria_id}`] = score.score;
-    });
-    
-    scoreForm.setFieldsValue(formData);
+    scoreForm.setFieldsValue(values);
     setIsScoreModalOpen(true);
-  }, [scores, scoreForm]);
+  };
 
-  const saveScores = useCallback(async (values: Record<string, number>) => {
-    if (!selectedParticipantForScoring || !eventId) return;
+  const closeScoreModal = () => {
+    setIsScoreModalOpen(false);
+    setScoringParticipant(null);
+    scoreForm.resetFields();
+  };
+
+  const saveScores = async (values: Record<string, number>) => {
+    if (!scoringParticipant || !eventId) return;
 
     try {
       setSavingScores(true);
-      
-      // Get all judges and criteria for this event
-      const eventJudgeIds = eventJudges.map(ej => ej.judge_id);
-      
-      // Process each score entry
-      const scoreEntries: Array<{
-        event_id: string;
-        participant_id: string;
-        judge_id: string;
-        criteria_id: string;
-        score: number;
-        is_locked: boolean;
-      }> = [];
+      const assignedJudgeIds = eventJudges.map((entry) => entry.judge_id);
 
-      Object.entries(values).forEach(([key, score]) => {
-        if (score !== undefined && score !== null) {
+      const entries = Object.entries(values)
+        .filter(([, score]) => score !== undefined && score !== null)
+        .map(([key, score]) => {
           const [judgeId, criteriaId] = key.split('_');
-          
-          // Only process if judge is assigned to this event
-          if (eventJudgeIds.includes(judgeId)) {
-            scoreEntries.push({
-              event_id: eventId,
-              participant_id: selectedParticipantForScoring.id,
-              judge_id: judgeId,
-              criteria_id: criteriaId,
-              score: Number(score),
-              is_locked: true
-            });
-          }
-        }
-      });
+          return { judgeId, criteriaId, score: Number(score) };
+        })
+        .filter((entry) => assignedJudgeIds.includes(entry.judgeId))
+        .map((entry) => ({
+          event_id: eventId,
+          participant_id: scoringParticipant.id,
+          judge_id: entry.judgeId,
+          criteria_id: entry.criteriaId,
+          score: entry.score,
+          is_locked: true,
+        }));
 
-      if (scoreEntries.length === 0) {
-        message.warning('No valid scores to save');
+      if (entries.length === 0) {
+        message.warning('No scores to save');
         return;
       }
 
-      // Delete existing scores for this participant first
       const { error: deleteError } = await supabase
         .from('scores')
         .delete()
         .eq('event_id', eventId)
-        .eq('participant_id', selectedParticipantForScoring.id);
+        .eq('participant_id', scoringParticipant.id);
 
       if (deleteError) throw deleteError;
 
-      // Insert new scores
-      const { error: insertError } = await supabase
-        .from('scores')
-        .insert(scoreEntries);
-
+      const { error: insertError } = await supabase.from('scores').insert(entries);
       if (insertError) throw insertError;
 
-      message.success('Scores saved successfully');
-      setIsScoreModalOpen(false);
-      setSelectedParticipantForScoring(null);
-      scoreForm.resetFields();
-      
-      // Refresh scores data
+      message.success('Scores saved');
+      closeScoreModal();
       await fetchScores();
-      
-    } catch (error: unknown) {
+    } catch (error) {
       console.error('Error saving scores:', error);
       message.error('Failed to save scores');
     } finally {
       setSavingScores(false);
     }
-  }, [selectedParticipantForScoring, eventId, eventJudges, scoreForm, fetchScores]);
+  };
 
-  // useEffect to fetch data when component mounts
-  useEffect(() => {
-    if (eventId) {
-      fetchEventDetails();
-      fetchAllParticipants();
-      fetchEventParticipants();
-      fetchEventCriteria();
-      fetchGroups();
-      fetchEventGroups();
-      fetchEventJudges();
-      fetchJudges();
-      fetchScores();
-    }
-  }, [eventId, fetchEventDetails, fetchAllParticipants, fetchEventParticipants, fetchEventCriteria, fetchGroups, fetchEventGroups, fetchEventJudges, fetchJudges, fetchScores]);
-
-  const handleGroupSelection = useCallback((groupId: string, checked: boolean) => {
-    if (checked) {
-      setSelectedGroups([...selectedGroups, groupId]);
-    } else {
-      setSelectedGroups(selectedGroups.filter(id => id !== groupId));
-    }
-  }, [selectedGroups]);
+  /* --------------------------------------------------------- tables */
 
   const participantColumns = [
     {
-      title: 'Name',
+      title: 'Entrant',
       dataIndex: 'full_name',
       key: 'full_name',
-      width: 200,
-      render: (text: string, record: Participant) => (
-        <div>
-          <div style={{ fontWeight: 500 }}>{text}</div>
-          <div style={{ fontSize: '12px', color: '#666' }}>
-            Chest: {record.chest_number} • {record.age_category} • {record.church}
+      render: (name: string, record: Participant) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium text-foreground">{name}</div>
+          <div className="truncate text-caption text-muted-foreground">
+            #{record.chest_number} · {record.church}
           </div>
         </div>
-      )
+      ),
     },
-    {
-      title: 'Age Category',
-      dataIndex: 'age_category',
-      key: 'age_category',
-      width: 150,
-      align: 'center' as const,
-    },
-    {
-      title: 'District',
-      dataIndex: 'district',
-      key: 'district',
-      width: 150
-    },
+    { title: 'District', dataIndex: 'district', key: 'district', width: 160, ellipsis: true },
     {
       title: 'Scores',
       key: 'scores',
-      width: 150,
-      align: 'center' as const,
+      width: 190,
       render: (_: unknown, record: Participant) => {
-        const hasScores = hasScoresSubmitted(record.id);
+        const submitted = hasScoresSubmitted(record.id);
         return (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {hasScores ? (
-                <>
-                  <CheckCircle size={16} style={{ color: '#52c41a' }} />
-                  <span style={{ fontSize: '12px', color: '#52c41a' }}>Submitted</span>
-                </>
-              ) : (
-                <>
-                  <XCircle size={16} style={{ color: '#ff4d4f' }} />
-                  <span style={{ fontSize: '12px', color: '#ff4d4f' }}>Not Submitted</span>
-                </>
-              )}
-            </div>
-            <Button
-              type="text"
-              size="small"
-              icon={<Edit3 size={14} />}
+          <div className="flex items-center gap-2">
+            <StatusPill tone={submitted ? 'success' : 'neutral'}>
+              {submitted ? <CheckCircle size={12} /> : <XCircle size={12} />}
+              {submitted ? 'Submitted' : 'Awaiting'}
+            </StatusPill>
+            <button
+              type="button"
+              aria-label="Edit scores"
+              title="Edit scores"
               onClick={() => openScoreModal(record)}
-              title="Edit Scores"
-            />
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-sunken hover:text-foreground"
+            >
+              <PencilSimple size={14} />
+            </button>
           </div>
         );
-      }
+      },
     },
     {
-      title: 'Actions',
+      title: '',
       key: 'actions',
-      width: 100,
+      width: 60,
+      fixed: 'right' as const,
       render: (_: unknown, record: Participant) => (
-        <Button
-          type="text"
-          danger
-          icon={<Trash2 size={16} />}
+        <button
+          type="button"
+          aria-label="Remove from event"
+          title="Remove from event"
           onClick={() => removeParticipantFromEvent(record.id)}
-          disabled={!isParticipantRegistered(record.id)}
-        />
-      )
-    }
-  ];
-
-  const eventParticipantRowSelection = {
-    selectedRowKeys: selectedEventParticipantKeys,
-    onChange: (selectedRowKeys: React.Key[]) => {
-      setSelectedEventParticipantKeys(selectedRowKeys);
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive-soft hover:text-destructive"
+        >
+          <Trash size={15} />
+        </button>
+      ),
     },
-  };
+  ];
 
   const groupColumns = [
     {
-      title: 'Group Name',
+      title: 'Group',
       dataIndex: ['group', 'name'],
       key: 'name',
-      width: 200,
-      render: (text: string, record: EventGroup) => (
-        <div>
-          <div style={{ fontWeight: 500 }}>{text}</div>
-          <div style={{ fontSize: '12px', color: '#666' }}>
-            {record.group.description || 'No description'}
+      render: (_: unknown, record: EventGroup) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium text-foreground">{record.group?.name}</div>
+          <div className="truncate text-caption text-muted-foreground">
+            {[record.group?.chest_number ? `#${record.group.chest_number}` : null, record.group?.church]
+              .filter(Boolean)
+              .join(' · ')}
           </div>
         </div>
-      )
+      ),
     },
     {
-      title: 'Members',
-      dataIndex: ['group', 'members'],
-      key: 'members',
-      width: 200,
-      render: (members: any[]) => (
-        <div>
-          <div>{members?.length || 0} participants</div>
-          {members && members.length > 0 && (
-            <div style={{ fontSize: '12px', color: '#666' }}>
-              {members.slice(0, 3).map(m => m.participant.full_name).join(', ')}
-              {members.length > 3 && ` +${members.length - 3} more`}
-            </div>
-          )}
-        </div>
-      )
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      width: 100,
+      title: 'District',
+      key: 'district',
+      ellipsis: true,
       render: (_: unknown, record: EventGroup) => (
-        <Button
-          type="text"
-          danger
-          icon={<Trash2 size={16} />}
+        <span className="text-caption text-muted-foreground">{record.group?.district || '—'}</span>
+      ),
+    },
+    {
+      title: '',
+      key: 'actions',
+      width: 60,
+      fixed: 'right' as const,
+      render: (_: unknown, record: EventGroup) => (
+        <button
+          type="button"
+          aria-label="Remove group"
+          title="Remove group"
           onClick={() => removeGroupFromEvent(record.group_id)}
-        />
-      )
-    }
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive-soft hover:text-destructive"
+        >
+          <Trash size={15} />
+        </button>
+      ),
+    },
   ];
 
   const judgeColumns = [
     {
-      title: 'Judge Name',
+      title: 'Judge',
       dataIndex: ['judge', 'full_name'],
-      key: 'name',
-      width: 200,
-    },
-    {
-      title: 'Church',
-      dataIndex: ['judge', 'church'],
-      key: 'church',
-      width: 200,
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      width: 100,
+      key: 'judge',
       render: (_: unknown, record: EventJudge) => (
-        <Button
-          type="text"
-          danger
-          icon={<Trash2 size={16} />}
+        <div className="min-w-0">
+          <div className="truncate font-medium text-foreground">{record.judge?.full_name}</div>
+          <div className="truncate text-caption text-muted-foreground">{record.judge?.church}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Scores filed',
+      key: 'filed',
+      width: 160,
+      render: (_: unknown, record: EventJudge) => {
+        const filed = scores.filter((score) => score.judge_id === record.judge_id).length;
+        const expectedForJudge =
+          (event?.event_type === 'group' ? eventGroups.length : eventParticipants.length) *
+          criteria.length;
+        return (
+          <span className="tnum text-foreground">
+            {filed}
+            <span className="text-muted-foreground"> / {expectedForJudge}</span>
+          </span>
+        );
+      },
+    },
+    {
+      title: '',
+      key: 'actions',
+      width: 60,
+      fixed: 'right' as const,
+      render: (_: unknown, record: EventJudge) => (
+        <button
+          type="button"
+          aria-label="Remove judge"
+          title="Remove judge"
           onClick={() => removeJudgeFromEvent(record.judge_id)}
-        />
-      )
-    }
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive-soft hover:text-destructive"
+        >
+          <Trash size={15} />
+        </button>
+      ),
+    },
   ];
 
-  if (loading) {
-    return (
-      <Layout style={{ minHeight: '100vh' }}>
-        <Navigation />
-        <Layout className="md:ml-64">
-          <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-              <Spin size="large" />
-            </div>
-          </Content>
-        </Layout>
-      </Layout>
+  const pickerParticipants = useMemo(() => {
+    const query = pickerSearch.trim().toLowerCase();
+    if (!query) return participants;
+    return participants.filter((participant) =>
+      `${participant.chest_number} ${participant.full_name} ${participant.church}`
+        .toLowerCase()
+        .includes(query),
     );
-  }
+  }, [participants, pickerSearch]);
 
-  if (!event) {
-    return (
-      <Layout style={{ minHeight: '100vh' }}>
-        <Navigation />
-        <Layout className="md:ml-64">
-          <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-              <Text>Event not found or failed to load</Text>
-            </div>
-          </Content>
-        </Layout>
-      </Layout>
-    );
-  }
+  const isGroupEvent = event?.event_type === 'group';
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Navigation />
-      <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
-          {/* Header */}
-          <div style={{ marginBottom: '24px' }}>
-            <Button 
-              icon={<ArrowLeft size={16} />} 
-              onClick={() => navigate('/admin/events')}
-              style={{ marginBottom: '16px' }}
-            >
-              Back to Events
-            </Button>
-            
-            <div style={{ marginBottom: '8px' }}>
-              <Title level={2} style={{ margin: 0 }}>{event.name}</Title>
-            </div>
-            <Text type="secondary">
-              {event.type.charAt(0).toUpperCase() + event.type.slice(1)} Event • {event.event_type === 'individual' ? 'Individual' : 'Group'} Category
-              {event.season && ` • ${event.season.name}`}
-              {event.time_limit && ` • ${event.time_limit} min time limit`}
-              {event.max_participants && ` • Max ${event.max_participants} participants`}
-            </Text>
-          </div>
-
-          {/* Event Details */}
-          <Card title="Event Details" style={{ marginBottom: '24px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-              <div>
-                <Text strong>Type:</Text>
-                <div>{event.type.charAt(0).toUpperCase() + event.type.slice(1)}</div>
-              </div>
-              <div>
-                <Text strong>Category:</Text>
-                <div>{event.event_type === 'individual' ? 'Individual Event' : 'Group Event'}</div>
-              </div>
-              <div>
-                <Text strong>Status:</Text>
-                <div>{event.status.charAt(0).toUpperCase() + event.status.slice(1)}</div>
-              </div>
-              <div>
-                <Text strong>Time Limit:</Text>
-                <div>{event.time_limit ? `${event.time_limit} minutes` : 'No time limit'}</div>
-              </div>
-              <div>
-                <Text strong>Max Participants:</Text>
-                <div>{event.max_participants || 'Unlimited'}</div>
-              </div>
-              <div>
-                <Text strong>Age Category:</Text>
-                <div>{event.age_category || 'All Ages'}</div>
-              </div>
-              <div>
-                <Text strong>Event Order:</Text>
-                <div>{event.event_order || 'Not set'}</div>
-              </div>
-              <div>
-                <Text strong>Created:</Text>
-                <div>{new Date(event.created_at).toLocaleDateString()}</div>
-              </div>
-            </div>
-            
-            {event.rules && (
-              <div style={{ marginTop: '16px' }}>
-                <Text strong>Rules:</Text>
-                <div style={{ marginTop: '8px', padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '6px' }}>
-                  {event.rules}
-                </div>
-              </div>
-            )}
-          </Card>
-
-          {/* Event Criteria */}
-          {criteria.length > 0 && (
-            <Card title="Scoring Criteria" style={{ marginBottom: '24px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                {criteria.map((criterion) => (
-                  <div key={criterion.id} style={{ padding: '12px', border: '1px solid #d9d9d9', borderRadius: '6px' }}>
-                    <div style={{ fontWeight: 500 }}>{criterion.name}</div>
-                    <div style={{ fontSize: '12px', color: '#666' }}>
-                      Max Score: {criterion.max_score} • Weight: {criterion.weight}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* Current Participants/Groups List */}
-          {event.event_type === 'individual' ? (
-            <Card 
-              title={
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Space>
-                    <Users size={16} />
-                    Event Participants ({eventParticipants.length})
-                  </Space>
-                  <Space>
-                    {selectedEventParticipantKeys.length > 0 && (
-                      <Button 
-                        danger 
-                        icon={<Trash2 size={16} />}
-                        loading={batchDeletingParticipants}
-                        onClick={handleBatchDeleteParticipants}
-                        size="small"
-                        className="md:inline-flex hidden:flex"
-                      >
-                        <span className="hidden md:inline">Remove Selected ({selectedEventParticipantKeys.length})</span>
-                      </Button>
-                    )}
-                    <Button
-                      type="primary"
-                      icon={<Plus size={16} />}
-                      onClick={() => setIsParticipantModalOpen(true)}
-                      size="small"
-                      className="md:inline-flex hidden:flex"
-                    >
-                      <span className="hidden md:inline">Add</span>
-                    </Button>
-                  </Space>
-                </div>
-              }
-              style={{ marginBottom: '24px' }}
-            >
-              <Table
-                columns={participantColumns}
-                dataSource={eventParticipants.map(ep => ep.participant)}
-                rowKey="id"
-                rowSelection={eventParticipantRowSelection}
-                pagination={false}
-                loading={participantsLoading}
-                locale={{
-                  emptyText: 'No participants registered for this event yet'
-                }}
-              />
-            </Card>
-          ) : (
-            <Card 
-              title={
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Space>
-                    <Users size={16} />
-                    Event Groups ({eventGroups.length})
-                  </Space>
-                  <Button
-                    type="primary"
-                    icon={<Plus size={16} />}
-                    onClick={() => setIsGroupModalOpen(true)}
-                    size="small"
-                    className="md:inline-flex hidden:flex"
-                  >
-                    <span className="hidden md:inline">Add</span>
-                  </Button>
-                </div>
-              }
-              style={{ marginBottom: '24px' }}
-            >
-              <Table
-                columns={groupColumns}
-                dataSource={eventGroups}
-                rowKey="id"
-                pagination={false}
-                loading={participantsLoading}
-                locale={{
-                  emptyText: 'No groups registered for this event yet'
-                }}
-              />
-            </Card>
-          )}
-
-          {/* Current Judges List */}
-          <Card 
-            title={
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Space>
-                  <Users size={16} />
-                  Event Judges ({eventJudges.length})
-                </Space>
-                <Button
-                  type="primary"
-                  icon={<Plus size={16} />}
-                  onClick={() => setIsJudgeModalOpen(true)}
-                  size="small"
-                  className="md:inline-flex hidden:flex"
-                >
-                  <span className="hidden md:inline">Add</span>
-                </Button>
-              </div>
-            }
-            style={{ marginBottom: '24px' }}
+    <AppShell
+      variant="admin"
+      title={event?.name ?? 'Event'}
+      subtitle={
+        event
+          ? `${event.level?.name ?? 'No level'} · ${event.age_category || 'All categories'} · ${event.type}`
+          : undefined
+      }
+      maxWidth="wide"
+      actions={
+        <>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<ArrowLeft size={15} />}
+            onClick={() => navigate('/admin/events')}
           >
-            <Table
-              columns={judgeColumns}
-              dataSource={eventJudges}
-              rowKey="id"
-              pagination={false}
-              loading={participantsLoading}
-              locale={{
-                emptyText: 'No judges assigned to this event yet'
-              }}
-            />
-          </Card>
-        </Content>
-      </Layout>
-
-      {/* Participant Assignment Modal */}
-      <Modal
-        title="Add Participants to Event"
-        open={isParticipantModalOpen}
-        onCancel={() => {
-          setIsParticipantModalOpen(false);
-          setSelectedParticipants([]);
-        }}
-        footer={null}
-        width={600}
-      >
-        <div style={{ marginBottom: '16px' }}>
-          <Text type="secondary">
-            Select participants to add to this event. Currently registered participants are shown in the table below.
-          </Text>
+            <span className="hidden sm:inline">Events</span>
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Pulse size={15} />}
+            onClick={() => navigate(`/admin/scoreboard/${eventId}`)}
+          >
+            <span className="hidden sm:inline">Live scores</span>
+          </Button>
+        </>
+      }
+    >
+      {loading ? (
+        <div className="space-y-4">
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-72 w-full" />
         </div>
-
-        {/* Search Bar */}
-        <div style={{ marginBottom: '16px' }}>
-          <Input
-            placeholder="Search by chest number or name..."
-            prefix={<Search size={16} style={{ color: '#bfbfbf' }} />}
-            onChange={(e) => {
-              const searchTerm = e.target.value.toLowerCase();
-              const filtered = participants.filter(participant => 
-                participant.chest_number.toLowerCase().includes(searchTerm) ||
-                participant.full_name.toLowerCase().includes(searchTerm)
-              );
-              setFilteredParticipants(filtered);
-            }}
-            allowClear
-          />
-        </div>
-
-        <div style={{ marginBottom: '16px', maxHeight: '300px', overflowY: 'auto', border: '1px solid #d9d9d9', borderRadius: '6px', padding: '16px' }}>
-          {(filteredParticipants.length > 0 ? filteredParticipants : participants).map((participant) => (
-            <div key={participant.id} style={{ marginBottom: '8px' }}>
-              <Checkbox
-                checked={selectedParticipants.includes(participant.id)}
-                onChange={(e) => handleParticipantSelection(participant.id, e.target.checked)}
-                disabled={isParticipantRegistered(participant.id)}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>{participant.full_name}</span>
-                  <span style={{ fontSize: '12px', color: '#666' }}>
-                    ({participant.chest_number} • {participant.age_category})
-                  </span>
-                  {isParticipantRegistered(participant.id) && (
-                    <Badge color="green" text="Already Registered" />
-                  )}
-                </div>
-              </Checkbox>
+      ) : (
+        event && (
+          <>
+            <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <StatTile
+                label={isGroupEvent ? 'Groups' : 'Entrants'}
+                value={isGroupEvent ? eventGroups.length : eventParticipants.length}
+                hint={event.max_participants ? `max ${event.max_participants}` : 'Registered'}
+                icon={<UsersThree size={15} />}
+                tone="primary"
+              />
+              <StatTile
+                label="Judges"
+                value={eventJudges.length}
+                hint="Assigned"
+                icon={<Gavel size={15} />}
+                tone="info"
+              />
+              <StatTile
+                label="Criteria"
+                value={criteria.length}
+                hint={`${criteria.reduce((total, criterion) => total + criterion.max_score * criterion.weight, 0)} max points`}
+                icon={<Target size={15} />}
+              />
+              <StatTile
+                label="Status"
+                value={
+                  <StatusPill tone={statusTone(event.status)} dot className="text-body">
+                    {event.status}
+                  </StatusPill>
+                }
+                hint={event.results_published ? 'Results published' : 'Results not published'}
+              />
             </div>
-          ))}
-        </div>
 
-        <Button
-          type="primary"
-          icon={<Plus size={16} />}
-          onClick={() => {
-            addParticipantsToEvent();
-            setIsParticipantModalOpen(false);
-          }}
-          loading={participantsLoading}
-          disabled={selectedParticipants.length === 0}
-          style={{ width: '100%' }}
-        >
-          Add {selectedParticipants.length > 0 ? `${selectedParticipants.length} ` : ''}Participant{selectedParticipants.length !== 1 ? 's' : ''} to Event
-        </Button>
-      </Modal>
-
-      {/* Group Assignment Modal */}
-      <Modal
-        title="Add Groups to Event"
-        open={isGroupModalOpen}
-        onCancel={() => {
-          setIsGroupModalOpen(false);
-          setSelectedGroups([]);
-        }}
-        footer={null}
-        width={600}
-      >
-        <div style={{ marginBottom: '16px' }}>
-          <Text type="secondary">
-            Select groups to add to this event. Currently registered groups are shown in the table below.
-          </Text>
-        </div>
-
-        {/* Search Bar */}
-        <div style={{ marginBottom: '16px' }}>
-          <Input
-            placeholder="Search by group name..."
-            prefix={<Search size={16} style={{ color: '#bfbfbf' }} />}
-            onChange={(e) => {
-              const searchTerm = e.target.value.toLowerCase();
-              const filtered = groups.filter(group => 
-                group.name.toLowerCase().includes(searchTerm)
-              );
-              setFilteredGroups(filtered);
-            }}
-            allowClear
-          />
-        </div>
-
-        <div style={{ marginBottom: '16px', maxHeight: '300px', overflowY: 'auto', border: '1px solid #d9d9d9', borderRadius: '6px', padding: '16px' }}>
-          {(filteredGroups.length > 0 ? filteredGroups : groups).map((group) => (
-            <div key={group.id} style={{ marginBottom: '8px' }}>
-              <Checkbox
-                checked={selectedGroups.includes(group.id)}
-                onChange={(e) => handleGroupSelection(group.id, e.target.checked)}
-                disabled={isGroupRegistered(group.id)}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>{group.name}</span>
-                  <span style={{ fontSize: '12px', color: '#666' }}>
-                    ({group.members?.length || 0} members)
-                  </span>
-                  {isGroupRegistered(group.id) && (
-                    <Badge color="green" text="Already Registered" />
-                  )}
+            <Card className="mb-4">
+              <CardHeader
+                title="Scoring progress"
+                subtitle={`${scores.length} of ${expectedScores} possible scores recorded`}
+              />
+              <div className="px-4 pb-5 pt-2 md:px-5">
+                <ProgressBar
+                  value={scoringProgress}
+                  tone={scoringProgress === 100 ? 'success' : 'primary'}
+                />
+                <div className="mt-3 grid gap-x-8 gap-y-2 text-caption sm:grid-cols-3">
+                  <Info label="Format" value={`${event.type} · ${event.event_type}`} />
+                  <Info
+                    label="Time limit"
+                    value={event.time_limit ? `${event.time_limit} minutes` : 'None'}
+                  />
+                  <Info
+                    label="Running order"
+                    value={event.event_order !== null ? `#${event.event_order}` : 'Unset'}
+                  />
                 </div>
-              </Checkbox>
+                {event.rules && (
+                  <p className="mt-3 rounded-lg bg-surface-sunken p-3 text-caption text-muted-foreground">
+                    {event.rules}
+                  </p>
+                )}
+              </div>
+            </Card>
+
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <SegmentedControl
+                value={tab}
+                onChange={(value) => setTab(value as Tab)}
+                className="max-w-md flex-1"
+                options={[
+                  {
+                    value: 'entrants',
+                    label: isGroupEvent ? 'Groups' : 'Entrants',
+                    count: isGroupEvent ? eventGroups.length : eventParticipants.length,
+                  },
+                  { value: 'judges', label: 'Judges', count: eventJudges.length },
+                  { value: 'criteria', label: 'Criteria', count: criteria.length },
+                ]}
+              />
+
+              {tab === 'entrants' && (
+                <Button
+                  size="sm"
+                  icon={<Plus size={15} />}
+                  onClick={() => {
+                    setPickerSearch('');
+                    if (isGroupEvent) setIsGroupModalOpen(true);
+                    else setIsParticipantModalOpen(true);
+                  }}
+                >
+                  Add {isGroupEvent ? 'groups' : 'participants'}
+                </Button>
+              )}
+              {tab === 'judges' && (
+                <Button size="sm" icon={<Plus size={15} />} onClick={() => setIsJudgeModalOpen(true)}>
+                  Assign judges
+                </Button>
+              )}
             </div>
-          ))}
-        </div>
 
-        <Button
-          type="primary"
-          icon={<Plus size={16} />}
-          onClick={() => {
-            addGroupsToEvent();
-            setIsGroupModalOpen(false);
-          }}
-          loading={participantsLoading}
-          disabled={selectedGroups.length === 0}
-          style={{ width: '100%' }}
-        >
-          Add {selectedGroups.length > 0 ? `${selectedGroups.length} ` : ''}Group{selectedGroups.length !== 1 ? 's' : ''} to Event
-        </Button>
-      </Modal>
-
-      {/* Judge Assignment Modal */}
-      <Modal
-        title="Add Judges to Event"
-        open={isJudgeModalOpen}
-        onCancel={() => {
-          setIsJudgeModalOpen(false);
-          setSelectedJudges([]);
-        }}
-        footer={null}
-        width={600}
-      >
-        <div style={{ marginBottom: '16px' }}>
-          <Text type="secondary">
-            Select judges to assign to this event. Currently assigned judges are shown in the table below.
-          </Text>
-        </div>
-
-        {/* Search Bar */}
-        <div style={{ marginBottom: '16px' }}>
-          <Input
-            placeholder="Search by judge name..."
-            prefix={<Search size={16} style={{ color: '#bfbfbf' }} />}
-            onChange={(e) => {
-              const searchTerm = e.target.value.toLowerCase();
-              const filtered = judges.filter(judge => 
-                judge.full_name.toLowerCase().includes(searchTerm) ||
-                judge.church.toLowerCase().includes(searchTerm)
-              );
-              setFilteredJudges(filtered);
-            }}
-            allowClear
-          />
-        </div>
-
-        <div style={{ marginBottom: '16px', maxHeight: '300px', overflowY: 'auto', border: '1px solid #d9d9d9', borderRadius: '6px', padding: '16px' }}>
-          {(filteredJudges.length > 0 ? filteredJudges : judges).map((judge) => (
-            <div key={judge.id} style={{ marginBottom: '8px' }}>
-              <Checkbox
-                checked={selectedJudges.includes(judge.id)}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    setSelectedJudges([...selectedJudges, judge.id]);
-                  } else {
-                    setSelectedJudges(selectedJudges.filter(id => id !== judge.id));
+            {tab === 'entrants' &&
+              (isGroupEvent ? (
+                <DataTable
+                  columns={groupColumns}
+                  dataSource={eventGroups}
+                  rowKey="id"
+                  scrollX={640}
+                  emptyIcon={<UsersThree size={22} />}
+                  emptyTitle="No groups in this event"
+                  emptyDescription="Add groups so judges have something to score."
+                />
+              ) : (
+                <DataTable
+                  columns={participantColumns}
+                  dataSource={registeredParticipants}
+                  rowKey="id"
+                  scrollX={720}
+                  rowSelection={{
+                    selectedRowKeys: selectedEventParticipantKeys,
+                    onChange: setSelectedEventParticipantKeys,
+                  }}
+                  toolbar={
+                    <Toolbar
+                      selectionCount={selectedEventParticipantKeys.length}
+                      selectionActions={
+                        <>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            icon={<Trash size={14} />}
+                            loading={batchDeletingParticipants}
+                            onClick={handleBatchDeleteParticipants}
+                          >
+                            Remove from event
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedEventParticipantKeys([])}
+                          >
+                            Clear
+                          </Button>
+                        </>
+                      }
+                    >
+                      <span className="text-caption text-muted-foreground">
+                        Entrants registered for this event
+                      </span>
+                    </Toolbar>
                   }
-                }}
-                disabled={eventJudges.some(ej => ej.judge_id === judge.id)}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>{judge.full_name}</span>
-                  <span style={{ fontSize: '12px', color: '#666' }}>
-                    ({judge.church})
-                  </span>
-                  {eventJudges.some(ej => ej.judge_id === judge.id) && (
-                    <Badge color="green" text="Already Registered" />
+                  emptyIcon={<UsersThree size={22} />}
+                  emptyTitle="No entrants yet"
+                  emptyDescription="Add participants so judges have someone to score."
+                />
+              ))}
+
+            {tab === 'judges' && (
+              <DataTable
+                columns={judgeColumns}
+                dataSource={eventJudges}
+                rowKey="id"
+                scrollX={560}
+                emptyIcon={<Gavel size={22} />}
+                emptyTitle="No judges assigned"
+                emptyDescription="Assign judges before the event starts; only assigned judges can score."
+              />
+            )}
+
+            {tab === 'criteria' && (
+              <Card>
+                <CardHeader
+                  title="Scoring criteria"
+                  subtitle="Edit these from the event form on the events page"
+                />
+                <div className="px-4 pb-5 md:px-5">
+                  {criteria.length === 0 ? (
+                    <p className="py-6 text-center text-body text-muted-foreground">
+                      No criteria yet — judges cannot score this event.
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-border">
+                      {criteria.map((criterion) => (
+                        <li key={criterion.id} className="flex items-center justify-between py-3">
+                          <span className="text-body text-foreground">{criterion.name}</span>
+                          <span className="tnum text-caption text-muted-foreground">
+                            max {criterion.max_score} · weight ×{criterion.weight}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
-              </Checkbox>
-            </div>
-          ))}
-        </div>
+              </Card>
+            )}
 
-        <Button
-          type="primary"
-          icon={<Plus size={16} />}
-          onClick={() => {
-            addJudgesToEvent();
-            setIsJudgeModalOpen(false);
-          }}
-          loading={participantsLoading}
-          disabled={selectedJudges.length === 0}
-          style={{ width: '100%' }}
-        >
-          Add {selectedJudges.length > 0 ? `${selectedJudges.length} ` : ''}Judge{selectedJudges.length !== 1 ? 's' : ''} to Event
-        </Button>
-      </Modal>
+            {/* --------------------------------------- entrant picker */}
+            <Sheet
+              open={isParticipantModalOpen}
+              onClose={() => setIsParticipantModalOpen(false)}
+              dismissable={!working}
+              size="lg"
+              title="Add participants"
+              description={
+                event.age_category
+                  ? `Only ${event.age_category} participants from this event level can enter.`
+                  : 'Participants registered in this event level.'
+              }
+              footer={
+                <Button
+                  size="lg"
+                  block
+                  loading={working}
+                  disabled={selectedParticipants.length === 0}
+                  onClick={addParticipantsToEvent}
+                >
+                  Add {selectedParticipants.length || ''} entrant
+                  {selectedParticipants.length === 1 ? '' : 's'}
+                </Button>
+              }
+            >
+              <SearchInput
+                value={pickerSearch}
+                onChange={setPickerSearch}
+                placeholder="Search chest number or name"
+                className="mb-2"
+              />
+              <PickerList
+                items={pickerParticipants.map((participant) => ({
+                  id: participant.id,
+                  title: participant.full_name,
+                  subtitle: `#${participant.chest_number} · ${participant.church}`,
+                  disabled: isParticipantRegistered(participant.id),
+                  disabledLabel: 'Already in',
+                }))}
+                selected={selectedParticipants}
+                onToggle={(id, checked) =>
+                  setSelectedParticipants((current) =>
+                    checked ? [...current, id] : current.filter((value) => value !== id),
+                  )
+                }
+              />
+            </Sheet>
 
-      {/* Score Editing Modal */}
-      <Modal
-        title={
-          <div>
-            <div style={{ fontSize: '16px', fontWeight: 500 }}>
-              Edit Scores - {selectedParticipantForScoring?.full_name}
-            </div>
-            <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-              Chest #{selectedParticipantForScoring?.chest_number} • {selectedParticipantForScoring?.age_category}
-            </div>
-          </div>
-        }
-        open={isScoreModalOpen}
-        onCancel={() => {
-          setIsScoreModalOpen(false);
-          setSelectedParticipantForScoring(null);
-          scoreForm.resetFields();
-        }}
-        footer={null}
-        width={800}
-      >
-        <Form
-          form={scoreForm}
-          layout="vertical"
-          onFinish={saveScores}
-        >
-          <div style={{ marginBottom: '16px' }}>
-            <Text type="secondary">
-              Enter scores for each judge and criteria. Leave empty if no score should be recorded.
-            </Text>
-          </div>
+            {/* ----------------------------------------- group picker */}
+            <Sheet
+              open={isGroupModalOpen}
+              onClose={() => setIsGroupModalOpen(false)}
+              dismissable={!working}
+              size="lg"
+              title="Add groups"
+              description="Groups are scored as one entrant."
+              footer={
+                <Button
+                  size="lg"
+                  block
+                  loading={working}
+                  disabled={selectedGroups.length === 0}
+                  onClick={addGroupsToEvent}
+                >
+                  Add {selectedGroups.length || ''} group{selectedGroups.length === 1 ? '' : 's'}
+                </Button>
+              }
+            >
+              <PickerList
+                items={groups.map((group) => ({
+                  id: group.id,
+                  title: group.name,
+                  subtitle: [group.chest_number ? `#${group.chest_number}` : null, group.church]
+                    .filter(Boolean)
+                    .join(' · ') || 'No chest number',
+                  disabled: isGroupRegistered(group.id),
+                  disabledLabel: 'Already in',
+                }))}
+                selected={selectedGroups}
+                onToggle={(id, checked) =>
+                  setSelectedGroups((current) =>
+                    checked ? [...current, id] : current.filter((value) => value !== id),
+                  )
+                }
+              />
+            </Sheet>
 
-          <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-            {eventJudges.map((eventJudge) => (
-              <div key={eventJudge.judge_id} style={{ marginBottom: '24px' }}>
-                <div style={{ 
-                  padding: '12px', 
-                  backgroundColor: '#f5f5f5', 
-                  borderRadius: '6px',
-                  marginBottom: '12px'
-                }}>
-                  <Text strong style={{ fontSize: '14px' }}>
-                    {eventJudge.judge.full_name}
-                  </Text>
-                  <div style={{ fontSize: '12px', color: '#666' }}>
-                    {eventJudge.judge.church}
+            {/* ----------------------------------------- judge picker */}
+            <Sheet
+              open={isJudgeModalOpen}
+              onClose={() => setIsJudgeModalOpen(false)}
+              dismissable={!working}
+              size="lg"
+              title="Assign judges"
+              description="Only assigned judges can submit scores for this event."
+              footer={
+                <Button
+                  size="lg"
+                  block
+                  loading={working}
+                  disabled={selectedJudges.length === 0}
+                  onClick={addJudgesToEvent}
+                >
+                  Assign {selectedJudges.length || ''} judge{selectedJudges.length === 1 ? '' : 's'}
+                </Button>
+              }
+            >
+              <PickerList
+                items={judges.map((judge) => ({
+                  id: judge.id,
+                  title: judge.full_name,
+                  subtitle: judge.church,
+                  disabled: eventJudges.some((entry) => entry.judge_id === judge.id),
+                  disabledLabel: 'Assigned',
+                }))}
+                selected={selectedJudges}
+                onToggle={(id, checked) =>
+                  setSelectedJudges((current) =>
+                    checked ? [...current, id] : current.filter((value) => value !== id),
+                  )
+                }
+              />
+            </Sheet>
+
+            {/* ------------------------------------------ score editor */}
+            <Sheet
+              open={isScoreModalOpen}
+              onClose={closeScoreModal}
+              dismissable={!savingScores}
+              size="lg"
+              title={`Edit scores — ${scoringParticipant?.full_name ?? ''}`}
+              description={
+                scoringParticipant
+                  ? `#${scoringParticipant.chest_number} · ${scoringParticipant.age_category}`
+                  : undefined
+              }
+              footer={
+                <div className="space-y-2">
+                  <p className="text-caption text-muted-foreground">
+                    Saving replaces every score this entrant has in this event.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      onClick={closeScoreModal}
+                      disabled={savingScores}
+                    >
+                      Cancel
+                    </Button>
+                    <Button size="lg" block loading={savingScores} onClick={() => scoreForm.submit()}>
+                      Save scores
+                    </Button>
                   </div>
                 </div>
-
-                <div style={{ display: 'grid', gap: '12px' }}>
-                  {criteria.map((criterion) => (
-                    <Form.Item
-                      key={`${eventJudge.judge_id}_${criterion.id}`}
-                      label={
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span>{criterion.name}</span>
-                          <span style={{ fontSize: '12px', color: '#666' }}>
-                            Max: {criterion.max_score} • Weight: {criterion.weight}
-                          </span>
-                        </div>
-                      }
-                      name={`${eventJudge.judge_id}_${criterion.id}`}
-                      rules={[
-                        {
-                          validator: (_, value) => {
-                            if (value === undefined || value === null || value === '') {
-                              return Promise.resolve();
+              }
+            >
+              {eventJudges.length === 0 || criteria.length === 0 ? (
+                <p className="py-6 text-center text-body text-muted-foreground">
+                  Assign judges and add criteria before entering scores.
+                </p>
+              ) : (
+                <Form form={scoreForm} layout="vertical" onFinish={saveScores} requiredMark={false}>
+                  {eventJudges.map((eventJudge) => (
+                    <div key={eventJudge.judge_id} className="mb-4">
+                      <div className="mb-2 rounded-lg bg-surface-sunken px-3 py-2">
+                        <p className="text-body font-medium text-foreground">
+                          {eventJudge.judge?.full_name}
+                        </p>
+                        <p className="text-caption text-muted-foreground">
+                          {eventJudge.judge?.church}
+                        </p>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {criteria.map((criterion) => (
+                          <Form.Item
+                            key={`${eventJudge.judge_id}_${criterion.id}`}
+                            name={`${eventJudge.judge_id}_${criterion.id}`}
+                            label={
+                              <span className="flex w-full items-baseline justify-between gap-2">
+                                <span>{criterion.name}</span>
+                                <span className="text-caption text-muted-foreground">
+                                  max {criterion.max_score}
+                                </span>
+                              </span>
                             }
-                            if (value < 0) {
-                              return Promise.reject('Score cannot be negative');
-                            }
-                            if (value > criterion.max_score) {
-                              return Promise.reject(`Score cannot exceed ${criterion.max_score}`);
-                            }
-                            return Promise.resolve();
-                          }
-                        }
-                      ]}
-                    >
-                      <InputNumber
-                        min={0}
-                        max={criterion.max_score}
-                        step={0.1}
-                        precision={1}
-                        style={{ width: '100%' }}
-                        placeholder={`0 - ${criterion.max_score}`}
-                      />
-                    </Form.Item>
+                            rules={[
+                              {
+                                validator: (_, value) => {
+                                  if (value === undefined || value === null || value === '') {
+                                    return Promise.resolve();
+                                  }
+                                  if (value < 0) return Promise.reject('Score cannot be negative');
+                                  if (value > criterion.max_score) {
+                                    return Promise.reject(`Max is ${criterion.max_score}`);
+                                  }
+                                  return Promise.resolve();
+                                },
+                              },
+                            ]}
+                          >
+                            <InputNumber
+                              className="w-full"
+                              min={0}
+                              max={criterion.max_score}
+                              step={0.1}
+                              precision={1}
+                              placeholder={`0 – ${criterion.max_score}`}
+                            />
+                          </Form.Item>
+                        ))}
+                      </div>
+                    </div>
                   ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            marginTop: '24px',
-            paddingTop: '16px',
-            borderTop: '1px solid #f0f0f0'
-          }}>
-            <Text type="secondary" style={{ fontSize: '12px' }}>
-              {eventJudges.length} judges × {criteria.length} criteria = {eventJudges.length * criteria.length} possible scores
-            </Text>
-            <Space>
-              <Button
-                onClick={() => {
-                  setIsScoreModalOpen(false);
-                  setSelectedParticipantForScoring(null);
-                  scoreForm.resetFields();
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="primary"
-                htmlType="submit"
-                loading={savingScores}
-              >
-                Save Scores
-              </Button>
-            </Space>
-          </div>
-        </Form>
-      </Modal>
-    </Layout>
+                </Form>
+              )}
+            </Sheet>
+          </>
+        )
+      )}
+    </AppShell>
   );
 };
+
+const Info = ({ label, value }: { label: string; value: string }) => (
+  <div className="min-w-0">
+    <span className="block text-muted-foreground">{label}</span>
+    <span className="block truncate font-medium capitalize text-foreground">{value}</span>
+  </div>
+);
+
+const PickerList = ({
+  items,
+  selected,
+  onToggle,
+}: {
+  items: Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+    disabled?: boolean;
+    disabledLabel?: string;
+  }>;
+  selected: string[];
+  onToggle: (id: string, checked: boolean) => void;
+}) => (
+  <div className="scrollbar-thin max-h-[55vh] overflow-y-auto rounded-xl border border-border">
+    {items.length === 0 ? (
+      <p className="px-3 py-8 text-center text-caption text-muted-foreground">Nothing to show</p>
+    ) : (
+      items.map((item) => (
+        <label
+          key={item.id}
+          className={`flex items-center gap-3 border-b border-border px-3 py-2.5 last:border-b-0 ${
+            item.disabled ? 'opacity-50' : 'cursor-pointer hover:bg-surface-sunken'
+          }`}
+        >
+          <Checkbox
+            disabled={item.disabled}
+            checked={selected.includes(item.id)}
+            onChange={(changeEvent) => onToggle(item.id, changeEvent.target.checked)}
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-body text-foreground">{item.title}</span>
+            <span className="block truncate text-caption text-muted-foreground">{item.subtitle}</span>
+          </span>
+          {item.disabled && item.disabledLabel && (
+            <StatusPill tone="neutral">{item.disabledLabel}</StatusPill>
+          )}
+        </label>
+      ))
+    )}
+  </div>
+);
 
 export default EventDetails;

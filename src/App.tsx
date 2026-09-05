@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { ConfigProvider, App as AntApp, Spin } from 'antd';
-import { message } from 'antd';
+import { antdTheme } from '@/design/antdTheme';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from '@/hooks/useAuth';
@@ -41,14 +41,7 @@ const App = () => (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ParticipantAuthProvider>
-          <ConfigProvider
-            theme={{
-              token: {
-                colorPrimary: '#8b5cf6',
-                borderRadius: 8,
-              },
-            }}
-          >
+          <ConfigProvider theme={antdTheme}>
             <AntApp>
               <BrowserRouter>
           <Suspense fallback={<PageFallback />}>

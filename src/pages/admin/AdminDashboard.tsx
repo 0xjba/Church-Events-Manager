@@ -1,233 +1,198 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowsClockwise, CalendarBlank, CaretRight, Certificate, ChartBar, Gavel, Pulse, Target, Trophy, User, UsersThree, WarningCircle } from '@phosphor-icons/react';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdminStats } from '@/hooks/useAdminStats';
 import { useRecentActivity } from '@/hooks/useRecentActivity';
-import Navigation from '@/components/Navigation';
-import { Layout, Card, Statistic, Row, Col, Typography, Button, Spin, Alert, List, Avatar, Tag } from 'antd';
-import { Users, Calendar, Trophy, BarChart3, LogOut, RefreshCw, User, Award, Target } from 'lucide-react';
+import { AppShell } from '@/components/shell/AppShell';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
+import { Button, Card, CardHeader, EmptyState, Skeleton, StatTile } from '@/components/ui/primitives';
 
+const QUICK_LINKS = [
+  { label: 'Participants', description: 'Register and manage entrants', path: '/admin/participants', icon: UsersThree },
+  { label: 'Judges', description: 'Accounts and assignments', path: '/admin/judges', icon: Gavel },
+  { label: 'Events', description: 'Criteria, entrants, status', path: '/admin/events', icon: CalendarBlank },
+  { label: 'Results', description: 'Publish and export', path: '/admin/results', icon: Trophy },
+];
 
-const { Content, Header } = Layout;
-const { Title, Text } = Typography;
+const activityIcon = (type: string) => {
+  switch (type) {
+    case 'participant':
+      return <User size={14} />;
+    case 'judge':
+      return <Certificate size={14} />;
+    case 'score':
+      return <Target size={14} />;
+    default:
+      return <CalendarBlank size={14} />;
+  }
+};
 
 const AdminDashboard = () => {
-  const { profile, signOut } = useAuth();
+  const { profile } = useAuth();
   const { stats, loading, error, refetch } = useAdminStats();
-  const { activities, loading: activitiesLoading, error: activitiesError, refetch: refetchActivities } = useRecentActivity();
+  const {
+    activities,
+    loading: activitiesLoading,
+    error: activitiesError,
+    refetch: refetchActivities,
+  } = useRecentActivity();
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
-  const statsData = [
-    {
-      title: 'Total Participants',
-      value: stats.totalParticipants,
-      description: 'Registered participants',
-      icon: <Users size={24} color="#8b5cf6" />,
-    },
-    {
-      title: 'Active Events',
-      value: stats.activeEvents,
-      description: 'Events in progress',
-      icon: <Calendar size={24} color="#8b5cf6" />,
-    },
-    {
-      title: 'Judges',
-      value: stats.totalJudges,
-      description: 'Assigned judges',
-      icon: <Trophy size={24} color="#8b5cf6" />,
-    },
-    {
-      title: 'Completed Events',
-      value: stats.completedEvents,
-      description: 'Events finished',
-      icon: <BarChart3 size={24} color="#8b5cf6" />,
-    }
-  ];
+  const refreshAll = () => {
+    refetch();
+    refetchActivities();
+    setLastUpdated(new Date());
+  };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Navigation />
-      
-      <Layout className="md:ml-64">
-        
-        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <Title level={2} style={{ margin: 0 }}>
-                Admin Dashboard
-              </Title>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
-              <Text type="secondary">
-                Welcome back, {profile?.full_name}
-              </Text>
-            </div>
-            <div>
-              <Button 
-                icon={<RefreshCw size={14} />} 
-                onClick={() => {
-                  refetch();
-                  refetchActivities();
-                  setLastUpdated(new Date());
-                }}
-                loading={loading || activitiesLoading}
-                size="small"
-                type="text"
-                style={{ 
-                  color: '#8b5cf6',
-                  padding: '4px 8px',
-                  height: 'auto',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <span style={{ fontSize: '12px' }}>
-                  Last updated: {lastUpdated.toLocaleTimeString()}
-                </span>
-              </Button>
-            </div>
+    <AppShell
+      variant="admin"
+      title="Dashboard"
+      subtitle={profile?.full_name ? `Signed in as ${profile.full_name}` : undefined}
+      actions={
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={<ArrowsClockwise size={14} />}
+          loading={loading || activitiesLoading}
+          onClick={refreshAll}
+        >
+          <span className="hidden sm:inline">
+            Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+          <span className="sm:hidden">Refresh</span>
+        </Button>
+      }
+    >
+      <PWAInstallPrompt />
+
+      {(error || activitiesError) && (
+        <div className="mb-4 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive-soft p-4">
+          <WarningCircle size={18} className="mt-0.5 shrink-0 text-destructive" />
+          <div className="flex-1">
+            <p className="text-body font-medium text-destructive">Could not load dashboard data</p>
+            <p className="mt-0.5 text-caption text-destructive/80">{error || activitiesError}</p>
           </div>
+          <Button variant="secondary" size="sm" onClick={refreshAll}>
+            Retry
+          </Button>
+        </div>
+      )}
 
-          <PWAInstallPrompt />
-
-          {(error || activitiesError) && (
-            <Alert
-              message="Error loading data"
-              description={error || activitiesError}
-              type="error"
-              showIcon
-              style={{ marginBottom: '16px' }}
-                                action={
-                    <Button size="small" onClick={() => {
-                      refetch();
-                      refetchActivities();
-                      setLastUpdated(new Date());
-                    }}>
-                      Retry
-                    </Button>
-                  }
+      {/* Counts first: the numbers an administrator checks on arrival. */}
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-[104px]" />)
+        ) : (
+          <>
+            <StatTile
+              label="Participants"
+              value={stats.totalParticipants}
+              hint="Registered"
+              icon={<UsersThree size={15} />}
+              tone="primary"
             />
-          )}
+            <StatTile
+              label="Active events"
+              value={stats.activeEvents}
+              hint="Not yet completed"
+              icon={<Pulse size={15} />}
+              tone="info"
+            />
+            <StatTile
+              label="Judges"
+              value={stats.totalJudges}
+              hint="Accounts"
+              icon={<Gavel size={15} />}
+              tone="neutral"
+            />
+            <StatTile
+              label="Completed"
+              value={stats.completedEvents}
+              hint={`of ${stats.totalEvents} events`}
+              icon={<ChartBar size={15} />}
+              tone="success"
+            />
+          </>
+        )}
+      </div>
 
-          <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
-            {statsData.map((stat, index) => (
-              <Col xs={24} sm={12} lg={6} key={index}>
-                <Card>
-                  <Spin spinning={loading} tip="Loading...">
-                    <Statistic
-                      title={stat.title}
-                      value={loading ? '-' : stat.value}
-                      prefix={stat.icon}
-                      valueStyle={{ color: loading ? '#d9d9d9' : undefined }}
-                    />
-                    <Text type="secondary" style={{ fontSize: '12px' }}>
-                      {stat.description}
-                    </Text>
-                  </Spin>
-                </Card>
-              </Col>
-            ))}
-          </Row>
-
-          {/* Additional Statistics Row */}
-          <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
-            <Col xs={24} sm={12} lg={12}>
-              <Card>
-                <Spin spinning={loading} tip="Loading...">
-                  <Statistic
-                    title="Total Events"
-                    value={loading ? '-' : stats.totalEvents}
-                    prefix={<Calendar size={24} color="#8b5cf6" />}
-                    valueStyle={{ color: loading ? '#d9d9d9' : undefined }}
-                  />
-                  <Text type="secondary" style={{ fontSize: '12px' }}>
-                    All events created
-                  </Text>
-                </Spin>
-              </Card>
-            </Col>
-          </Row>
-
-          <Row gutter={[24, 24]}>
-            <Col xs={24}>
-              <Card>
-                <Title level={4}>Recent Activity</Title>
-                <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
-                  Latest updates and changes
-                </Text>
-                <Spin spinning={activitiesLoading}>
-                  {activities.length > 0 ? (
-                    <List
-                      dataSource={activities}
-                      renderItem={(activity) => {
-                        const getIcon = () => {
-                          switch (activity.type) {
-                            case 'event':
-                              return <Calendar size={16} color="#8b5cf6" />;
-                            case 'participant':
-                              return <User size={16} color="#8b5cf6" />;
-                            case 'judge':
-                              return <Award size={16} color="#8b5cf6" />;
-                            case 'score':
-                              return <Target size={16} color="#8b5cf6" />;
-                            default:
-                              return <Calendar size={16} color="#8b5cf6" />;
-                          }
-                        };
-
-                        const getActionColor = () => {
-                          switch (activity.action) {
-                            case 'created':
-                            case 'registered':
-                              return '#8b5cf6';
-                            case 'completed':
-                              return '#6b7280';
-                            case 'submitted':
-                              return '#8b5cf6';
-                            default:
-                              return '#6b7280';
-                          }
-                        };
-
-                        return (
-                          <List.Item>
-                            <List.Item.Meta
-                              avatar={
-                                <Avatar 
-                                  icon={getIcon()} 
-                                  style={{ backgroundColor: getActionColor() }}
-                                />
-                              }
-                              title={activity.title}
-                              description={
-                                <div>
-                                  <div>{activity.description}</div>
-                                  <Text type="secondary" style={{ fontSize: '12px' }}>
-                                    {new Date(activity.timestamp).toLocaleDateString()} at{' '}
-                                    {new Date(activity.timestamp).toLocaleTimeString()}
-                                  </Text>
-                                </div>
-                              }
-                            />
-                          </List.Item>
-                        );
-                      }}
-                    />
-                  ) : (
-                    <div style={{ textAlign: 'center', padding: '32px 0', color: '#6b7280' }}>
-                      No recent activity
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader title="Recent activity" subtitle="Latest changes across the event" />
+          <div className="px-4 pb-4 md:px-5 md:pb-5">
+            {activitiesLoading ? (
+              <div className="space-y-2 pt-3">
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+              </div>
+            ) : activities.length === 0 ? (
+              <EmptyState
+                icon={<Pulse size={20} />}
+                title="No recent activity"
+                description="Registrations, scores and status changes show up here."
+                className="py-8"
+              />
+            ) : (
+              <ul className="divide-y divide-border">
+                {activities.map((activity, index) => (
+                  <li key={`${activity.timestamp}-${index}`} className="flex gap-3 py-3">
+                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-strong">
+                      {activityIcon(activity.type)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-body font-medium text-foreground">
+                        {activity.title}
+                      </p>
+                      <p className="truncate text-caption text-muted-foreground">
+                        {activity.description}
+                      </p>
                     </div>
-                  )}
-                </Spin>
-              </Card>
-            </Col>
+                    <time className="shrink-0 text-caption text-muted-foreground">
+                      {new Date(activity.timestamp).toLocaleString([], {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </time>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </Card>
 
-
-          </Row>
-        </Content>
-      </Layout>
-    </Layout>
+        <Card>
+          <CardHeader title="Jump to" subtitle="Common tasks" />
+          <div className="p-2 md:p-3">
+            {QUICK_LINKS.map((link) => {
+              const Icon = link.icon;
+              return (
+                <Link
+                  key={link.path}
+                  to={link.path}
+                  className="flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-surface-sunken"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-sunken text-muted-foreground">
+                    <Icon size={16} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-body font-medium text-foreground">{link.label}</span>
+                    <span className="block truncate text-caption text-muted-foreground">
+                      {link.description}
+                    </span>
+                  </span>
+                  <CaretRight size={16} className="text-muted-foreground" />
+                </Link>
+              );
+            })}
+          </div>
+        </Card>
+      </div>
+    </AppShell>
   );
 };
 

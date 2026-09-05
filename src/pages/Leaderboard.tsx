@@ -1,450 +1,434 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { message } from 'antd';
+import { ArrowsClockwise, Certificate, Medal, Trophy } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
-import { ResultsCalculator } from '@/utils/resultsCalculator';
-import Navigation from '@/components/Navigation';
-import { Layout, Card, Button, Select, Table, Badge, Typography, Space, Spin, message } from 'antd';
-import { Trophy, Medal, Award, Filter, RefreshCw } from 'lucide-react';
+import {
+  churchStandings,
+  districtStandings,
+  individualStandings,
+  scopeAllows,
+  widestScope,
+  type LevelScope,
+  type PlacedResult,
+  type Standing,
+} from '@/utils/championship';
+import { AppShell } from '@/components/shell/AppShell';
+import {
+  Button,
+  Card,
+  EmptyState,
+  Skeleton,
+  StatusPill,
+} from '@/components/ui/primitives';
+import { SegmentedControl } from '@/components/ui/inputs';
+import { cn } from '@/lib/utils';
+import type { SupabaseRow } from '@/lib/types';
 
-const { Content } = Layout;
-const { Title, Text } = Typography;
-
-interface Event {
+interface EventSummary {
   id: string;
   name: string;
   type: string;
+  event_type: string;
   status: string;
+  age_category: string | null;
   results_published: boolean;
+  event_levels: { id: string; name: string; scope: LevelScope } | null;
 }
 
 interface EventResult {
   id: string;
-  participant_id: string;
-  total_score: number;
-  average_score: number;
+  event_id: string;
+  participant_id: string | null;
+  group_id: string | null;
   rank: number;
   tie_breaker_reason: string | null;
   participants: {
     id: string;
     full_name: string;
     chest_number: string;
-    category: string;
     church: string;
     district: string;
-  };
+  } | null;
+  groups: {
+    id: string;
+    name: string;
+    chest_number: string | null;
+    church: string | null;
+    district: string | null;
+  } | null;
 }
 
+const rankStyles = (rank: number) => {
+  if (rank === 1) return 'bg-gold/15 text-gold border-gold/30';
+  if (rank === 2) return 'bg-silver/15 text-silver border-silver/30';
+  if (rank === 3) return 'bg-bronze/15 text-bronze border-bronze/30';
+  return 'bg-muted text-muted-foreground border-transparent';
+};
+
+const RankBadge = ({ rank }: { rank: number }) => (
+  <span
+    className={cn(
+      'tnum flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-body font-semibold',
+      rankStyles(rank),
+    )}
+  >
+    {rank === 1 ? <Trophy size={18} /> : rank === 2 ? <Medal size={18} /> : rank === 3 ? <Certificate size={18} /> : rank}
+  </span>
+);
+
 const Leaderboard = () => {
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<EventSummary[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string>('');
   const [eventResults, setEventResults] = useState<EventResult[]>([]);
-  const [championshipData, setChampionshipData] = useState<any>(null);
-  // Category filtering removed as participant category column was dropped
+  const [championship, setChampionship] = useState<{
+    individuals: Array<Standing<NonNullable<EventResult['participants']>>>;
+    churches: Array<Standing<string>>;
+    districts: Array<Standing<string>>;
+    events_count: number;
+  } | null>(null);
+  const [championshipView, setChampionshipView] = useState<'individual' | 'church' | 'district'>('individual');
+  const [view, setView] = useState<'event' | 'championship'>('event');
   const [loading, setLoading] = useState(true);
-  const [showChampionship, setShowChampionship] = useState(false);
+  const [loadingResults, setLoadingResults] = useState(false);
+
+  // A local church level has no church table worth showing, and districts only
+  // matter once the competition is state-wide.
+  const allows = scopeAllows(widestScope(events.map((event) => event.event_levels?.scope)));
 
   useEffect(() => {
-    fetchPublishedEvents();
-    fetchCategories();
-  }, []);
+    if (championshipView === 'church' && !allows.church) setChampionshipView('individual');
+    if (championshipView === 'district' && !allows.district) setChampionshipView('individual');
+  }, [allows.church, allows.district, championshipView]);
 
-  useEffect(() => {
-    if (selectedEvent) {
-      fetchEventResults(selectedEvent);
-    }
-  }, [selectedEvent]);
-
-  const fetchPublishedEvents = async () => {
+  const fetchPublishedEvents = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('events')
-        .select('*')
+        .select(
+          `id, name, type, event_type, status, age_category, results_published,
+           event_levels ( id, name, scope )`,
+        )
         .eq('results_published', true)
         .order('event_order', { ascending: true, nullsFirst: false });
 
       if (error) throw error;
-      setEvents(data || []);
-      
-      if (data && data.length > 0) {
-        setSelectedEvent(data[0].id);
-      }
-    } catch (error) {
+
+      setEvents((data ?? []) as unknown as EventSummary[]);
+      if (data && data.length > 0) setSelectedEvent((current) => current || data[0].id);
+    } catch {
       message.error('Failed to load published events');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchCategories = async () => {
+  const fetchEventResults = useCallback(async (eventId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('participants')
-        .select('category')
-        .neq('category', null);
-
-      if (error) throw error;
-      
-      const uniqueCategories = [...new Set(data?.map(p => p.category) || [])];
-      setCategories(uniqueCategories);
-    } catch (error) {
-      console.error('Failed to load categories:', error);
-    }
-  };
-
-  const fetchEventResults = async (eventId: string) => {
-    try {
+      setLoadingResults(true);
       const { data, error } = await supabase
         .from('results')
-        .select(`
-          *,
-          participants (
-            id,
-            full_name,
-            chest_number,
-            category,
-            church,
-            district
-          )
-        `)
+        .select(
+          `id, event_id, participant_id, group_id, rank, tie_breaker_reason,
+           participants ( id, full_name, chest_number, church, district ),
+           groups ( id, name, chest_number, church, district )`,
+        )
         .eq('event_id', eventId)
         .order('rank', { ascending: true });
 
       if (error) throw error;
-      
-      let filteredResults = data || [];
-      
-      // Note: Category filtering removed as participant category column was dropped
-      // All participants are now treated equally regardless of category
-      
-      setEventResults(filteredResults);
-    } catch (error) {
+      setEventResults((data ?? []) as unknown as EventResult[]);
+    } catch {
       message.error('Failed to load event results');
+    } finally {
+      setLoadingResults(false);
     }
-  };
+  }, []);
 
-  const fetchChampionshipStandings = async () => {
+  useEffect(() => {
+    fetchPublishedEvents();
+  }, [fetchPublishedEvents]);
+
+  useEffect(() => {
+    if (selectedEvent) fetchEventResults(selectedEvent);
+  }, [selectedEvent, fetchEventResults]);
+
+  // Standings come from placings alone: rank points added up, no scores. That
+  // is all this audience is allowed to see, and the database enforces it.
+  const loadChampionship = async () => {
     try {
-      const eventIds = events.map(e => e.id);
-      const standings = await ResultsCalculator.getChampionshipStandings(eventIds);
-      
-      let filteredStandings = standings.participants;
-      
-      // Note: Category filtering removed as participant category column was dropped
-      // All participants are now treated equally regardless of category
-      
-      setChampionshipData({
-        ...standings,
-        participants: filteredStandings
+      setLoadingResults(true);
+
+      const { data, error } = await supabase
+        .from('results')
+        .select(
+          `event_id, rank,
+           participants ( id, full_name, chest_number, church, district ),
+           groups ( id, name, chest_number, church, district )`,
+        )
+        .in('event_id', events.map((event) => event.id))
+        .not('rank', 'is', null);
+
+      if (error) throw error;
+
+      // A group placing counts for the church or district the group represents,
+      // and on the group scale, so each row needs to know which kind of event
+      // it came from.
+      const typeByEvent = new Map(events.map((event) => [event.id, event.event_type]));
+
+      const placed: PlacedResult[] = (data ?? []).map((row: SupabaseRow) => ({
+        event_id: row.event_id,
+        event_type: typeByEvent.get(row.event_id) === 'group' ? 'group' : 'individual',
+        rank: row.rank,
+        participant: row.participants,
+        group: row.groups,
+      }));
+
+      setChampionship({
+        individuals: individualStandings(placed) as Array<
+          Standing<NonNullable<EventResult['participants']>>
+        >,
+        churches: churchStandings(placed),
+        districts: districtStandings(placed),
+        events_count: new Set(placed.map((row) => row.event_id)).size,
       });
-      
-      setShowChampionship(true);
-    } catch (error) {
+    } catch {
       message.error('Failed to load championship standings');
+    } finally {
+      setLoadingResults(false);
     }
   };
 
-  const getRankIcon = (rank: number) => {
-    switch (rank) {
-      case 1:
-        return <Trophy size={20} style={{ color: '#8b5cf6' }} />;
-      case 2:
-        return <Medal size={20} style={{ color: '#6b7280' }} />;
-      case 3:
-        return <Award size={20} style={{ color: '#6b7280' }} />;
-      default:
-        return <span style={{ fontWeight: 'bold' }}>#{rank}</span>;
-    }
+  const switchView = (next: 'event' | 'championship') => {
+    setView(next);
+    if (next === 'championship' && !championship) loadChampionship();
   };
 
-  const getRankEmoji = (rank: number) => {
-    switch (rank) {
-      case 1: return '🥇';
-      case 2: return '🥈';
-      case 3: return '🥉';
-      default: return `#${rank}`;
-    }
+  const refresh = () => {
+    if (view === 'championship') loadChampionship();
+    else if (selectedEvent) fetchEventResults(selectedEvent);
   };
 
-  const eventResultColumns = [
-    {
-      title: 'Rank',
-      dataIndex: 'rank',
-      key: 'rank',
-      width: 80,
-      render: (rank: number, record: EventResult) => (
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '18px', marginBottom: '4px' }}>
-            {getRankEmoji(rank)}
-          </div>
-          {record.tie_breaker_reason && (
-            <Badge color="orange" text="Tie" />
-          )}
-        </div>
-      ),
-    },
-    {
-      title: 'Participant',
-      dataIndex: 'participants',
-      key: 'participant',
-      render: (participant: any) => (
-        <div>
-          <div style={{ fontWeight: 'medium' }}>{participant.full_name}</div>
-          <Text type="secondary" style={{ fontSize: '12px' }}>
-            #{participant.chest_number}
-          </Text>
-        </div>
-      ),
-    },
-    // Category column removed as participant category column was dropped
-    {
-      title: 'Church',
-      dataIndex: ['participants', 'church'],
-      key: 'church',
-    },
-    {
-      title: 'District',
-      dataIndex: ['participants', 'district'],
-      key: 'district',
-    },
-    {
-      title: 'Total Score',
-      dataIndex: 'total_score',
-      key: 'total_score',
-      render: (score: number) => <span style={{ fontWeight: 'bold', fontSize: '16px' }}>{score}</span>,
-    },
-    {
-      title: 'Average Score',
-      dataIndex: 'average_score',
-      key: 'average_score',
-    },
-  ];
-
-  const championshipColumns = [
-    {
-      title: 'Rank',
-      dataIndex: 'rank',
-      key: 'rank',
-      width: 80,
-      render: (rank: number) => (
-        <div style={{ textAlign: 'center' }}>
-          {getRankIcon(rank)}
-        </div>
-      ),
-    },
-    {
-      title: 'Participant',
-      dataIndex: 'participant',
-      key: 'participant',
-      render: (participant: any) => (
-        <div>
-          <div style={{ fontWeight: 'medium' }}>{participant.full_name}</div>
-          <Text type="secondary" style={{ fontSize: '12px' }}>
-            #{participant.chest_number}
-          </Text>
-        </div>
-      ),
-    },
-    {
-      title: 'Category',
-      dataIndex: ['participant', 'age_category'],
-      key: 'category',
-      render: (category: string) => <span style={{ textTransform: 'capitalize' }}>{category}</span>,
-    },
-    {
-      title: 'Church',
-      dataIndex: ['participant', 'church'],
-      key: 'church',
-    },
-    {
-      title: 'District',
-      dataIndex: ['participant', 'district'],
-      key: 'district',
-    },
-    {
-      title: 'Events',
-      dataIndex: 'events_participated',
-      key: 'events_participated',
-    },
-    {
-      title: 'Championship Points',
-      dataIndex: 'total_championship_points',
-      key: 'total_championship_points',
-      render: (points: number) => <span style={{ fontWeight: 'bold', fontSize: '16px' }}>{points}</span>,
-    },
-    {
-      title: 'Avg Score',
-      dataIndex: 'average_score',
-      key: 'average_score',
-      render: (score: number) => score.toFixed(1),
-    },
-    {
-      title: 'Best Rank',
-      dataIndex: 'best_rank',
-      key: 'best_rank',
-      render: (rank: number) => `#${rank}`,
-    },
-  ];
-
-  if (loading) {
-    return (
-      <Layout style={{ minHeight: '100vh' }}>
-        <Navigation />
-        <Layout style={{ marginLeft: '256px' }}>
-          <Content style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Spin size="large" />
-          </Content>
-        </Layout>
-      </Layout>
-    );
-  }
+  const activeEvent = events.find((event) => event.id === selectedEvent);
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Navigation />
-      
-      <Layout style={{ marginLeft: '256px' }}>
-        <Content style={{ padding: '16px 24px', paddingBottom: '80px' }}>
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <img 
-                  src="/pypa-logo.png" 
-                  alt="PYPA Logo" 
-                  style={{ 
-                    width: 32, 
-                    height: 32, 
-                    borderRadius: '8px',
-                    marginRight: '12px'
-                  }} 
-                />
-                <div>
-                  <Title level={2} style={{ margin: 0 }}>
-                    Leaderboard
-                  </Title>
-                  <Text type="secondary">
-                    Competition results and rankings
-                  </Text>
-                </div>
-              </div>
-              
-              <Button 
-                type="primary" 
-                icon={<Trophy size={16} />} 
-                onClick={fetchChampionshipStandings}
-              >
-                Championship Standings
-              </Button>
-            </div>
-          </div>
+    <AppShell
+      variant="mobile"
+      title="Leaderboard"
+      subtitle="Published results"
+      actions={
+        <button
+          type="button"
+          onClick={refresh}
+          aria-label="Refresh"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+        >
+          <ArrowsClockwise size={16} className={loadingResults ? 'animate-spin' : undefined} />
+        </button>
+      }
+    >
+      {loading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-11 w-full" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+      ) : events.length === 0 ? (
+        <EmptyState
+          icon={<Trophy size={22} />}
+          title="No published results yet"
+          description="Results appear here once administrators publish them."
+        />
+      ) : (
+        <>
+          <SegmentedControl
+            value={view}
+            onChange={switchView}
+            className="mb-3"
+            options={[
+              { value: 'event', label: 'By event' },
+              { value: 'championship', label: 'Championship' },
+            ]}
+          />
 
-          {/* Filters */}
-          <Card style={{ marginBottom: '24px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'end' }}>
-              <div>
-                <Text strong style={{ display: 'block', marginBottom: '8px' }}>Event</Text>
-                <Select 
-                  value={selectedEvent} 
-                  onChange={setSelectedEvent}
-                  style={{ width: '100%' }}
-                  placeholder="Select event"
-                >
-                  {events.map(event => (
-                    <Select.Option key={event.id} value={event.id}>
-                      {event.name}
-                    </Select.Option>
-                  ))}
-                </Select>
+          {view === 'event' && (
+            <>
+              {/* Horizontal event chips beat a select on a phone: one tap, no overlay. */}
+              <div className="scrollbar-thin -mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1">
+                {events.map((event) => (
+                  <button
+                    key={event.id}
+                    type="button"
+                    onClick={() => setSelectedEvent(event.id)}
+                    className={cn(
+                      'shrink-0 rounded-full border px-3.5 py-2 text-caption font-medium transition-colors',
+                      event.id === selectedEvent
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-surface text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {event.name}
+                  </button>
+                ))}
               </div>
-              
-              {/* Category filter removed as participant category column was dropped */}
-              
-              <div>
-                <Button
-                  onClick={() => setShowChampionship(!showChampionship)}
-                >
-                  {showChampionship ? 'Event Results' : 'Championship'}
-                </Button>
-              </div>
-            </div>
-          </Card>
 
-          {/* Championship Standings */}
-          {showChampionship && championshipData ? (
-            <Card>
-              <div style={{ marginBottom: '16px' }}>
-                <Space align="center">
-                  <Trophy size={24} style={{ color: '#8b5cf6' }} />
-                  <Title level={3} style={{ margin: 0 }}>Championship Standings</Title>
-                </Space>
-                <Text type="secondary">
-                  Overall rankings across {championshipData.events_count} events
-                </Text>
-              </div>
-              
-              <Table
-                columns={championshipColumns}
-                dataSource={championshipData.participants}
-                rowKey="participant.id"
-                pagination={{ pageSize: 50 }}
-                rowClassName={(_, index) => index < 3 ? 'championship-top-three' : ''}
-              />
-            </Card>
-          ) : (
-            /* Event Results */
-            <Card>
-              <div style={{ marginBottom: '16px' }}>
-                <Space align="center">
-                  <Medal size={20} />
-                  <Title level={3} style={{ margin: 0 }}>
-                    {events.find(e => e.id === selectedEvent)?.name || 'Event Results'}
-                  </Title>
-                </Space>
-                <Text type="secondary">
-                  Event leaderboard and participant rankings
-                </Text>
-              </div>
-              
-              {eventResults.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                  <Text type="secondary">
-                    {selectedEvent ? 'No results available for this event' : 'Select an event to view results'}
-                  </Text>
-                </div>
-              ) : (
-                <Table
-                  columns={eventResultColumns}
-                  dataSource={eventResults}
-                  rowKey="id"
-                  pagination={{ pageSize: 50 }}
-                  rowClassName={(_, index) => index < 3 ? 'event-top-three' : ''}
-                />
+              {activeEvent && (
+                <p className="mb-3 text-caption capitalize text-muted-foreground">
+                  {activeEvent.age_category || 'All categories'} · {activeEvent.type}
+                </p>
               )}
-            </Card>
+
+              {loadingResults ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-[76px] w-full" />
+                  <Skeleton className="h-[76px] w-full" />
+                  <Skeleton className="h-[76px] w-full" />
+                </div>
+              ) : eventResults.length === 0 ? (
+                <EmptyState
+                  icon={<Trophy size={22} />}
+                  title="No results for this event"
+                  description="Nothing has been published for this event yet."
+                />
+              ) : (
+                <ol className="space-y-2">
+                  {eventResults.map((result) => (
+                    <li key={result.id}>
+                      <Card className={result.rank <= 3 ? 'border-border-strong' : undefined}>
+                        <div className="flex items-center gap-3 p-3">
+                          <RankBadge rank={result.rank} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-body font-medium text-foreground">
+                                {result.groups?.name ?? result.participants?.full_name ?? 'Unknown'}
+                              </p>
+                              {result.tie_breaker_reason && <StatusPill tone="warning">Tie</StatusPill>}
+                            </div>
+                            <p className="truncate text-caption text-muted-foreground">
+                              {[
+                                (result.groups?.chest_number ?? result.participants?.chest_number)
+                                  ? `#${result.groups?.chest_number ?? result.participants?.chest_number}`
+                                  : null,
+                                result.groups?.church ?? result.participants?.church,
+                                result.groups?.district ?? result.participants?.district,
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </p>
+                          </div>
+                          {result.rank <= 3 && (
+                            <span className="shrink-0 text-caption font-medium capitalize text-muted-foreground">
+                              {result.rank === 1 ? 'First' : result.rank === 2 ? 'Second' : 'Third'}
+                            </span>
+                          )}
+                        </div>
+                      </Card>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </>
           )}
 
-          {events.length === 0 && (
-            <Card>
-                          <div style={{ textAlign: 'center', padding: '32px 0' }}>
-              <img 
-                src="/pypa-logo.png" 
-                alt="PYPA Logo" 
-                style={{ 
-                  width: 48, 
-                  height: 48, 
-                  borderRadius: '12px',
-                  marginBottom: '16px',
-                  opacity: 0.3
-                }} 
-              />
-              <Title level={4} style={{ marginBottom: '8px' }}>No Published Results</Title>
-              <Text type="secondary">
-                Results will appear here once events are completed and published by administrators.
-              </Text>
-            </div>
-            </Card>
+          {view === 'championship' && (
+            <>
+              {loadingResults ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-[76px] w-full" />
+                  <Skeleton className="h-[76px] w-full" />
+                </div>
+              ) : !championship || championship.individuals.length === 0 ? (
+                <EmptyState
+                  icon={<Trophy size={22} />}
+                  title="No championship standings"
+                  description="Standings appear once results are published for at least one event."
+                />
+              ) : (
+                <>
+                  {/* Church and district standings only mean something once the
+                      competition is bigger than one church. */}
+                  {(allows.church || allows.district) && (
+                    <SegmentedControl
+                      value={championshipView}
+                      onChange={(value) =>
+                        setChampionshipView(value as 'individual' | 'church' | 'district')
+                      }
+                      className="mb-3"
+                      options={[
+                        { value: 'individual', label: 'Individual' },
+                        ...(allows.church ? [{ value: 'church', label: 'Church' }] : []),
+                        ...(allows.district ? [{ value: 'district', label: 'District' }] : []),
+                      ]}
+                    />
+                  )}
+
+                  <p className="mb-3 text-caption text-muted-foreground">
+                    Rank points across {championship.events_count} published events · individual
+                    events 5 and 3, group events 10 and 5
+                  </p>
+
+                  <ol className="space-y-2">
+                    {(championshipView === 'individual'
+                      ? championship.individuals.map((standing) => ({
+                          key: standing.key,
+                          rank: standing.rank,
+                          title: standing.subject?.full_name ?? 'Unknown',
+                          subtitle: [
+                            standing.subject?.chest_number ? `#${standing.subject.chest_number}` : null,
+                            standing.subject?.church,
+                          ]
+                            .filter(Boolean)
+                            .join(' · '),
+                          points: standing.points,
+                          placings: standing.placings,
+                          tied: standing.tied,
+                        }))
+                      : (championshipView === 'church' ? championship.churches : championship.districts).map(
+                          (standing) => ({
+                            key: standing.key,
+                            rank: standing.rank,
+                            title: standing.subject,
+                            subtitle: `${standing.events} placings`,
+                            points: standing.points,
+                            placings: standing.placings,
+                            tied: standing.tied,
+                          }),
+                        )
+                    ).map((row) => (
+                      <li key={row.key}>
+                        <Card>
+                          <div className="flex items-center gap-3 p-3">
+                            <RankBadge rank={row.rank} />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="truncate text-body font-medium text-foreground">
+                                  {row.title}
+                                </p>
+                                {row.tied && <StatusPill tone="warning">Tie</StatusPill>}
+                              </div>
+                              <p className="truncate text-caption text-muted-foreground">
+                                {row.subtitle}
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="tnum text-title font-semibold text-foreground">
+                                {row.points}
+                              </p>
+                              <p className="tnum text-caption text-muted-foreground">
+                                {row.placings.first}·{row.placings.second}·{row.placings.third}
+                              </p>
+                            </div>
+                          </div>
+                        </Card>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              )}
+            </>
           )}
-        </Content>
-      </Layout>
-    </Layout>
+        </>
+      )}
+    </AppShell>
   );
 };
 

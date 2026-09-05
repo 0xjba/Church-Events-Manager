@@ -160,6 +160,8 @@ export type Database = {
           description: string | null
           id: string
           is_active: boolean
+          results_published: boolean
+          scope: string
           name: string
           updated_at: string
           year: number
@@ -169,6 +171,8 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean
+          results_published?: boolean
+          scope?: string
           name: string
           updated_at?: string
           year: number
@@ -178,6 +182,8 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean
+          results_published?: boolean
+          scope?: string
           name?: string
           updated_at?: string
           year?: number
@@ -319,6 +325,10 @@ export type Database = {
         Row: {
           created_at: string
           description: string | null
+          chest_number: string | null
+          church: string | null
+          district: string | null
+          level_id: string | null
           id: string
           name: string
           updated_at: string
@@ -326,6 +336,10 @@ export type Database = {
         Insert: {
           created_at?: string
           description?: string | null
+          chest_number?: string | null
+          church?: string | null
+          district?: string | null
+          level_id?: string | null
           id?: string
           name: string
           updated_at?: string
@@ -333,6 +347,10 @@ export type Database = {
         Update: {
           created_at?: string
           description?: string | null
+          chest_number?: string | null
+          church?: string | null
+          district?: string | null
+          level_id?: string | null
           id?: string
           name?: string
           updated_at?: string
@@ -395,6 +413,7 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean | null
+          level_id: string | null
           last_login: string | null
           login_count: number | null
           updated_at: string
@@ -410,6 +429,7 @@ export type Database = {
           full_name: string
           id?: string
           is_active?: boolean | null
+          level_id?: string | null
           last_login?: string | null
           login_count?: number | null
           updated_at?: string
@@ -425,6 +445,7 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean | null
+          level_id?: string | null
           last_login?: string | null
           login_count?: number | null
           updated_at?: string
@@ -609,6 +630,14 @@ export type Database = {
       get_user_role: {
         Args: { user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
+      }
+      email_for_username: {
+        Args: { p_username: string }
+        Returns: string
+      }
+      replace_event_results: {
+        Args: { p_event_id: string; p_results: Json }
+        Returns: number
       }
     }
     Enums: {

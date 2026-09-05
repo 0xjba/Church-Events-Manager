@@ -1,14 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Form, Input as AntInput, Modal, Select, Spin, message } from 'antd';
+import { Eye, FileCsv, PencilSimple, Plus, Trash, UploadSimple, UserPlus, UsersThree } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
+import type { FormValues } from '@/lib/types';
 import { setPassword, setPasswords } from '@/utils/credentials';
-import Navigation from '@/components/Navigation';
-import ResponsiveTable from '@/components/ResponsiveTable';
-import { Layout, Card, Button, Input, Form, Modal, Select, message, Spin, Space, Typography, Checkbox } from 'antd';
-import { Plus, Edit, Trash2, Users, Upload, Eye, Search } from 'lucide-react';
-
-const { Content } = Layout;
-const { Title, Text } = Typography;
+import { AppShell } from '@/components/shell/AppShell';
+import { DataTable } from '@/components/admin/DataTable';
+import { Toolbar } from '@/components/admin/Toolbar';
+import { Button, Card, StatusPill } from '@/components/ui/primitives';
+import { SearchInput, SegmentedControl } from '@/components/ui/inputs';
+import { ImportPanel } from '@/components/admin/ImportPanel';
+import { Sheet } from '@/components/ui/Sheet';
 
 interface Participant {
   id: string;
@@ -19,82 +22,102 @@ interface Participant {
   district: string;
   created_at: string;
   username?: string;
+  level_id: string | null;
+}
+
+interface EventLevel {
+  id: string;
+  name: string;
+  year: number;
+  is_active: boolean;
 }
 
 interface Group {
   id: string;
   name: string;
   description: string | null;
+  chest_number: string | null;
+  church: string | null;
+  district: string | null;
+  level_id: string | null;
   created_at: string;
-  members?: Array<{
-    id: string;
-    participant_id: string;
-    participant: {
-      full_name: string;
-      chest_number: string;
-      church: string;
-    };
-  }>;
 }
+
+const AGE_CATEGORIES = ['Sub Juniors', 'Juniors', 'Intermediates', 'Seniors'];
 
 const ParticipantManagement = () => {
   const navigate = useNavigate();
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [levels, setLevels] = useState<EventLevel[]>([]);
+  // Chest numbers are issued per level, so the screen always works within one.
+  const [levelId, setLevelId] = useState<string>('');
+  const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<'people' | 'groups'>('people');
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
-  
-  // Groups state
-  const [groups, setGroups] = useState<Group[]>([]);
+
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
-  
-  // Bulk import state
-  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
-  const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [parsedData, setParsedData] = useState<any[]>([]);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [isValidating, setIsValidating] = useState(false);
-  const [conflicts, setConflicts] = useState<any[]>([]);
-  const [resolvedData, setResolvedData] = useState<any[]>([]);
   const [submittingGroup, setSubmittingGroup] = useState(false);
   const [groupForm] = Form.useForm();
-  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
-  
-  // Batch selection state
+
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [parsedData, setParsedData] = useState<FormValues[]>([]);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [isValidating, setIsValidating] = useState(false);
+  const [conflicts, setConflicts] = useState<Array<{ row: number; name: string; changes: string[] }>>([]);
+  const [resolvedData, setResolvedData] = useState<FormValues[]>([]);
+
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [batchDeleting, setBatchDeleting] = useState(false);
-  
-  // Group batch selection state
   const [selectedGroupKeys, setSelectedGroupKeys] = useState<React.Key[]>([]);
   const [batchDeletingGroups, setBatchDeletingGroups] = useState(false);
-  
-  // Search state
+
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredParticipants, setFilteredParticipants] = useState<Participant[]>([]);
-  
-  // File input ref
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    fetchLevels();
     fetchParticipants();
     fetchGroups();
   }, []);
 
-  // Filter participants based on search term
-  useEffect(() => {
-    if (!searchTerm.trim()) {
-      setFilteredParticipants(participants);
-    } else {
-      const filtered = participants.filter(participant => 
-        participant.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        participant.chest_number.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredParticipants(filtered);
+  const fetchLevels = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('event_levels')
+        .select('id, name, year, is_active')
+        .order('year', { ascending: false });
+
+      if (error) throw error;
+
+      const rows = (data || []) as EventLevel[];
+      setLevels(rows);
+      setLevelId((current) => current || rows.find((level) => level.is_active)?.id || rows[0]?.id || '');
+    } catch (error) {
+      console.error('Error fetching event levels:', error);
     }
-  }, [participants, searchTerm]);
+  };
+
+  const levelParticipants = useMemo(
+    () => (levelId ? participants.filter((participant) => participant.level_id === levelId) : participants),
+    [participants, levelId],
+  );
+
+  const filteredParticipants = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return levelParticipants;
+    return levelParticipants.filter(
+      (participant) =>
+        participant.full_name.toLowerCase().includes(query) ||
+        participant.chest_number.toLowerCase().includes(query) ||
+        participant.church?.toLowerCase().includes(query),
+    );
+  }, [levelParticipants, searchTerm]);
 
   const fetchParticipants = async () => {
     try {
@@ -116,40 +139,26 @@ const ParticipantManagement = () => {
     try {
       const { data, error } = await supabase
         .from('groups')
-        .select(`
-          *,
-          members:group_members(
-            id,
-            participant_id,
-            participant:participants(
-              full_name,
-              chest_number,
-              church
-            )
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setGroups(data || []);
+      setGroups((data || []) as unknown as Group[]);
     } catch (error) {
       console.error('Error fetching groups:', error);
     }
   };
 
-  const onSubmit = async (values: any) => {
+  const onSubmit = async (values: FormValues) => {
     try {
       setSubmitting(true);
-      
-      // Get the current user's session
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        throw new Error('No active session found. Please log in again.');
-      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error('No active session found. Please log in again.');
 
       if (editingParticipant) {
-        // Update existing participant
         const { error } = await supabase
           .from('participants')
           .update({
@@ -162,19 +171,15 @@ const ParticipantManagement = () => {
           })
           .eq('id', editingParticipant.id);
 
-        if (error) {
-          console.error('Database error:', error);
-          throw new Error(error.message || 'Failed to update participant');
-        }
+        if (error) throw new Error(error.message || 'Failed to update participant');
 
         // Hashing happens in the edge function, not here.
         if (values.password) {
           await setPassword('participant', editingParticipant.id, values.password);
         }
 
-        message.success('Participant updated successfully');
+        message.success('Participant updated');
       } else {
-        // Create new participant
         const { data: newParticipant, error } = await supabase
           .from('participants')
           .insert({
@@ -184,17 +189,14 @@ const ParticipantManagement = () => {
             church: values.church,
             district: values.district,
             username: values.username,
+            level_id: levelId,
             is_active: true,
-            created_by: user.id
-            // Note: profile_id column was removed from participants table
+            created_by: user.id,
           })
           .select()
           .single();
 
-        if (error) {
-          console.error('Database error:', error);
-          throw new Error(error.message || 'Failed to create participant');
-        }
+        if (error) throw new Error(error.message || 'Failed to create participant');
 
         try {
           await setPassword('participant', newParticipant.id, values.password);
@@ -204,102 +206,98 @@ const ParticipantManagement = () => {
           throw credentialError;
         }
 
-        message.success('Participant created successfully with login credentials');
+        message.success('Participant created with login credentials');
       }
-      setIsModalOpen(false);
-      form.resetFields();
+
+      closeParticipantModal();
       fetchParticipants();
-    } catch (error: any) {
-      console.error('Error creating participant:', error);
-      message.error(error.message || 'Failed to add participant');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to save participant');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleEdit = (participant: Participant) => {
-    setEditingParticipant(participant);
-    form.setFieldsValue(participant);
+  const openParticipantModal = (participant?: Participant) => {
+    if (participant) {
+      setEditingParticipant(participant);
+      form.setFieldsValue(participant);
+    } else {
+      setEditingParticipant(null);
+      form.resetFields();
+    }
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
+  const closeParticipantModal = () => {
+    setIsModalOpen(false);
+    setEditingParticipant(null);
+    form.resetFields();
+  };
+
+  const handleDelete = (participant: Participant) => {
     Modal.confirm({
-      title: 'Are you sure you want to delete this participant?',
+      title: `Delete ${participant.full_name}?`,
+      content: 'Their scores and results are removed with them. This cannot be undone.',
+      okText: 'Delete',
       okType: 'danger',
       onOk: async () => {
         try {
-          const { error } = await supabase
-            .from('participants')
-            .delete()
-            .eq('id', id);
-
+          const { error } = await supabase.from('participants').delete().eq('id', participant.id);
           if (error) throw error;
-          message.success('Participant deleted successfully');
+          message.success('Participant deleted');
           fetchParticipants();
-        } catch (error) {
+        } catch {
           message.error('Failed to delete participant');
         }
-      }
+      },
     });
   };
 
-  const handleBatchDelete = async () => {
-    if (selectedRowKeys.length === 0) {
-      message.warning('Please select participants to delete');
-      return;
-    }
+  const handleBatchDelete = () => {
+    if (selectedRowKeys.length === 0) return;
 
     Modal.confirm({
       title: `Delete ${selectedRowKeys.length} participant(s)?`,
       content: 'This action cannot be undone.',
+      okText: 'Delete',
       okType: 'danger',
       onOk: async () => {
         try {
           setBatchDeleting(true);
-          
-          // Delete each selected participant
-          for (const participantId of selectedRowKeys) {
-            const { error } = await supabase
-              .from('participants')
-              .delete()
-              .eq('id', String(participantId));
-            
-            if (error) throw error;
-          }
+          const { error } = await supabase
+            .from('participants')
+            .delete()
+            .in('id', selectedRowKeys.map(String));
 
-          message.success(`Successfully deleted ${selectedRowKeys.length} participant(s)`);
+          if (error) throw error;
+          message.success(`Deleted ${selectedRowKeys.length} participant(s)`);
           setSelectedRowKeys([]);
           fetchParticipants();
-        } catch (error: any) {
-          message.error(error.message || 'Failed to delete participants');
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : 'Failed to delete participants');
         } finally {
           setBatchDeleting(false);
         }
-      }
+      },
     });
   };
 
-  const rowSelection = {
-    selectedRowKeys,
-    onChange: (selectedRowKeys: React.Key[]) => {
-      setSelectedRowKeys(selectedRowKeys);
-    },
-  };
+  /* ----------------------------------------------------------- groups */
 
-  // Group management functions
   const openGroupModal = (group?: Group) => {
     if (group) {
       setEditingGroup(group);
       groupForm.setFieldsValue({
         name: group.name,
-        description: group.description || ''
+        chest_number: group.chest_number ?? '',
+        church: group.church ?? '',
+        district: group.district ?? '',
+        description: group.description || '',
       });
-      setSelectedParticipants(group.members?.map(m => m.participant_id) || []);
     } else {
       setEditingGroup(null);
       groupForm.resetFields();
-      setSelectedParticipants([]);
     }
     setIsGroupModalOpen(true);
   };
@@ -308,196 +306,129 @@ const ParticipantManagement = () => {
     setIsGroupModalOpen(false);
     setEditingGroup(null);
     groupForm.resetFields();
-    setSelectedParticipants([]);
   };
 
-  const onSubmitGroup = async (values: any) => {
+  const onSubmitGroup = async (values: FormValues) => {
     try {
       setSubmittingGroup(true);
 
-      if (selectedParticipants.length === 0) {
-        message.error('Please select at least one participant for the group');
-        return;
-      }
+      const details = {
+        name: values.name,
+        chest_number: values.chest_number || null,
+        church: values.church || null,
+        district: values.district || null,
+        description: values.description || null,
+        level_id: levelId,
+      };
 
       if (editingGroup) {
-        // Update existing group
-        const { error: groupError } = await supabase
-          .from('groups')
-          .update({
-            name: values.name,
-            description: values.description || null
-          })
-          .eq('id', editingGroup.id);
-
-        if (groupError) throw groupError;
-
-        // Update group members
-        await updateGroupMembers(editingGroup.id, selectedParticipants);
-
-        message.success('Group updated successfully');
+        const { error } = await supabase.from('groups').update(details).eq('id', editingGroup.id);
+        if (error) throw error;
+        message.success('Group updated');
       } else {
-        // Create new group
-        const { data: newGroup, error: groupError } = await supabase
-          .from('groups')
-          .insert({
-            name: values.name,
-            description: values.description || null
-          })
-          .select()
-          .single();
-
-        if (groupError) throw groupError;
-
-        // Add group members
-        await createGroupMembers(newGroup.id, selectedParticipants);
-
-        message.success('Group created successfully');
+        const { error } = await supabase.from('groups').insert(details);
+        if (error) throw error;
+        message.success('Group created');
       }
 
       closeGroupModal();
       fetchGroups();
-    } catch (error: any) {
-      message.error(error.message || 'Failed to save group');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to save group');
     } finally {
       setSubmittingGroup(false);
     }
   };
 
-  const updateGroupMembers = async (groupId: string, participantIds: string[]) => {
-    // Delete existing members
-    await supabase
-      .from('group_members')
-      .delete()
-      .eq('group_id', groupId);
-
-    // Add new members
-    if (participantIds.length > 0) {
-      const { error } = await supabase
-        .from('group_members')
-        .insert(participantIds.map(participantId => ({
-          group_id: groupId,
-          participant_id: participantId
-        })));
-
-      if (error) throw error;
-    }
-  };
-
-  const createGroupMembers = async (groupId: string, participantIds: string[]) => {
-    if (participantIds.length > 0) {
-      const { error } = await supabase
-        .from('group_members')
-        .insert(participantIds.map(participantId => ({
-          group_id: groupId,
-          participant_id: participantId
-        })));
-
-      if (error) throw error;
-    }
-  };
-
-  const deleteGroup = async (id: string) => {
+  const deleteGroup = (group: Group) => {
     Modal.confirm({
-      title: 'Are you sure you want to delete this group?',
+      title: `Delete ${group.name}?`,
+      content: 'Members stay registered; only the group is removed.',
+      okText: 'Delete',
       okType: 'danger',
       onOk: async () => {
         try {
-          const { error } = await supabase
-            .from('groups')
-            .delete()
-            .eq('id', id);
-
+          const { error } = await supabase.from('groups').delete().eq('id', group.id);
           if (error) throw error;
-          message.success('Group deleted successfully');
+          message.success('Group deleted');
           fetchGroups();
-        } catch (error) {
+        } catch {
           message.error('Failed to delete group');
         }
-      }
+      },
     });
   };
 
-  const handleBatchDeleteGroups = async () => {
-    if (selectedGroupKeys.length === 0) {
-      message.warning('Please select groups to delete');
-      return;
-    }
+  const handleBatchDeleteGroups = () => {
+    if (selectedGroupKeys.length === 0) return;
 
     Modal.confirm({
       title: `Delete ${selectedGroupKeys.length} group(s)?`,
       content: 'This action cannot be undone.',
+      okText: 'Delete',
       okType: 'danger',
       onOk: async () => {
         try {
           setBatchDeletingGroups(true);
-          
-          // Delete each selected group
-          for (const groupId of selectedGroupKeys) {
-            const { error } = await supabase
-              .from('groups')
-              .delete()
-              .eq('id', String(groupId));
-            
-            if (error) throw error;
-          }
+          const { error } = await supabase
+            .from('groups')
+            .delete()
+            .in('id', selectedGroupKeys.map(String));
 
-          message.success(`Successfully deleted ${selectedGroupKeys.length} group(s)`);
+          if (error) throw error;
+          message.success(`Deleted ${selectedGroupKeys.length} group(s)`);
           setSelectedGroupKeys([]);
           fetchGroups();
-        } catch (error: any) {
-          message.error(error.message || 'Failed to delete groups');
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : 'Failed to delete groups');
         } finally {
           setBatchDeletingGroups(false);
         }
-      }
+      },
     });
   };
 
-  const groupRowSelection = {
-    selectedRowKeys: selectedGroupKeys,
-    onChange: (selectedRowKeys: React.Key[]) => {
-      setSelectedGroupKeys(selectedRowKeys);
-    },
-  };
+  /* ------------------------------------------------------ bulk import */
 
-  // CSV parsing and validation functions
   const parseCSV = (fileContent: string) => {
-    const lines = fileContent.split('\n').filter(line => line.trim());
+    const lines = fileContent.split('\n').filter((line) => line.trim());
     if (lines.length < 2) {
-      throw new Error('CSV file must have at least a header row and one data row');
+      throw new Error('CSV file must have a header row and at least one data row');
     }
-    
-    const headers = lines[0].split(',').map(h => h.trim());
-    const requiredHeaders = ['full_name', 'age_category', 'chest_number', 'church', 'district', 'username', 'password'];
-    
-    // Check if all required headers are present
-    const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+
+    const headers = lines[0].split(',').map((header) => header.trim());
+    const requiredHeaders = [
+      'full_name',
+      'age_category',
+      'chest_number',
+      'church',
+      'district',
+      'username',
+      'password',
+    ];
+
+    const missingHeaders = requiredHeaders.filter((header) => !headers.includes(header));
     if (missingHeaders.length > 0) {
       throw new Error(`Missing required columns: ${missingHeaders.join(', ')}`);
     }
-    
-    const data = lines.slice(1).map((line, index) => {
-      const values = line.split(',').map(v => v.trim());
-      const row: any = {};
-      headers.forEach((header, i) => {
-        row[header] = values[i] || '';
+
+    return lines.slice(1).map((line, index) => {
+      const values = line.split(',').map((value) => value.trim());
+      const row: FormValues = {};
+      headers.forEach((header, position) => {
+        row[header] = values[position] || '';
       });
-      row._rowNumber = index + 2; // +2 because we skip header and arrays are 0-indexed
+      row._rowNumber = index + 2; // header row plus zero-indexing
       return row;
     });
-    
-    return data;
   };
 
-  const validateParticipantData = (data: any[]) => {
+  const validateParticipantData = (data: FormValues[]) => {
     const errors: string[] = [];
-    const validAgeCategories = ['Sub Juniors', 'Juniors', 'Intermediates', 'Seniors'];
-    
-    data.forEach((row, index) => {
+
+    data.forEach((row) => {
       const rowNum = row._rowNumber;
-      
-      // Required field validation
+
       if (!row.full_name) errors.push(`Row ${rowNum}: Missing full_name`);
       if (!row.age_category) errors.push(`Row ${rowNum}: Missing age_category`);
       if (!row.chest_number) errors.push(`Row ${rowNum}: Missing chest_number`);
@@ -505,146 +436,27 @@ const ParticipantManagement = () => {
       if (!row.district) errors.push(`Row ${rowNum}: Missing district`);
       if (!row.username) errors.push(`Row ${rowNum}: Missing username`);
       if (!row.password) errors.push(`Row ${rowNum}: Missing password`);
-      
-      // Format validation
+
       if (row.username && row.username.length < 3) {
         errors.push(`Row ${rowNum}: Username must be at least 3 characters`);
       }
       if (row.password && row.password.length < 8) {
         errors.push(`Row ${rowNum}: Password must be at least 8 characters`);
       }
-      if (row.age_category && !validAgeCategories.includes(row.age_category)) {
-        errors.push(`Row ${rowNum}: Invalid age_category. Must be one of: ${validAgeCategories.join(', ')}`);
+      if (row.age_category && !AGE_CATEGORIES.includes(row.age_category)) {
+        errors.push(`Row ${rowNum}: Invalid age_category. One of: ${AGE_CATEGORIES.join(', ')}`);
       }
     });
-    
+
     return errors;
-  };
-
-  const handleFileUpload = async (file: File) => {
-    console.log('handleFileUpload called with file:', file);
-    
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      message.error('Please upload a CSV file');
-      return;
-    }
-    
-    try {
-      console.log('Starting file validation...');
-      setIsValidating(true);
-      const fileContent = await file.text();
-      console.log('File content length:', fileContent.length);
-      const parsed = parseCSV(fileContent);
-      console.log('Parsed data:', parsed);
-      const errors = validateParticipantData(parsed);
-      console.log('Validation errors:', errors);
-      
-      if (errors.length > 0) {
-        setCsvFile(file);
-        setParsedData(parsed);
-        setValidationErrors(errors);
-        setConflicts([]);
-        setResolvedData([]);
-        message.warning(`Found ${errors.length} validation errors. Please check the data.`);
-        return;
-      }
-      
-      // Check for conflicts and auto-resolve
-      const { conflicts: detectedConflicts, resolvedData: autoResolvedData } = await checkConflicts(parsed);
-      
-      setCsvFile(file);
-      setParsedData(parsed);
-      setValidationErrors([]);
-      setConflicts(detectedConflicts);
-      setResolvedData(autoResolvedData);
-      
-      if (detectedConflicts.length > 0) {
-        message.info(`Found ${detectedConflicts.length} conflicts. Auto-resolved and ready to import.`);
-      } else {
-        message.success(`Successfully parsed ${parsed.length} participants. Ready to import.`);
-      }
-    } catch (error: any) {
-      message.error(error.message || 'Failed to parse CSV file');
-    } finally {
-      setIsValidating(false);
-    }
-  };
-
-  const downloadTemplate = () => {
-    const template = 'full_name,age_category,chest_number,church,district,username,password\nJohn Doe,Juniors,001,Grace Church,District A,john.doe,password123\nJane Smith,Intermediates,002,Hope Church,District B,jane.smith,password456';
-    const blob = new Blob([template], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'participants_template.csv';
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
-
-  // Conflict detection and auto-resolution
-  const checkConflicts = async (data: any[]) => {
-    try {
-      // Get existing chest numbers and usernames
-      const { data: existingParticipants, error } = await supabase
-        .from('participants')
-        .select('chest_number, username');
-      
-      if (error) throw error;
-      
-      const existingChestNumbers = new Set(existingParticipants?.map(p => p.chest_number) || []);
-      const existingUsernames = new Set(existingParticipants?.map(p => p.username) || []);
-      
-      const conflicts = [];
-      const resolvedData = [];
-      
-      // Check for duplicates within the import data
-      const importChestNumbers = new Set();
-      const importUsernames = new Set();
-      
-      for (const row of data) {
-        const rowNum = row._rowNumber;
-        let hasConflict = false;
-        const changes = [];
-        
-        // Check chest number conflicts
-        if (existingChestNumbers.has(row.chest_number) || importChestNumbers.has(row.chest_number)) {
-          const newChestNumber = findNextChestNumber(existingChestNumbers, importChestNumbers);
-          changes.push(`Chest number '${row.chest_number}' → '${newChestNumber}' (auto-fixed)`);
-          row.chest_number = newChestNumber;
-          hasConflict = true;
-        }
-        importChestNumbers.add(row.chest_number);
-        
-        // Check username conflicts
-        if (existingUsernames.has(row.username) || importUsernames.has(row.username)) {
-          const newUsername = generateUniqueUsername(row.username, existingUsernames, importUsernames);
-          changes.push(`Username '${row.username}' → '${newUsername}' (auto-fixed)`);
-          row.username = newUsername;
-          hasConflict = true;
-        }
-        importUsernames.add(row.username);
-        
-        if (hasConflict) {
-          conflicts.push({
-            row: rowNum,
-            name: row.full_name,
-            changes: changes
-          });
-        }
-        
-        resolvedData.push(row);
-      }
-      
-      return { conflicts, resolvedData };
-    } catch (error: any) {
-      message.error('Failed to check conflicts: ' + error.message);
-      return { conflicts: [], resolvedData: data };
-    }
   };
 
   const findNextChestNumber = (existing: Set<unknown>, importSet: Set<unknown>) => {
     let num = 1;
-    while (existing.has(num.toString().padStart(3, '0')) || importSet.has(num.toString().padStart(3, '0'))) {
+    while (
+      existing.has(num.toString().padStart(3, '0')) ||
+      importSet.has(num.toString().padStart(3, '0'))
+    ) {
       num++;
     }
     return num.toString().padStart(3, '0');
@@ -652,56 +464,147 @@ const ParticipantManagement = () => {
 
   const generateUniqueUsername = (username: string, existing: Set<unknown>, importSet: Set<unknown>) => {
     let counter = 1;
-    let newUsername = username;
-    
-    while (existing.has(newUsername) || importSet.has(newUsername)) {
-      newUsername = `${username}.${counter}`;
+    let candidate = username;
+    while (existing.has(candidate) || importSet.has(candidate)) {
+      candidate = `${username}.${counter}`;
       counter++;
     }
-    
-    return newUsername;
+    return candidate;
   };
 
-  // Bulk import function
+  const checkConflicts = async (data: FormValues[]) => {
+    try {
+      // A chest number only clashes inside its own level; a username is the
+      // login, so it clashes everywhere.
+      const [chestResponse, usernameResponse] = await Promise.all([
+        supabase.from('participants').select('chest_number').eq('level_id', levelId),
+        supabase.from('participants').select('username'),
+      ]);
+
+      if (chestResponse.error) throw chestResponse.error;
+      if (usernameResponse.error) throw usernameResponse.error;
+
+      const existingChestNumbers = new Set(chestResponse.data?.map((p) => p.chest_number) || []);
+      const existingUsernames = new Set(usernameResponse.data?.map((p) => p.username) || []);
+
+      const detected: Array<{ row: number; name: string; changes: string[] }> = [];
+      const resolved: FormValues[] = [];
+      const importChestNumbers = new Set<string>();
+      const importUsernames = new Set<string>();
+
+      for (const row of data) {
+        const changes: string[] = [];
+
+        if (existingChestNumbers.has(row.chest_number) || importChestNumbers.has(row.chest_number)) {
+          const next = findNextChestNumber(existingChestNumbers, importChestNumbers);
+          changes.push(`Chest number ${row.chest_number} → ${next}`);
+          row.chest_number = next;
+        }
+        importChestNumbers.add(row.chest_number);
+
+        if (existingUsernames.has(row.username) || importUsernames.has(row.username)) {
+          const next = generateUniqueUsername(row.username, existingUsernames, importUsernames);
+          changes.push(`Username ${row.username} → ${next}`);
+          row.username = next;
+        }
+        importUsernames.add(row.username);
+
+        if (changes.length > 0) {
+          detected.push({ row: row._rowNumber, name: row.full_name, changes });
+        }
+        resolved.push(row);
+      }
+
+      return { conflicts: detected, resolvedData: resolved };
+    } catch (error) {
+      message.error(
+        `Failed to check conflicts: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+      return { conflicts: [], resolvedData: data };
+    }
+  };
+
+  const resetImport = () => {
+    setCsvFile(null);
+    setParsedData([]);
+    setValidationErrors([]);
+    setConflicts([]);
+    setResolvedData([]);
+  };
+
+  const handleFileUpload = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      message.error('Please upload a CSV file');
+      return;
+    }
+
+    try {
+      setIsValidating(true);
+      const parsed = parseCSV(await file.text());
+      const errors = validateParticipantData(parsed);
+
+      if (errors.length > 0) {
+        setCsvFile(file);
+        setParsedData(parsed);
+        setValidationErrors(errors);
+        setConflicts([]);
+        setResolvedData([]);
+        message.warning(`${errors.length} rows need fixing before import`);
+        return;
+      }
+
+      const { conflicts: detected, resolvedData: autoResolved } = await checkConflicts(parsed);
+      setCsvFile(file);
+      setParsedData(parsed);
+      setValidationErrors([]);
+      setConflicts(detected);
+      setResolvedData(autoResolved);
+
+      if (detected.length > 0) {
+        message.info(`${detected.length} conflicts auto-resolved and ready to import`);
+      } else {
+        message.success(`${parsed.length} participants ready to import`);
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to parse CSV file');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
   const handleBulkImport = async () => {
     try {
       setIsValidating(true);
-      
-      // Get the current user's session
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        throw new Error('No active session found. Please log in again.');
-      }
 
-      // Prepare data for import
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error('No active session found. Please log in again.');
+
       const dataToImport = resolvedData.length > 0 ? resolvedData : parsedData;
-      const participantsToInsert = dataToImport.map(row => ({
+      const participantsToInsert = dataToImport.map((row) => ({
         full_name: row.full_name,
         age_category: row.age_category,
         chest_number: row.chest_number,
         church: row.church,
         district: row.district,
         username: row.username,
+        level_id: levelId,
         is_active: true,
-        created_by: user.id
+        created_by: user.id,
       }));
 
-      // Insert all participants in a single transaction
       const { data: newParticipants, error } = await supabase
         .from('participants')
         .insert(participantsToInsert)
         .select();
 
-      if (error) {
-        console.error('Database error:', error);
-        throw new Error(error.message || 'Failed to import participants');
-      }
+      if (error) throw new Error(error.message || 'Failed to import participants');
 
-      // Passwords are hashed server side, keyed by the row that was just created.
+      // Passwords are hashed server side, keyed by the row just created.
       try {
-        const credentials = newParticipants.map(created => {
-          const row = dataToImport.find(r => r.username === created.username);
+        const credentials = newParticipants.map((created) => {
+          const row = dataToImport.find((candidate) => candidate.username === created.username);
           if (!row) throw new Error(`Could not match a password to ${created.username}`);
           return { user_type: 'participant' as const, user_id: created.id, password: row.password };
         });
@@ -710,613 +613,596 @@ const ParticipantManagement = () => {
         await supabase
           .from('participants')
           .delete()
-          .in('id', newParticipants.map(p => p.id));
+          .in('id', newParticipants.map((created) => created.id));
         throw credentialError;
       }
 
-      message.success(`Successfully imported ${newParticipants.length} participants`);
+      message.success(`Imported ${newParticipants.length} participants`);
       setIsBulkImportOpen(false);
-      setCsvFile(null);
-      setParsedData([]);
-      setValidationErrors([]);
-      setConflicts([]);
-      setResolvedData([]);
+      resetImport();
       fetchParticipants();
-      
-    } catch (error: any) {
-      console.error('Import error:', error);
-      message.error(error.message || 'Failed to import participants');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to import participants');
     } finally {
       setIsValidating(false);
     }
   };
 
-  const columns = [
+  /* ------------------------------------------------------------ table */
+
+  const participantColumns = [
     {
-      title: 'Chest #',
+      title: 'Chest',
       dataIndex: 'chest_number',
       key: 'chest_number',
-      width: 100,
+      width: 88,
+      sorter: (a: Participant, b: Participant) => a.chest_number.localeCompare(b.chest_number),
+      render: (chestNumber: string) => (
+        <span className="tnum font-semibold text-foreground">{chestNumber}</span>
+      ),
     },
     {
       title: 'Name',
       dataIndex: 'full_name',
       key: 'full_name',
+      sorter: (a: Participant, b: Participant) => a.full_name.localeCompare(b.full_name),
+      render: (fullName: string, record: Participant) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium text-foreground">{fullName}</div>
+          {record.username && (
+            <div className="truncate text-caption text-muted-foreground">@{record.username}</div>
+          )}
+        </div>
+      ),
     },
     {
-      title: 'Age Category',
+      title: 'Age category',
       dataIndex: 'age_category',
       key: 'age_category',
       width: 150,
+      filters: AGE_CATEGORIES.map((category) => ({ text: category, value: category })),
+      onFilter: (value: unknown, record: Participant) => record.age_category === value,
+      render: (category: string) => <StatusPill>{category}</StatusPill>,
     },
+    { title: 'Church', dataIndex: 'church', key: 'church', ellipsis: true },
+    { title: 'District', dataIndex: 'district', key: 'district', ellipsis: true },
     {
-      title: 'Church',
-      dataIndex: 'church',
-      key: 'church',
-    },
-    {
-      title: 'District',
-      dataIndex: 'district',
-      key: 'district',
-    },
-    {
-      title: 'Actions',
+      title: '',
       key: 'actions',
       width: 120,
-      render: (_: any, record: Participant) => (
-        <Space>
-          <Button
-            type="text"
-            icon={<Eye size={16} />}
+      fixed: 'right' as const,
+      render: (_: unknown, record: Participant) => (
+        <div className="flex justify-end gap-1">
+          <IconButton
+            label="View details"
+            icon={<Eye size={15} />}
             onClick={() => navigate(`/admin/participants/${record.id}`)}
-            title="View Details"
           />
-          <Button
-            type="text"
-            icon={<Edit size={16} />}
-            onClick={() => handleEdit(record)}
-            title="Edit Participant"
+          <IconButton
+            label="Edit"
+            icon={<PencilSimple size={15} />}
+            onClick={() => openParticipantModal(record)}
           />
-          <Button
-            type="text"
+          <IconButton
+            label="Delete"
             danger
-            icon={<Trash2 size={16} />}
-            onClick={() => handleDelete(record.id)}
-            title="Delete Participant"
+            icon={<Trash size={15} />}
+            onClick={() => handleDelete(record)}
           />
-        </Space>
+        </div>
       ),
     },
   ];
 
+  const groupColumns = [
+    {
+      title: 'Chest',
+      dataIndex: 'chest_number',
+      key: 'chest_number',
+      width: 88,
+      render: (chestNumber: string | null) =>
+        chestNumber ? (
+          <span className="tnum font-semibold text-foreground">{chestNumber}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      title: 'Group',
+      dataIndex: 'name',
+      key: 'name',
+      render: (name: string, record: Group) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium text-foreground">{name}</div>
+          {record.description && (
+            <div className="truncate text-caption text-muted-foreground">{record.description}</div>
+          )}
+        </div>
+      ),
+    },
+    { title: 'Church', dataIndex: 'church', key: 'church', ellipsis: true },
+    { title: 'District', dataIndex: 'district', key: 'district', ellipsis: true },
+    {
+      title: '',
+      key: 'actions',
+      width: 90,
+      fixed: 'right' as const,
+      render: (_: unknown, record: Group) => (
+        <div className="flex justify-end gap-1">
+          <IconButton label="Edit" icon={<PencilSimple size={15} />} onClick={() => openGroupModal(record)} />
+          <IconButton
+            label="Delete"
+            danger
+            icon={<Trash size={15} />}
+            onClick={() => deleteGroup(record)}
+          />
+        </div>
+      ),
+    },
+  ];
+
+  const previewRows = resolvedData.length > 0 ? resolvedData : parsedData;
+
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Navigation />
-      
-      <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-              <div>
-                <Title level={2} style={{ margin: 0 }}>
-                  Participant Management
-                </Title>
-                <Text type="secondary">
-                  Manage event participants
-                </Text>
-              </div>
-              
-              <div className="flex gap-2">
-                <Button
-                  type="primary"
-                  icon={<Plus size={16} />}
-                  onClick={() => {
-                    setEditingParticipant(null);
-                    form.resetFields();
-                    setIsModalOpen(true);
-                  }}
-                  className="md:inline-flex hidden:flex"
-                >
-                  <span className="hidden md:inline">Add Participant</span>
-                </Button>
-                <Button
-                  icon={<Upload size={16} />}
-                  onClick={() => setIsBulkImportOpen(true)}
-                  className="md:inline-flex hidden:flex"
-                >
-                  <span className="hidden md:inline">Bulk Import</span>
-                </Button>
-                {selectedRowKeys.length > 0 && (
-                  <Button 
-                    danger 
-                    icon={<Trash2 size={16} />}
+    <AppShell
+      variant="admin"
+      title="Participants"
+      subtitle={`${levelParticipants.length} registered in this level · ${groups.length} groups`}
+      maxWidth="wide"
+      actions={
+        <>
+          <Select
+            value={levelId || undefined}
+            onChange={setLevelId}
+            className="w-44"
+            size="small"
+            placeholder="Event level"
+            options={levels.map((level) => ({
+              value: level.id,
+              label: `${level.name} ${level.year}`,
+            }))}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<UploadSimple size={15} />}
+            disabled={!levelId}
+            onClick={() => setIsBulkImportOpen(true)}
+          >
+            <span className="hidden sm:inline">Import</span>
+          </Button>
+          <Button
+            size="sm"
+            icon={<Plus size={15} />}
+            disabled={tab === 'people' && !levelId}
+            onClick={() => (tab === 'people' ? openParticipantModal() : openGroupModal())}
+          >
+            <span className="hidden sm:inline">
+              {tab === 'people' ? 'Add participant' : 'Add group'}
+            </span>
+          </Button>
+        </>
+      }
+    >
+      <SegmentedControl
+        value={tab}
+        onChange={(value) => setTab(value as 'people' | 'groups')}
+        className="mb-4 max-w-sm"
+        options={[
+          { value: 'people', label: 'Participants', count: participants.length },
+          { value: 'groups', label: 'Groups', count: groups.length },
+        ]}
+      />
+
+      {tab === 'people' ? (
+        <DataTable
+          columns={participantColumns}
+          dataSource={filteredParticipants}
+          rowKey="id"
+          loading={loading}
+          scrollX={860}
+          rowSelection={{
+            selectedRowKeys,
+            onChange: setSelectedRowKeys,
+          }}
+          toolbar={
+            <Toolbar
+              selectionCount={selectedRowKeys.length}
+              selectionActions={
+                <>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    icon={<Trash size={14} />}
                     loading={batchDeleting}
                     onClick={handleBatchDelete}
-                    className="md:inline-flex hidden:flex"
                   >
-                    <span className="hidden md:inline">Delete Selected ({selectedRowKeys.length})</span>
+                    Delete
                   </Button>
-                )}
-              </div>
-            </div>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedRowKeys([])}>
+                    Clear
+                  </Button>
+                </>
+              }
+            >
+              <SearchInput
+                value={searchTerm}
+                onChange={setSearchTerm}
+                placeholder="Search name, chest number or church"
+                className="w-full max-w-sm"
+              />
+              {searchTerm && (
+                <span className="tnum text-caption text-muted-foreground">
+                  {filteredParticipants.length} of {participants.length}
+                </span>
+              )}
+            </Toolbar>
+          }
+          emptyIcon={<UserPlus size={22} />}
+          emptyTitle={searchTerm ? 'No matching participants' : 'No participants in this level yet'}
+          emptyDescription={
+            searchTerm
+              ? 'Try a different name or chest number.'
+              : 'Add participants one at a time, or import a CSV. Chest numbers restart in every event level.'
+          }
+          emptyAction={
+            !searchTerm && (
+              <Button size="sm" icon={<Plus size={14} />} onClick={() => openParticipantModal()}>
+                Add participant
+              </Button>
+            )
+          }
+        />
+      ) : (
+        <DataTable
+          columns={groupColumns}
+          dataSource={groups}
+          rowKey="id"
+          loading={loading}
+          scrollX={600}
+          rowSelection={{
+            selectedRowKeys: selectedGroupKeys,
+            onChange: setSelectedGroupKeys,
+          }}
+          toolbar={
+            <Toolbar
+              selectionCount={selectedGroupKeys.length}
+              selectionActions={
+                <>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    icon={<Trash size={14} />}
+                    loading={batchDeletingGroups}
+                    onClick={handleBatchDeleteGroups}
+                  >
+                    Delete
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedGroupKeys([])}>
+                    Clear
+                  </Button>
+                </>
+              }
+            >
+              <span className="text-caption text-muted-foreground">
+                Groups compete as one entrant in group events
+              </span>
+            </Toolbar>
+          }
+          emptyIcon={<UsersThree size={22} />}
+          emptyTitle="No groups yet"
+          emptyDescription="Create a group to enter it into group events."
+          emptyAction={
+            <Button size="sm" icon={<Plus size={14} />} onClick={() => openGroupModal()}>
+              Add group
+            </Button>
+          }
+        />
+      )}
+
+      {/* ----------------------------------------- participant form */}
+      <Sheet
+        open={isModalOpen}
+        onClose={closeParticipantModal}
+        dismissable={!submitting}
+        title={editingParticipant ? 'Edit participant' : 'Add participant'}
+        description={
+          editingParticipant
+            ? 'Leave the password blank to keep the current one.'
+            : `Registered in ${levels.find((level) => level.id === levelId)?.name ?? 'this level'} — the chest number only has to be unique there.`
+        }
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" size="lg" onClick={closeParticipantModal} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button size="lg" block loading={submitting} onClick={() => form.submit()}>
+              {editingParticipant ? 'Save changes' : 'Add participant'}
+            </Button>
+          </div>
+        }
+      >
+        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+          <Form.Item
+            label="Full name"
+            name="full_name"
+            rules={[{ required: true, min: 2, message: 'Name must be at least 2 characters' }]}
+          >
+            <AntInput placeholder="Full name" />
+          </Form.Item>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Form.Item
+              label="Age category"
+              name="age_category"
+              rules={[{ required: true, message: 'Age category is required' }]}
+            >
+              <Select
+                placeholder="Select"
+                options={AGE_CATEGORIES.map((category) => ({ value: category, label: category }))}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="Chest number"
+              name="chest_number"
+              rules={[{ required: true, message: 'Chest number is required' }]}
+            >
+              <AntInput placeholder="001" />
+            </Form.Item>
           </div>
 
-          <Card>
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                <Input
-                  placeholder="Search participants by name or chest number..."
-                  prefix={<Search size={16} />}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  allowClear
-                  style={{ flex: 1 }}
-                />
-                {searchTerm && (
-                  <Text type="secondary" style={{ whiteSpace: 'nowrap' }}>
-                    {filteredParticipants.length} of {participants.length} participants
-                  </Text>
-                )}
-              </div>
-            </div>
-            
-            <ResponsiveTable
-              columns={columns}
-              dataSource={filteredParticipants}
-              loading={loading}
-              rowKey="id"
-              rowSelection={rowSelection}
-              cardTitle={(record) => `${record.chest_number} - ${record.full_name}`}
-              locale={{
-                emptyText: loading ? <Spin /> : (searchTerm ? 'No participants found matching your search' : undefined)
-              }}
-            />
-          </Card>
-
-          <Card style={{ marginTop: '24px' }}>
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                <div>
-                </div>
-                
-                <div className="flex gap-2">
-                  <Button
-                    type="primary"
-                    icon={<Users size={16} />}
-                    onClick={() => openGroupModal()}
-                    className="md:inline-flex hidden:flex"
-                  >
-                    <span className="hidden md:inline">Add Group</span>
-                  </Button>
-                  {selectedGroupKeys.length > 0 && (
-                    <Button 
-                      danger 
-                      icon={<Trash2 size={16} />}
-                      loading={batchDeletingGroups}
-                      onClick={handleBatchDeleteGroups}
-                      className="md:inline-flex hidden:flex"
-                    >
-                      <span className="hidden md:inline">Delete Selected ({selectedGroupKeys.length})</span>
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-            
-            <ResponsiveTable
-              columns={[
-                {
-                  title: 'Group Name',
-                  dataIndex: 'name',
-                  key: 'name',
-                },
-                {
-                  title: 'Description',
-                  dataIndex: 'description',
-                  key: 'description',
-                  render: (description: string | null) => description || 'No description',
-                },
-                {
-                  title: 'Members',
-                  dataIndex: 'members',
-                  key: 'members',
-                  render: (members: any[]) => (
-                    <div>
-                      {members?.length || 0} participants
-                      {members && members.length > 0 && (
-                        <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
-                          {members.slice(0, 3).map(m => m.participant.full_name).join(', ')}
-                          {members.length > 3 && ` +${members.length - 3} more`}
-                        </div>
-                      )}
-                    </div>
-                  ),
-                },
-                {
-                  title: 'Actions',
-                  key: 'actions',
-                  width: 120,
-                  render: (_: any, record: Group) => (
-                    <Space>
-                      <Button
-                        type="text"
-                        icon={<Edit size={16} />}
-                        onClick={() => openGroupModal(record)}
-                      />
-                      <Button
-                        type="text"
-                        danger
-                        icon={<Trash2 size={16} />}
-                        onClick={() => deleteGroup(record.id)}
-                      />
-                    </Space>
-                  ),
-                },
-              ]}
-              dataSource={groups}
-              loading={loading}
-              rowKey="id"
-              rowSelection={groupRowSelection}
-              cardTitle={(record) => record.name}
-              cardExtra={(record) => (
-                <Text type="secondary">{record.members?.length || 0} members</Text>
-              )}
-              locale={{
-                emptyText: undefined
-              }}
-            />
-          </Card>
-
-          <Modal
-            title={editingParticipant ? 'Edit Participant' : 'Add New Participant'}
-            open={isModalOpen}
-            onCancel={() => {
-              setIsModalOpen(false);
-              setEditingParticipant(null);
-              form.resetFields();
-            }}
-            footer={null}
-            width={600}
-          >
-            <Form
-              form={form}
-              layout="vertical"
-              onFinish={onSubmit}
+          <div className="grid grid-cols-2 gap-3">
+            <Form.Item
+              label="Church"
+              name="church"
+              rules={[{ required: true, message: 'Church is required' }]}
             >
-              <Form.Item
-                label="Full Name"
-                name="full_name"
-                rules={[{ required: true, message: 'Name must be at least 2 characters', min: 2 }]}
-              >
-                <Input />
-              </Form.Item>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <Form.Item
-                  label="Age Category"
-                  name="age_category"
-                  rules={[{ required: true, message: 'Age category is required' }]}
-                >
-                  <Select placeholder="Select age category">
-                    <Select.Option value="Sub Juniors">Sub Juniors</Select.Option>
-                    <Select.Option value="Juniors">Juniors</Select.Option>
-                    <Select.Option value="Intermediates">Intermediates</Select.Option>
-                    <Select.Option value="Seniors">Seniors</Select.Option>
-                  </Select>
-                </Form.Item>
-                
-                <Form.Item
-                  label="Chest Number"
-                  name="chest_number"
-                  rules={[{ required: true, message: 'Chest number is required' }]}
-                >
-                  <Input />
-                </Form.Item>
-              </div>
-              
-              <Form.Item
-                label="Church"
-                name="church"
-                rules={[{ required: true, message: 'Church is required' }]}
-              >
-                <Input />
-              </Form.Item>
-              
-              <Form.Item
-                label="District"
-                name="district"
-                rules={[{ required: true, message: 'District is required' }]}
-              >
-                <Input />
-              </Form.Item>
+              <AntInput />
+            </Form.Item>
 
-              <Form.Item
-                label="Username"
-                name="username"
-                rules={[{ required: true, message: 'Username must be at least 3 characters', min: 3 }]}
-              >
-                <Input placeholder="Enter username for login" />
-              </Form.Item>
-              
-              <Form.Item
-                label="Password"
-                name="password"
-                rules={[
-                  { 
-                    required: !editingParticipant, 
-                    message: 'Password must be at least 8 characters', 
-                    min: 8 
-                  }
-                ]}
-              >
-                <Input.Password 
-                  placeholder={editingParticipant ? "Leave blank to keep current password" : "Enter password for login"} 
-                />
-              </Form.Item>
-              
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
-                <Button onClick={() => setIsModalOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="primary" htmlType="submit" loading={submitting}>
-                  {editingParticipant ? 'Update' : 'Add'} Participant
-                </Button>
-              </div>
-            </Form>
-          </Modal>
-
-          {/* Group Modal */}
-          <Modal
-            title={editingGroup ? 'Edit Group' : 'Create New Group'}
-            open={isGroupModalOpen}
-            onCancel={closeGroupModal}
-            footer={null}
-            width={700}
-            destroyOnClose
-          >
-            <Form
-              form={groupForm}
-              onFinish={onSubmitGroup}
-              layout="vertical"
-              style={{ marginTop: '16px' }}
+            <Form.Item
+              label="District"
+              name="district"
+              rules={[{ required: true, message: 'District is required' }]}
             >
-              <Form.Item
-                label="Group Name"
-                name="name"
-                rules={[{ required: true, message: 'Group name is required' }]}
-              >
-                <Input placeholder="Enter group name" />
-              </Form.Item>
-              
-              <Form.Item
-                label="Description"
-                name="description"
-              >
-                <Input.TextArea rows={2} placeholder="Optional description" />
-              </Form.Item>
+              <AntInput />
+            </Form.Item>
+          </div>
 
-              <Form.Item
-                label="Select Participants"
-                required
+          <Form.Item
+            label="Username"
+            name="username"
+            rules={[{ required: true, min: 3, message: 'Username must be at least 3 characters' }]}
+          >
+            <AntInput placeholder="firstname.lastname" autoComplete="off" />
+          </Form.Item>
+
+          <Form.Item
+            label="Password"
+            name="password"
+            rules={[
+              {
+                required: !editingParticipant,
+                min: 8,
+                message: 'Password must be at least 8 characters',
+              },
+            ]}
+          >
+            <AntInput.Password
+              autoComplete="new-password"
+              placeholder={editingParticipant ? 'Leave blank to keep current' : 'At least 8 characters'}
+            />
+          </Form.Item>
+        </Form>
+      </Sheet>
+
+      {/* ------------------------------------------------ group form */}
+      <Sheet
+        open={isGroupModalOpen}
+        onClose={closeGroupModal}
+        dismissable={!submittingGroup}
+        title={editingGroup ? 'Edit group' : 'Create group'}
+        description="A group competes under its own chest number, for its church or district."
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" size="lg" onClick={closeGroupModal} disabled={submittingGroup}>
+              Cancel
+            </Button>
+            <Button size="lg" block loading={submittingGroup} onClick={() => groupForm.submit()}>
+              {editingGroup ? 'Save changes' : 'Create group'}
+            </Button>
+          </div>
+        }
+      >
+        <Form form={groupForm} layout="vertical" onFinish={onSubmitGroup} requiredMark={false}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Form.Item
+              label="Group name"
+              name="name"
+              rules={[{ required: true, message: 'Group name is required' }]}
+            >
+              <AntInput placeholder="Zion Youth Team" />
+            </Form.Item>
+
+            <Form.Item
+              label="Chest number"
+              name="chest_number"
+              rules={[{ required: true, message: 'Chest number is required' }]}
+            >
+              <AntInput placeholder="G01" />
+            </Form.Item>
+
+            <Form.Item
+              label="Church"
+              name="church"
+              rules={[{ required: true, message: 'Church is required' }]}
+            >
+              <AntInput />
+            </Form.Item>
+
+            <Form.Item label="District" name="district">
+              <AntInput placeholder="Needed for the district championship" />
+            </Form.Item>
+          </div>
+
+          <Form.Item label="Description" name="description">
+            <AntInput.TextArea rows={2} placeholder="Optional" />
+          </Form.Item>
+        </Form>
+
+        <p className="pb-2 text-caption text-muted-foreground">
+          Placings earned by this group count towards its church, and its district above that.
+        </p>
+      </Sheet>
+
+      {/* ----------------------------------------------- bulk import */}
+      <Sheet
+        open={isBulkImportOpen}
+        onClose={() => {
+          setIsBulkImportOpen(false);
+          resetImport();
+        }}
+        dismissable={!isValidating}
+        size="lg"
+        title="Import participants"
+        description={`One CSV, one participant per row, into ${levels.find((level) => level.id === levelId)?.name ?? 'this level'}.`}
+        footer={
+          csvFile ? (
+            <div className="flex gap-2">
+              <Button variant="secondary" size="lg" onClick={resetImport} disabled={isValidating}>
+                Change file
+              </Button>
+              <Button
+                size="lg"
+                block
+                disabled={validationErrors.length > 0 || isValidating || previewRows.length === 0}
+                loading={isValidating}
+                onClick={handleBulkImport}
               >
-                <div style={{ 
-                  border: '1px solid #d9d9d9', 
-                  borderRadius: '6px', 
-                  padding: '12px',
-                  maxHeight: '200px',
-                  overflowY: 'auto'
-                }}>
-                  {participants.map(participant => (
-                    <div key={participant.id} style={{ marginBottom: '8px' }}>
-                      <Checkbox
-                        checked={selectedParticipants.includes(participant.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedParticipants([...selectedParticipants, participant.id]);
-                          } else {
-                            setSelectedParticipants(selectedParticipants.filter(id => id !== participant.id));
-                          }
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span>{participant.full_name}</span>
-                          <span style={{ fontSize: '12px', color: '#6b7280' }}>
-                            #{participant.chest_number} • {participant.church}
-                          </span>
-                        </div>
-                      </Checkbox>
-                    </div>
+                Import {previewRows.length} participants
+              </Button>
+            </div>
+          ) : undefined
+        }
+      >
+        {!csvFile ? (
+          <ImportPanel template="participants" onFile={handleFileUpload} disabled={isValidating} />
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 rounded-lg bg-surface-sunken px-3 py-2">
+              <FileCsv size={15} className="text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-caption text-foreground">
+                {csvFile.name}
+              </span>
+              {isValidating && <Spin size="small" />}
+            </div>
+
+            {validationErrors.length > 0 && (
+              <div className="rounded-xl border border-destructive/30 bg-destructive-soft p-3">
+                <p className="text-caption font-semibold text-destructive">
+                  {validationErrors.length} problems — fix these and upload again
+                </p>
+                <ul className="scrollbar-thin mt-1.5 max-h-40 space-y-0.5 overflow-y-auto">
+                  {validationErrors.map((error) => (
+                    <li key={error} className="text-caption text-destructive/90">
+                      {error}
+                    </li>
                   ))}
-                </div>
-                <Text type="secondary">
-                  Selected: {selectedParticipants.length} participant{selectedParticipants.length !== 1 ? 's' : ''}
-                </Text>
-              </Form.Item>
-              
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
-                <Button onClick={closeGroupModal}>
-                  Cancel
-                </Button>
-                <Button type="primary" htmlType="submit" loading={submittingGroup}>
-                  {editingGroup ? 'Update' : 'Create'} Group
-                </Button>
-              </div>
-            </Form>
-          </Modal>
-
-          {/* Bulk Import Modal */}
-          <Modal
-            title="Bulk Import Participants"
-            open={isBulkImportOpen}
-            onCancel={() => {
-              setIsBulkImportOpen(false);
-              setCsvFile(null);
-              setParsedData([]);
-              setValidationErrors([]);
-              setConflicts([]);
-              setResolvedData([]);
-            }}
-            footer={null}
-            width={800}
-          >
-            {!csvFile ? (
-              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                <Upload size={48} style={{ color: '#1890ff', marginBottom: '16px' }} />
-                <Title level={4}>Upload CSV File</Title>
-                <Text type="secondary" style={{ marginBottom: '24px', display: 'block' }}>
-                  Upload a CSV file with participant data. Download the template for the correct format.
-                </Text>
-                
-                <div style={{ marginBottom: '24px' }}>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".csv"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        console.log('File selected:', file.name);
-                        handleFileUpload(file);
-                      }
-                    }}
-                    style={{ display: 'none' }}
-                  />
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-                    <Button 
-                      type="dashed" 
-                      size="large" 
-                      style={{ width: '200px', height: '60px', cursor: 'pointer' }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        console.log('Button clicked, triggering file input');
-                        if (fileInputRef.current) {
-                          fileInputRef.current.click();
-                        } else {
-                          console.error('File input ref not found');
-                        }
-                      }}
-                    >
-                      <Upload size={20} style={{ marginRight: '8px' }} />
-                      Choose CSV File
-                    </Button>
-                    <Text type="secondary" style={{ fontSize: '12px' }}>
-                      Click the button above to select a CSV file
-                    </Text>
-                  </div>
-                </div>
-                
-                <div>
-                  <Button type="link" onClick={downloadTemplate} style={{ marginRight: '16px' }}>
-                    Download Template
-                  </Button>
-                  <Button onClick={() => setIsBulkImportOpen(false)}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <div style={{ marginBottom: '16px' }}>
-                  <Text strong>File: {csvFile.name}</Text>
-                  {isValidating && <Spin size="small" style={{ marginLeft: '8px' }} />}
-                  <Button 
-                    type="link" 
-                    onClick={() => {
-                      setCsvFile(null);
-                      setParsedData([]);
-                      setValidationErrors([]);
-                      setConflicts([]);
-                      setResolvedData([]);
-                    }}
-                    style={{ float: 'right' }}
-                  >
-                    Change File
-                  </Button>
-                </div>
-                
-                {validationErrors.length > 0 && (
-                  <div style={{ marginBottom: '16px' }}>
-                    <Text type="danger" strong>Validation Errors ({validationErrors.length}):</Text>
-                    <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: '8px' }}>
-                      {validationErrors.map((error, index) => (
-                        <div key={index} style={{ color: '#ff4d4f', fontSize: '12px', marginBottom: '4px' }}>
-                          {error}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {conflicts.length > 0 && (
-                  <div style={{ marginBottom: '16px' }}>
-                    <Text type="warning" strong>Auto-Resolved Conflicts ({conflicts.length}):</Text>
-                    <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: '8px' }}>
-                      {conflicts.map((conflict, index) => (
-                        <div key={index} style={{ color: '#faad14', fontSize: '12px', marginBottom: '4px' }}>
-                          <strong>Row {conflict.row} ({conflict.name}):</strong> {conflict.changes.join(', ')}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {(resolvedData.length > 0 || parsedData.length > 0) && (
-                  <div>
-                    <Text strong>Preview ({(resolvedData.length || parsedData.length)} participants):</Text>
-                    <div style={{ maxHeight: '300px', overflowY: 'auto', marginTop: '8px' }}>
-                      <table style={{ width: '100%', border: '1px solid #d9d9d9', borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr style={{ backgroundColor: '#f5f5f5' }}>
-                            <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Name</th>
-                            <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Age Category</th>
-                            <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Chest #</th>
-                            <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Church</th>
-                            <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>District</th>
-                            <th style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>Username</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(resolvedData.length > 0 ? resolvedData : parsedData).slice(0, 10).map((row, index) => (
-                            <tr key={index}>
-                              <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.full_name}</td>
-                              <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.age_category}</td>
-                              <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.chest_number}</td>
-                              <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.church}</td>
-                              <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.district}</td>
-                              <td style={{ padding: '8px', border: '1px solid #d9d9d9', fontSize: '12px' }}>{row.username}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {(resolvedData.length || parsedData.length) > 10 && (
-                        <Text type="secondary" style={{ fontSize: '12px' }}>
-                          ... and {(resolvedData.length || parsedData.length) - 10} more participants
-                        </Text>
-                      )}
-                    </div>
-                  </div>
-                )}
-                
-                <div style={{ marginTop: '16px', textAlign: 'right' }}>
-                  <Button onClick={() => setIsBulkImportOpen(false)} style={{ marginRight: '8px' }}>
-                    Cancel
-                  </Button>
-                  <Button 
-                    type="primary" 
-                    disabled={validationErrors.length > 0 || isValidating}
-                    loading={isValidating}
-                    onClick={handleBulkImport}
-                  >
-                    Import {(resolvedData.length || parsedData.length)} Participants
-                  </Button>
-                </div>
+                </ul>
               </div>
             )}
-          </Modal>
-        </Content>
-      </Layout>
-    </Layout>
+
+            {conflicts.length > 0 && (
+              <div className="rounded-xl border border-warning/30 bg-warning-soft p-3">
+                <p className="text-caption font-semibold text-warning">
+                  {conflicts.length} conflicts resolved automatically
+                </p>
+                <ul className="scrollbar-thin mt-1.5 max-h-40 space-y-0.5 overflow-y-auto">
+                  {conflicts.map((conflict) => (
+                    <li key={`${conflict.row}-${conflict.name}`} className="text-caption text-warning">
+                      Row {conflict.row} ({conflict.name}): {conflict.changes.join(', ')}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {previewRows.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-caption font-medium text-foreground">
+                  Preview · {previewRows.length} participants
+                </p>
+                <div className="scrollbar-thin max-h-72 overflow-auto rounded-xl border border-border">
+                  <table className="w-full text-caption">
+                    <thead className="sticky top-0 bg-surface-sunken text-muted-foreground">
+                      <tr>
+                        <Th>Name</Th>
+                        <Th>Category</Th>
+                        <Th>Chest</Th>
+                        <Th>Church</Th>
+                        <Th>Username</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewRows.slice(0, 25).map((row) => (
+                        <tr key={row._rowNumber} className="border-t border-border">
+                          <Td>{row.full_name}</Td>
+                          <Td>{row.age_category}</Td>
+                          <Td className="tnum">{row.chest_number}</Td>
+                          <Td>{row.church}</Td>
+                          <Td>{row.username}</Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {previewRows.length > 25 && (
+                  <p className="mt-1 text-caption text-muted-foreground">
+                    and {previewRows.length - 25} more
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </Sheet>
+    </AppShell>
   );
 };
+
+const IconButton = ({
+  label,
+  icon,
+  onClick,
+  danger,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+}) => (
+  <button
+    type="button"
+    title={label}
+    aria-label={label}
+    onClick={onClick}
+    className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+      danger
+        ? 'text-muted-foreground hover:bg-destructive-soft hover:text-destructive'
+        : 'text-muted-foreground hover:bg-surface-sunken hover:text-foreground'
+    }`}
+  >
+    {icon}
+  </button>
+);
+
+const Th = ({ children }: { children: React.ReactNode }) => (
+  <th className="px-3 py-2 text-left font-medium">{children}</th>
+);
+
+const Td = ({ children, className }: { children: React.ReactNode; className?: string }) => (
+  <td className={`truncate px-3 py-2 text-foreground ${className ?? ''}`}>{children}</td>
+);
 
 export default ParticipantManagement;

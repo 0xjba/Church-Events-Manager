@@ -2,117 +2,221 @@
 @tailwind components;
 @tailwind utilities;
 
-/* PYPA - Mobile-first PWA Design System
-All colors MUST be HSL.
-*/
+/*
+ * PYPA design tokens.
+ *
+ * Two surfaces share one system: a mobile-first surface for judges and
+ * participants (thumb reachable controls, one task per screen) and a
+ * desktop-first surface for admins (dense tables, more per screen).
+ *
+ * The palette is ink navy on warm paper with brass for anything that marks
+ * achievement — placings, medals, champion rows. Brass is never a button and
+ * never decoration. State colours (success / warning / danger) mean state
+ * only, so a red cell always says something is wrong.
+ */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Neutrals — barely warm paper; enough to kill the blue-white glare
+       without tipping the greys yellow. */
+    --background: 42 22% 97%;
+    --foreground: 215 30% 12%;
+
+    --surface: 0 0% 100%;
+    --surface-foreground: 215 30% 12%;
+    --surface-sunken: 42 18% 94.5%;
+    --surface-raised: 0 0% 100%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 215 30% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 215 30% 12%;
 
-    --primary: 258 90% 66%;
+    /* Brand — ink carries the chrome and every primary action. Deep enough
+       for white text at 12:1, so the same colour works as fill and as type. */
+    --primary: 213 62% 20%;
     --primary-foreground: 0 0% 100%;
+    --primary-soft: 213 44% 92%;
+    --primary-strong: 213 68% 13%;
 
-    --secondary: 220 14.3% 95.9%;
-    --secondary-foreground: 220.9 39.3% 11%;
+    --secondary: 42 16% 94%;
+    --secondary-foreground: 215 24% 20%;
 
-    --muted: 220 14.3% 95.9%;
-    --muted-foreground: 220 8.9% 46.1%;
+    --muted: 42 14% 93%;
+    --muted-foreground: 215 12% 38%;
 
-    --accent: 220 14.3% 95.9%;
-    --accent-foreground: 220.9 39.3% 11%;
+    --accent: 36 66% 93%;
+    --accent-foreground: 30 72% 26%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    --success: 142 71% 45%;
+    /* State — each holds 4.5:1 on paper as text, and on its own soft tint. */
+    --success: 158 60% 24%;
     --success-foreground: 0 0% 100%;
+    --success-soft: 156 44% 91%;
 
-    --warning: 38 92% 50%;
+    --warning: 26 82% 34%;
     --warning-foreground: 0 0% 100%;
+    --warning-soft: 34 84% 90%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 258 90% 66%;
+    --destructive: 2 66% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 4 74% 94%;
+
+    --info: 205 66% 30%;
+    --info-foreground: 0 0% 100%;
+    --info-soft: 202 60% 92%;
+
+    /* Placings — struck metal, nowhere else in the interface. */
+    --gold: 34 72% 34%;
+    --silver: 214 12% 40%;
+    --bronze: 18 54% 33%;
+
+    --border: 40 14% 88%;
+    --border-strong: 40 10% 78%;
+    --input: 40 14% 84%;
+    --ring: 213 62% 20%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Layout */
+    --shell-sidebar: 15rem;
+    --shell-header: 3.5rem;
+    --shell-tabbar: 4.25rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 218 34% 8%;
+    --foreground: 40 30% 94%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --surface: 218 30% 11%;
+    --surface-foreground: 40 30% 94%;
+    --surface-sunken: 218 34% 7%;
+    --surface-raised: 218 26% 14%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --card: 218 30% 11%;
+    --card-foreground: 40 30% 94%;
 
-    --primary: 258 90% 66%;
-    --primary-foreground: 0 0% 100%;
+    --popover: 218 30% 13%;
+    --popover-foreground: 40 30% 94%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    /* Ink cannot carry the chrome on a dark ground, so brass leads instead. */
+    --primary: 36 64% 56%;
+    --primary-foreground: 218 44% 10%;
+    --primary-soft: 36 30% 20%;
+    --primary-strong: 36 70% 66%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --secondary: 218 22% 18%;
+    --secondary-foreground: 40 26% 90%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --muted: 218 22% 17%;
+    --muted-foreground: 40 12% 66%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --accent: 36 34% 22%;
+    --accent-foreground: 36 70% 74%;
 
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 100%;
+    --success: 158 44% 44%;
+    --success-soft: 158 34% 16%;
+    --warning: 30 74% 54%;
+    --warning-soft: 30 44% 18%;
+    --destructive: 4 66% 56%;
+    --destructive-soft: 4 40% 20%;
+    --info: 202 56% 52%;
+    --info-soft: 202 40% 18%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
+    --gold: 36 66% 56%;
+    --silver: 215 12% 62%;
+    --bronze: 20 46% 52%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 258 90% 66%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --border: 218 20% 22%;
+    --border-strong: 218 16% 30%;
+    --input: 218 20% 24%;
+    --ring: 36 64% 56%;
   }
 }
 
 @layer base {
   * {
-    border-color: hsl(var(--border));
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
   }
 
   body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
+    @apply bg-background font-sans text-foreground antialiased;
+    overscroll-behavior-y: none;
+  }
+
+  /* One family throughout; hierarchy comes from weight and size, not a
+     second typeface. */
+  h1,
+  h2,
+  h3 {
+    font-weight: 600;
+    letter-spacing: -0.018em;
+  }
+
+  /* Scores, chest numbers, counts: mono so digits line up down a column and
+     read as data rather than prose. */
+  .tnum {
+    @apply font-mono;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Inputs below 16px make iOS Safari zoom on focus. */
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1rem);
+  }
+
+  @media (min-width: 768px) {
+    input,
+    select,
+    textarea {
+      font-size: inherit;
+    }
+  }
+}
+
+@layer components {
+  /* Respect the home indicator and notch on phones. */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border-strong;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

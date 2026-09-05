@@ -5,7 +5,7 @@
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f0f23",
-  "theme_color": "#8b5cf6",
+  "theme_color": "#1B324E",
   "orientation": "portrait-primary",
   "categories": ["productivity", "education", "entertainment"],
   "icons": [

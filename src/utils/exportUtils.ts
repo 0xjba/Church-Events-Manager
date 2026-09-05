@@ -1,4 +1,5 @@
 import { EventResults, ResultData } from './resultsCalculator';
+import type { SupabaseRow } from '@/lib/types';
 
 export interface ExportData {
   event_name: string;
@@ -44,7 +45,7 @@ export class ExportUtils {
       result.rank.toString(),
       result.participant.full_name,
       result.participant.chest_number,
-      result.participant.age_category,
+      result.participant.age_category ?? '',
       result.participant.church,
       result.participant.district,
       result.total_score.toString(),
@@ -288,7 +289,7 @@ export class ExportUtils {
   /**
    * Generates championship standings CSV
    */
-  static generateChampionshipCSV(championshipData: any): string {
+  static generateChampionshipCSV(championshipData: SupabaseRow): string {
     const headers = [
       'Rank',
       'Participant Name',
@@ -303,7 +304,7 @@ export class ExportUtils {
       'Worst Rank'
     ];
 
-    const rows = championshipData.participants.map((participant: any) => [
+    const rows = championshipData.participants.map((participant: SupabaseRow) => [
       participant.rank.toString(),
       participant.participant.full_name,
       participant.participant.chest_number,

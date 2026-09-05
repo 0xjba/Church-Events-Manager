@@ -16,6 +16,7 @@ interface Profile {
 interface AuthContextType {
   user: User | null;
   session: Session | null;
+  profileChecked: boolean;
   profile: Profile | null;
   loading: boolean;
   signIn: (username: string, password: string) => Promise<{ error?: any }>;
@@ -56,6 +57,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  // Distinguishes "the profile has not come back yet" from "this account has
+  // no readable profile", so a failed read cannot leave the app spinning.
+  const [profileChecked, setProfileChecked] = useState(false);
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -71,7 +75,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.error('Error fetching profile:', error);
       setProfile(null);
     } finally {
-      // Always set loading to false after profile fetch completes
+      setProfileChecked(true);
       setLoading(false);
     }
   };
@@ -84,10 +88,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          // Fetch profile immediately but keep loading true until profile is loaded
+          // The profile decides where a signed-in user belongs, so nothing may
+          // route until it has arrived. Without this the sign-in redirect
+          // bounced off Index and back to the login page.
+          setLoading(true);
+          setProfileChecked(false);
           fetchProfile(session.user.id);
         } else {
           setProfile(null);
+          setProfileChecked(true);
           setLoading(false);
         }
       }
@@ -98,8 +107,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        setLoading(true);
+        setProfileChecked(false);
         fetchProfile(session.user.id);
       } else {
+        setProfileChecked(true);
         setLoading(false);
       }
     });
@@ -107,7 +119,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async (username: string, password: string) => {
+  const signIn = async (identifier: string, password: string) => {
     try {
       // Clean up existing state
       cleanupAuthState();
@@ -119,20 +131,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Continue even if this fails
       }
 
-      // Try to find user by username and get their email
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles')
-        .select('email')
-        .eq('username', username)
-        .limit(1);
+      // Admins may type either their email address or their username. The
+      // username path goes through a function because the profiles table is no
+      // longer readable without a session.
+      let email = identifier;
 
-      if (profileError) throw profileError;
-      
-      if (!profiles || profiles.length === 0) {
-        throw new Error('User not found');
+      if (!identifier.includes('@')) {
+        const { data: resolved, error: lookupError } = await supabase.rpc('email_for_username', {
+          p_username: identifier,
+        });
+
+        if (lookupError) throw lookupError;
+        if (!resolved) throw new Error('User not found');
+
+        email = resolved as string;
       }
-
-      const email = profiles[0].email;
 
       // Sign in with email and password
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -203,6 +216,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     signIn,
     signUp,
     signOut,
+    profileChecked,
     isAdmin: profile?.role === 'admin',
     isJudge: profile?.role === 'judge',
   };

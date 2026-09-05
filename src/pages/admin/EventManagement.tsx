@@ -1,16 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Form, Input as AntInput, InputNumber, Modal, Select, message } from 'antd';
+import { CalendarBlank, Copy, Eye, FileCsv, PencilSimple, Plus, Trash, UploadSimple, X } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
-import Navigation from '@/components/Navigation';
-import ResponsiveTable from '@/components/ResponsiveTable';
-import { Layout, Card, Button, Input, Select, Modal, Badge, Form, Typography, Space, Spin, message, Popconfirm, Upload, Progress } from 'antd';
-import { Plus, Edit, Trash2, X, Eye, Copy, Upload as UploadIcon } from 'lucide-react';
+import type { FormValues } from '@/lib/types';
+import { AppShell } from '@/components/shell/AppShell';
+import { DataTable } from '@/components/admin/DataTable';
+import { Toolbar } from '@/components/admin/Toolbar';
+import { Button, ProgressBar, StatusPill, statusTone } from '@/components/ui/primitives';
+import { SearchInput } from '@/components/ui/inputs';
+import { ImportIssues, ImportPanel, ImportSummary } from '@/components/admin/ImportPanel';
+import { parseCsv } from '@/utils/csv';
+import { TEMPLATES } from '@/utils/importTemplates';
+import { parseEventRows, type ParsedEvent } from '@/utils/importEvents';
+import { Sheet } from '@/components/ui/Sheet';
+import { cn } from '@/lib/utils';
 
-const { Content } = Layout;
-const { Title, Text } = Typography;
-const { TextArea } = Input;
-
-interface Event {
+interface EventRecord {
   id: string;
   name: string;
   type: string;
@@ -23,8 +29,8 @@ interface Event {
   status: string;
   event_order: number | null;
   created_at: string;
-  level?: { id: string; name: string; year: number; };
-  criteria?: Array<{ id: string; name: string; max_score: number; weight: number; }>;
+  event_levels?: { id: string; name: string; year: number };
+  event_criteria?: Array<{ id: string; name: string; max_score: number; weight: number }>;
 }
 
 interface EventLevel {
@@ -41,29 +47,43 @@ interface Criteria {
   weight: number;
 }
 
+type AgeCategory = 'Sub Juniors' | 'Juniors' | 'Intermediates' | 'Seniors';
+
+const AGE_CATEGORIES: AgeCategory[] = ['Sub Juniors', 'Juniors', 'Intermediates', 'Seniors'];
+const STATUSES = ['upcoming', 'active', 'completed'];
+
 const EventManagement = () => {
   const navigate = useNavigate();
-  const [events, setEvents] = useState<Event[]>([]);
-  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<EventRecord[]>([]);
   const [eventLevels, setEventLevels] = useState<EventLevel[]>([]);
   const [selectedLevelId, setSelectedLevelId] = useState<string>('all');
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<Event | null>(null);
-  const [duplicatingEvent, setDuplicatingEvent] = useState<Event | null>(null);
+  const [editingEvent, setEditingEvent] = useState<EventRecord | null>(null);
+  const [duplicatingEvent, setDuplicatingEvent] = useState<EventRecord | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
   const [criteria, setCriteria] = useState<Criteria[]>([{ name: '', max_score: 10, weight: 1.0 }]);
+
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [batchDeleting, setBatchDeleting] = useState(false);
-  const [eventType, setEventType] = useState<string>('individual');
+
+  const [isEventImportOpen, setIsEventImportOpen] = useState(false);
+  const [eventImportLevel, setEventImportLevel] = useState<string>('');
+  const [eventImportFile, setEventImportFile] = useState<File | null>(null);
+  const [parsedEvents, setParsedEvents] = useState<ParsedEvent[]>([]);
+  const [eventImportErrors, setEventImportErrors] = useState<string[]>([]);
+  const [importingEvents, setImportingEvents] = useState(false);
+
   const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState(false);
   const [bulkImportLoading, setBulkImportLoading] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importResults, setImportResults] = useState<{
     success: number;
     skipped: number;
-    errors: Array<{ chest_number: string; error: string; }>;
+    errors: Array<{ chest_number: string; error: string }>;
   } | null>(null);
 
   useEffect(() => {
@@ -71,20 +91,13 @@ const EventManagement = () => {
     fetchEventLevels();
   }, []);
 
-  useEffect(() => {
-    if (selectedLevelId === 'all') {
-      setFilteredEvents(events);
-    } else {
-      setFilteredEvents(events.filter(event => event.level_id === selectedLevelId));
-    }
-  }, [events, selectedLevelId]);
-
   const fetchEventLevels = async () => {
     try {
       const { data, error } = await supabase
         .from('event_levels')
         .select('id, name, year, is_active')
         .order('year', { ascending: false });
+
       if (error) throw error;
       setEventLevels(data || []);
     } catch (error) {
@@ -98,8 +111,9 @@ const EventManagement = () => {
         .from('events')
         .select(`*, event_levels (id, name, year), event_criteria (id, name, max_score, weight)`)
         .order('created_at', { ascending: false });
+
       if (error) throw error;
-      setEvents(data || []);
+      setEvents((data || []) as unknown as EventRecord[]);
     } catch (error) {
       console.error('Error fetching events:', error);
     } finally {
@@ -107,72 +121,67 @@ const EventManagement = () => {
     }
   };
 
-  const openModal = (event?: Event, isDuplicating: boolean = false) => {
+  const levelOf = (event: EventRecord) => eventLevels.find((level) => level.id === event.level_id);
+  const isLocked = (event: EventRecord) => {
+    const level = levelOf(event);
+    return Boolean(level && !level.is_active);
+  };
+
+  const visibleEvents = useMemo(() => {
+    const byLevel =
+      selectedLevelId === 'all'
+        ? events
+        : events.filter((event) => event.level_id === selectedLevelId);
+
+    const query = search.trim().toLowerCase();
+    if (!query) return byLevel;
+    return byLevel.filter((event) =>
+      [event.name, event.age_category, event.type].filter(Boolean).some((field) =>
+        String(field).toLowerCase().includes(query),
+      ),
+    );
+  }, [events, selectedLevelId, search]);
+
+  /* ------------------------------------------------------- event form */
+
+  const openModal = (event?: EventRecord, isDuplicating = false) => {
     if (event) {
+      const eventCriteria = event.event_criteria ?? [];
+      const nextCriteria =
+        eventCriteria.length > 0
+          ? eventCriteria.map((criterion) => ({
+              name: criterion.name,
+              max_score: criterion.max_score,
+              weight: criterion.weight,
+            }))
+          : [{ name: '', max_score: 10, weight: 1.0 }];
+
       if (isDuplicating) {
         setDuplicatingEvent(event);
         setEditingEvent(null);
-        // Pre-fill form with event data for duplication
-        const eventTypeValue = event.event_type || 'individual';
-        setEventType(eventTypeValue);
-        form.setFieldsValue({
-          name: `${event.name} (Copy)`,
-          type: event.type,
-          event_type: eventTypeValue,
-          level_id: event.level_id,
-          age_category: event.age_category,
-          rules: event.rules || '',
-          time_limit: event.time_limit || undefined,
-          max_participants: event.max_participants || undefined,
-          status: 'upcoming', // Default to upcoming for new events
-          event_order: event.event_order || undefined
-        });
-        // Use event_criteria from the fetched data
-        const eventCriteria = (event as any).event_criteria || [];
-        if (eventCriteria.length > 0) {
-          setCriteria(eventCriteria.map((c: any) => ({
-            name: c.name,
-            max_score: c.max_score,
-            weight: c.weight
-          })));
-        } else {
-          setCriteria([{ name: '', max_score: 10, weight: 1.0 }]);
-        }
       } else {
         setEditingEvent(event);
         setDuplicatingEvent(null);
-        const eventTypeValue = event.event_type || 'individual';
-        setEventType(eventTypeValue);
-        form.setFieldsValue({
-          name: event.name,
-          type: event.type,
-          event_type: eventTypeValue,
-          level_id: event.level_id,
-          age_category: event.age_category,
-          rules: event.rules || '',
-          time_limit: event.time_limit || undefined,
-          max_participants: event.max_participants || undefined,
-          status: event.status,
-          event_order: event.event_order || undefined
-        });
-        // Use event_criteria from the fetched data
-        const eventCriteria = (event as any).event_criteria || [];
-        if (eventCriteria.length > 0) {
-          setCriteria(eventCriteria.map((c: any) => ({
-            name: c.name,
-            max_score: c.max_score,
-            weight: c.weight
-          })));
-        } else {
-          setCriteria([{ name: '', max_score: 10, weight: 1.0 }]);
-        }
       }
+
+      form.setFieldsValue({
+        name: isDuplicating ? `${event.name} (Copy)` : event.name,
+        type: event.type,
+        event_type: event.event_type || 'individual',
+        level_id: event.level_id,
+        age_category: event.age_category,
+        rules: event.rules || '',
+        time_limit: event.time_limit || undefined,
+        max_participants: event.max_participants || undefined,
+        status: isDuplicating ? 'upcoming' : event.status,
+        event_order: event.event_order || undefined,
+      });
+      setCriteria(nextCriteria);
     } else {
       setEditingEvent(null);
       setDuplicatingEvent(null);
-      setEventType('individual');
       form.resetFields();
-      form.setFieldsValue({ event_type: 'individual' });
+      form.setFieldsValue({ event_type: 'individual', type: 'stage', status: 'upcoming' });
       setCriteria([{ name: '', max_score: 10, weight: 1.0 }]);
     }
     setIsModalOpen(true);
@@ -184,397 +193,394 @@ const EventManagement = () => {
     setDuplicatingEvent(null);
     form.resetFields();
     setCriteria([{ name: '', max_score: 10, weight: 1.0 }]);
-    setEventType('individual');
   };
 
-  const handleEventTypeChange = (value: string) => {
-    setEventType(value);
+  const replaceCriteria = async (eventId: string, list: Criteria[]) => {
+    await supabase.from('event_criteria').delete().eq('event_id', eventId);
+
+    if (list.length > 0) {
+      const { error } = await supabase.from('event_criteria').insert(
+        list.map((criterion) => ({
+          event_id: eventId,
+          name: criterion.name,
+          max_score: criterion.max_score,
+          weight: criterion.weight,
+        })),
+      );
+      if (error) throw error;
+    }
   };
 
-  const onSubmit = async (values: any) => {
+  const onSubmit = async (values: FormValues) => {
     try {
       setSubmitting(true);
 
-      // Validate criteria
-      if (!criteria.length || criteria.some(c => !c.name.trim())) {
-        message.error('All criteria must have names');
+      if (!criteria.length || criteria.some((criterion) => !criterion.name.trim())) {
+        message.error('Every criterion needs a name');
         return;
       }
 
-      // Check if event level is active for new events
       if (!editingEvent) {
-        const selectedLevel = eventLevels.find(l => l.id === values.level_id);
-        if (selectedLevel && !selectedLevel.is_active) {
-          message.error('Cannot create events in inactive event levels');
+        const level = eventLevels.find((candidate) => candidate.id === values.level_id);
+        if (level && !level.is_active) {
+          message.error('Cannot create events in an inactive event level');
           return;
         }
       }
 
+      const payload = {
+        name: values.name,
+        type: values.type,
+        event_type: values.event_type,
+        level_id: values.level_id,
+        age_category: values.age_category || null,
+        rules: values.rules || null,
+        time_limit: values.time_limit || null,
+        max_participants: values.max_participants || null,
+        status: values.status,
+        event_order: values.event_order || null,
+      };
+
       if (editingEvent) {
-        // Update existing event
-        const { error: eventError } = await supabase
-          .from('events')
-          .update({
-            name: values.name,
-            type: values.type,
-            event_type: values.event_type,
-            level_id: values.level_id,
-            age_category: values.age_category || null,
-            rules: values.rules || null,
-            time_limit: values.time_limit || null,
-            max_participants: values.max_participants || null,
-            status: values.status,
-            event_order: values.event_order || null
-          })
-          .eq('id', editingEvent.id);
-
-        if (eventError) throw eventError;
-
-        // Update criteria
-        await updateEventCriteria(editingEvent.id, criteria);
-
-        message.success('Event updated successfully');
+        const { error } = await supabase.from('events').update(payload).eq('id', editingEvent.id);
+        if (error) throw error;
+        await replaceCriteria(editingEvent.id, criteria);
+        message.success('Event updated');
       } else {
-        // Create new event
-        const { data: newEvent, error: eventError } = await supabase
+        const { data: newEvent, error } = await supabase
           .from('events')
-          .insert({
-            name: values.name,
-            type: values.type,
-            event_type: values.event_type,
-            level_id: values.level_id,
-            age_category: values.age_category || null,
-            rules: values.rules || null,
-            time_limit: values.time_limit || null,
-            max_participants: values.max_participants || null,
-            status: values.status,
-            event_order: values.event_order || null
-          })
+          .insert(payload)
           .select()
           .single();
-
-        if (eventError) throw eventError;
-
-        // Create criteria
-        await createEventCriteria(newEvent.id, criteria);
-
-        message.success('Event created successfully');
+        if (error) throw error;
+        await replaceCriteria(newEvent.id, criteria);
+        message.success(duplicatingEvent ? 'Event duplicated' : 'Event created');
       }
 
       closeModal();
       fetchEvents();
-    } catch (error: any) {
-      message.error(error.message || 'Failed to save event');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to save event');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const updateEventCriteria = async (eventId: string, criteria: Criteria[]) => {
-    // Delete existing criteria
-    await supabase
-      .from('event_criteria')
-      .delete()
-      .eq('event_id', eventId);
+  const addCriteria = () => setCriteria((list) => [...list, { name: '', max_score: 10, weight: 1.0 }]);
 
-    // Insert new criteria
-    if (criteria.length > 0) {
-      const { error } = await supabase
-        .from('event_criteria')
-        .insert(criteria.map(c => ({
-          event_id: eventId,
-          name: c.name,
-          max_score: c.max_score,
-          weight: c.weight
-        })));
+  const removeCriteria = (index: number) =>
+    setCriteria((list) => (list.length > 1 ? list.filter((_, position) => position !== index) : list));
 
-      if (error) throw error;
-    }
-  };
+  const updateCriteria = (index: number, field: keyof Criteria, value: string | number) =>
+    setCriteria((list) =>
+      list.map((criterion, position) =>
+        position === index ? { ...criterion, [field]: value } : criterion,
+      ),
+    );
 
-  const createEventCriteria = async (eventId: string, criteria: Criteria[]) => {
-    if (criteria.length > 0) {
-      const { error } = await supabase
-        .from('event_criteria')
-        .insert(criteria.map(c => ({
-          event_id: eventId,
-          name: c.name,
-          max_score: c.max_score,
-          weight: c.weight
-        })));
+  /* --------------------------------------------------------- actions */
 
-      if (error) throw error;
-    }
-  };
-
-  const addCriteria = () => {
-    setCriteria([...criteria, { name: '', max_score: 10, weight: 1.0 }]);
-  };
-
-  const removeCriteria = (index: number) => {
-    if (criteria.length > 1) {
-      setCriteria(criteria.filter((_, i) => i !== index));
-    }
-  };
-
-  const updateCriteria = (index: number, field: keyof Criteria, value: any) => {
-    const newCriteria = [...criteria];
-    newCriteria[index] = { ...newCriteria[index], [field]: value };
-    setCriteria(newCriteria);
-  };
-
-  const deleteEvent = async (eventId: string) => {
-    try {
-      const { error } = await supabase
-        .from('events')
-        .delete()
-        .eq('id', eventId);
-
-      if (error) throw error;
-      message.success('Event deleted successfully');
-      fetchEvents();
-    } catch (error: any) {
-      message.error(error.message || 'Failed to delete event');
-    }
+  const deleteEvent = (event: EventRecord) => {
+    Modal.confirm({
+      title: `Delete ${event.name}?`,
+      content: 'Criteria, entrants, scores and results for this event are deleted too.',
+      okText: 'Delete',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const { error } = await supabase.from('events').delete().eq('id', event.id);
+          if (error) throw error;
+          message.success('Event deleted');
+          fetchEvents();
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : 'Failed to delete event');
+        }
+      },
+    });
   };
 
   const updateEventStatus = async (eventId: string, newStatus: string) => {
     try {
-      const { error } = await supabase
-        .from('events')
-        .update({ status: newStatus })
-        .eq('id', eventId);
-
+      const { error } = await supabase.from('events').update({ status: newStatus }).eq('id', eventId);
       if (error) throw error;
-      message.success('Event status updated successfully');
+      message.success('Status updated');
       fetchEvents();
-    } catch (error: any) {
+    } catch {
       message.error('Failed to update event status');
     }
   };
 
-  const handleBatchDelete = async () => {
-    if (selectedRowKeys.length === 0) {
-      message.warning('Please select events to delete');
-      return;
-    }
+  const handleBatchDelete = () => {
+    if (selectedRowKeys.length === 0) return;
 
+    Modal.confirm({
+      title: `Delete ${selectedRowKeys.length} event(s)?`,
+      content: 'This action cannot be undone.',
+      okText: 'Delete',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          setBatchDeleting(true);
+          const { error } = await supabase
+            .from('events')
+            .delete()
+            .in('id', selectedRowKeys.map(String));
+
+          if (error) throw error;
+          message.success(`Deleted ${selectedRowKeys.length} event(s)`);
+          setSelectedRowKeys([]);
+          fetchEvents();
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : 'Failed to delete events');
+        } finally {
+          setBatchDeleting(false);
+        }
+      },
+    });
+  };
+
+  /* --------------------------------------------------- event import */
+
+  const resetEventImport = () => {
+    setEventImportFile(null);
+    setParsedEvents([]);
+    setEventImportErrors([]);
+  };
+
+  const openEventImport = () => {
+    setEventImportLevel(
+      selectedLevelId !== 'all'
+        ? selectedLevelId
+        : eventLevels.find((level) => level.is_active)?.id ?? eventLevels[0]?.id ?? '',
+    );
+    resetEventImport();
+    setIsEventImportOpen(true);
+  };
+
+  const handleEventImportFile = async (file: File) => {
     try {
-      setBatchDeleting(true);
-      
-      // Delete each selected event
-      for (const eventId of selectedRowKeys) {
-        const { error } = await supabase
-          .from('events')
-          .delete()
-          .eq('id', eventId as string);
-        
-        if (error) throw error;
-      }
+      setImportingEvents(true);
 
-      message.success(`Successfully deleted ${selectedRowKeys.length} event(s)`);
-      setSelectedRowKeys([]);
-      fetchEvents();
-    } catch (error: any) {
-      message.error(error.message || 'Failed to delete events');
+      const parsed = parseCsv(await file.text(), [
+        'event_name', 'age_category', 'event_format', 'entrant_type', 'criterion_name', 'criterion_max',
+      ]);
+
+      // Only events already in the target level count as duplicates.
+      const existing = events
+        .filter((event) => event.level_id === eventImportLevel)
+        .map((event) => ({ name: event.name, age_category: event.age_category }));
+
+      const { events: parsedList, errors } = parseEventRows(parsed.rows, existing);
+
+      setEventImportFile(file);
+      setParsedEvents(parsedList);
+      setEventImportErrors(errors);
+
+      if (errors.length > 0) message.warning(`${errors.length} problems to fix before import`);
+      else message.success(`${parsedList.length} events ready to import`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Could not read that file');
     } finally {
-      setBatchDeleting(false);
+      setImportingEvents(false);
     }
   };
 
-  // CSV parsing function
+  const runEventImport = async () => {
+    try {
+      setImportingEvents(true);
+
+      const { data: created, error } = await supabase
+        .from('events')
+        .insert(parsedEvents.map((event) => ({
+          name: event.name,
+          type: event.type,
+          event_type: event.event_type,
+          level_id: eventImportLevel,
+          age_category: event.age_category as AgeCategory | null,
+          rules: event.rules,
+          time_limit: event.time_limit,
+          max_participants: event.max_participants,
+          status: 'upcoming',
+          event_order: event.event_order,
+        })))
+        .select();
+
+      if (error) throw new Error(error.message);
+
+      try {
+        const criteria = created.flatMap((event) => {
+          const source = parsedEvents.find(
+            (candidate) =>
+              candidate.name === event.name && (candidate.age_category ?? null) === event.age_category,
+          );
+          if (!source) throw new Error(`Could not match criteria to ${event.name}`);
+
+          return source.criteria.map((criterion) => ({
+            event_id: event.id,
+            name: criterion.name,
+            max_score: criterion.max_score,
+            weight: criterion.weight,
+          }));
+        });
+
+        const { error: criteriaError } = await supabase.from('event_criteria').insert(criteria);
+        if (criteriaError) throw new Error(criteriaError.message);
+      } catch (criteriaError) {
+        // An event without criteria cannot be scored, so it should not survive.
+        await supabase.from('events').delete().in('id', created.map((event) => event.id));
+        throw criteriaError;
+      }
+
+      message.success(`Imported ${created.length} events`);
+      setIsEventImportOpen(false);
+      resetEventImport();
+      fetchEvents();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to import events');
+    } finally {
+      setImportingEvents(false);
+    }
+  };
+
+  /* ---------------------------------------------------- bulk import */
+
   const parseCSV = (csvText: string) => {
     const lines = csvText.trim().split('\n');
-    const headers = lines[0].split(',').map(h => h.trim());
-    
+    const headers = lines[0].split(',').map((header) => header.trim());
+
     if (headers[0] !== 'chest_number' || headers[1] !== 'age_category' || headers[2] !== 'events') {
       throw new Error('CSV must have columns: chest_number, age_category, events');
     }
 
-    return lines.slice(1).map((line, index) => {
-      // Parse CSV line properly handling quoted values
-      const parseCSVLine = (line: string): string[] => {
-        const result: string[] = [];
-        let current = '';
-        let inQuotes = false;
-        
-        for (let i = 0; i < line.length; i++) {
-          const char = line[i];
-          
-          if (char === '"') {
-            inQuotes = !inQuotes;
-          } else if (char === ',' && !inQuotes) {
-            result.push(current.trim());
-            current = '';
-          } else {
-            current += char;
-          }
-        }
-        
-        result.push(current.trim());
-        return result;
-      };
+    // Event lists are quoted, so a naive split on commas would break them.
+    const parseLine = (line: string): string[] => {
+      const result: string[] = [];
+      let current = '';
+      let inQuotes = false;
 
-      const values = parseCSVLine(line);
-      if (values.length !== 3) {
-        throw new Error(`Invalid CSV format at line ${index + 2}. Expected 3 columns, got ${values.length}`);
+      for (const character of line) {
+        if (character === '"') inQuotes = !inQuotes;
+        else if (character === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else current += character;
       }
-      
-      const chest_number = values[0];
-      const age_category = values[1];
-      // Remove quotes and split by comma for events
-      const eventsString = values[2].replace(/^"(.*)"$/, '$1');
-      const events = eventsString.split(',').map(e => e.trim()).filter(e => e);
-      
-      return { chest_number, age_category, events };
+      result.push(current.trim());
+      return result;
+    };
+
+    return lines.slice(1).map((line) => {
+      const [chest_number, age_category, eventList] = parseLine(line);
+      return {
+        chest_number,
+        age_category,
+        events: (eventList ?? '')
+          .split(',')
+          .map((name) => name.trim())
+          .filter(Boolean),
+      };
     });
   };
 
-
-  // Bulk import function
   const handleBulkImport = async (file: File) => {
     try {
       setBulkImportLoading(true);
       setImportProgress(0);
       setImportResults(null);
 
-      // Read CSV file
-      const csvText = await file.text();
-      const csvData = parseCSV(csvText);
+      const csvData = parseCSV(await file.text());
 
-      // Get all events from database
       const { data: allEvents, error: eventsError } = await supabase
         .from('events')
         .select('id, name, age_category')
         .eq('event_type', 'individual');
-
       if (eventsError) throw eventsError;
 
-      // Create event name + age_category to event object mapping
-      const eventMap = new Map<string, any>();
-      allEvents?.forEach(event => {
-        const key = `${event.name.toLowerCase()}-${event.age_category || 'no-category'}`;
-        eventMap.set(key, event);
+      const eventMap = new Map<string, { id: string }>();
+      allEvents?.forEach((event) => {
+        eventMap.set(`${event.name.toLowerCase()}-${event.age_category || 'no-category'}`, event);
       });
 
-      // Get all participants
       const { data: allParticipants, error: participantsError } = await supabase
         .from('participants')
         .select('id, chest_number, age_category');
-
       if (participantsError) throw participantsError;
 
-      // Create chest number to participant mapping
-      const participantMap = new Map<string, any>();
-      allParticipants?.forEach(participant => {
-        participantMap.set(participant.chest_number, participant);
+      const participantMap = new Map<string, { id: string; age_category: string }>();
+      allParticipants?.forEach((participant) => {
+        participantMap.set(participant.chest_number, participant as { id: string; age_category: string });
       });
 
-      // Get existing event participants
       const { data: existingEventParticipants, error: existingError } = await supabase
         .from('event_participants')
         .select('event_id, participant_id');
-
       if (existingError) throw existingError;
 
-      // Create set of existing combinations
       const existingCombinations = new Set<string>();
-      existingEventParticipants?.forEach(ep => {
-        existingCombinations.add(`${ep.event_id}-${ep.participant_id}`);
+      existingEventParticipants?.forEach((row) => {
+        existingCombinations.add(`${row.event_id}-${row.participant_id}`);
       });
 
       const results = {
         success: 0,
         skipped: 0,
-        errors: [] as Array<{ chest_number: string; error: string; }>
+        errors: [] as Array<{ chest_number: string; error: string }>,
       };
 
-      // Process each CSV row
-      for (let i = 0; i < csvData.length; i++) {
-        const { chest_number, age_category, events } = csvData[i];
-        
-        try {
-          // Validate participant exists
-          const participant = participantMap.get(chest_number);
-          if (!participant) {
-            results.errors.push({
-              chest_number,
-              error: 'Participant not found'
-            });
-            continue;
-          }
+      for (let index = 0; index < csvData.length; index++) {
+        const { chest_number, age_category, events: eventNames } = csvData[index];
 
-          // Validate CSV age category matches participant age category
-          if (participant.age_category !== age_category) {
-            results.errors.push({
-              chest_number,
-              error: `Age category mismatch. CSV: ${age_category}, Participant: ${participant.age_category}`
-            });
-            continue;
-          }
-
-          // Process each event for this participant
-          for (const eventName of events) {
-            const eventKey = `${eventName.toLowerCase()}-${age_category}`;
-            const event = eventMap.get(eventKey);
+        const participant = participantMap.get(chest_number);
+        if (!participant) {
+          results.errors.push({ chest_number, error: 'Participant not found' });
+        } else if (participant.age_category !== age_category) {
+          results.errors.push({
+            chest_number,
+            error: `Age category mismatch. CSV: ${age_category}, participant: ${participant.age_category}`,
+          });
+        } else {
+          for (const eventName of eventNames) {
+            const event = eventMap.get(`${eventName.toLowerCase()}-${age_category}`);
             if (!event) {
               results.errors.push({
                 chest_number,
-                error: `Event not found: ${eventName} (${age_category})`
+                error: `Event not found: ${eventName} (${age_category})`,
               });
               continue;
             }
 
-            // Check if already registered
             const combinationKey = `${event.id}-${participant.id}`;
             if (existingCombinations.has(combinationKey)) {
               results.skipped++;
               continue;
             }
 
-            // Add participant to event
             const { error: insertError } = await supabase
               .from('event_participants')
-              .insert({
-                event_id: event.id,
-                participant_id: participant.id
-              });
+              .insert({ event_id: event.id, participant_id: participant.id });
 
             if (insertError) {
               results.errors.push({
                 chest_number,
-                error: `Failed to add to ${eventName}: ${insertError.message}`
+                error: `Failed to add to ${eventName}: ${insertError.message}`,
               });
             } else {
               results.success++;
-              existingCombinations.add(combinationKey); // Add to prevent duplicates in same batch
+              existingCombinations.add(combinationKey);
             }
           }
-        } catch (error: any) {
-          results.errors.push({
-            chest_number,
-            error: error.message || 'Unknown error'
-          });
         }
 
-        // Update progress
-        setImportProgress(Math.round(((i + 1) / csvData.length) * 100));
+        setImportProgress(Math.round(((index + 1) / csvData.length) * 100));
       }
 
       setImportResults(results);
-      
-      if (results.success > 0) {
-        message.success(`Successfully added ${results.success} participant(s) to events`);
-      }
-      if (results.skipped > 0) {
-        message.info(`${results.skipped} participant(s) were already registered`);
-      }
-      if (results.errors.length > 0) {
-        message.error(`${results.errors.length} error(s) occurred during import`);
-      }
 
-    } catch (error: any) {
-      message.error(error.message || 'Failed to import CSV');
+      if (results.success > 0) message.success(`Added ${results.success} entries`);
+      if (results.skipped > 0) message.info(`${results.skipped} already registered`);
+      if (results.errors.length > 0) message.error(`${results.errors.length} rows failed`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to import CSV');
     } finally {
       setBulkImportLoading(false);
     }
@@ -586,310 +592,283 @@ const EventManagement = () => {
     setImportProgress(0);
   };
 
-  const rowSelection = {
-    selectedRowKeys,
-    onChange: (selectedRowKeys: React.Key[]) => {
-      setSelectedRowKeys(selectedRowKeys);
-    },
-  };
+  /* ----------------------------------------------------------- table */
 
   const columns = [
-    { 
-      title: 'Event', 
-      dataIndex: 'name', 
+    {
+      title: 'Event',
+      dataIndex: 'name',
       key: 'name',
-      render: (name: string, record: Event) => {
-        const level = eventLevels.find(l => l.id === record.level_id);
-        const isInactive = level && !level.is_active;
-        return (
-          <span style={{ 
-            color: isInactive ? '#999' : 'inherit',
-            opacity: isInactive ? 0.6 : 1
-          }}>
-            {name}
-          </span>
-        );
-      }
-    },
-    { title: 'Type', dataIndex: 'type', key: 'type', render: (type: string) => <span style={{ textTransform: 'capitalize' }}>{type}</span> },
-    { title: 'Category', dataIndex: 'event_type', key: 'event_type', width: 100, render: (event_type: string) => (
-      <span style={{ textTransform: 'capitalize' }}>
-        {event_type === 'individual' ? 'Individual' : 'Group'}
-      </span>
-    ) },
-    { 
-      title: 'Event Level', 
-      dataIndex: ['event_levels', 'name'], 
-      key: 'level',
-      render: (levelName: string, record: Event) => {
-        const level = eventLevels.find(l => l.id === record.level_id);
-        const isInactive = level && !level.is_active;
-        return (
-          <span style={{ 
-            color: isInactive ? '#999' : 'inherit',
-            opacity: isInactive ? 0.6 : 1
-          }}>
-            {levelName} {isInactive ? '(Inactive)' : ''}
-          </span>
-        );
-      }
+      sorter: (a: EventRecord, b: EventRecord) => a.name.localeCompare(b.name),
+      render: (name: string, record: EventRecord) => (
+        <div className={cn('min-w-0', isLocked(record) && 'opacity-60')}>
+          <div className="flex items-center gap-2">
+            {record.event_order !== null && (
+              <span className="tnum rounded bg-muted px-1.5 text-caption font-semibold text-muted-foreground">
+                #{record.event_order}
+              </span>
+            )}
+            <span className="truncate font-medium text-foreground">{name}</span>
+          </div>
+          <div className="truncate text-caption capitalize text-muted-foreground">
+            {record.type} · {record.event_type} · {record.event_criteria?.length ?? 0} criteria
+          </div>
+        </div>
+      ),
     },
     {
-      title: 'Age Category',
+      title: 'Level',
+      dataIndex: ['event_levels', 'name'],
+      key: 'level',
+      width: 170,
+      render: (_: unknown, record: EventRecord) => {
+        const level = levelOf(record);
+        return (
+          <div className="min-w-0">
+            <div className="truncate text-foreground">{record.event_levels?.name ?? '—'}</div>
+            {level && !level.is_active && (
+              <span className="text-caption text-warning">Inactive level</span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      title: 'Age category',
       dataIndex: 'age_category',
       key: 'age_category',
       width: 150,
-    },
-    { 
-      title: 'Status', 
-      dataIndex: 'status', 
-      key: 'status', 
-      render: (status: string, record: Event) => {
-        const level = eventLevels.find(l => l.id === record.level_id);
-        const isInactive = level && !level.is_active;
-        return (
-          <Select
-            value={status}
-            onChange={(value) => updateEventStatus(record.id, value)}
-            style={{ width: 120, opacity: isInactive ? 0.6 : 1 }}
-            disabled={isInactive}
-          >
-            <Select.Option value="upcoming">Upcoming</Select.Option>
-            <Select.Option value="active">Active</Select.Option>
-            <Select.Option value="completed">Completed</Select.Option>
-          </Select>
-        );
-      }
+      filters: AGE_CATEGORIES.map((category) => ({ text: category, value: category })),
+      onFilter: (value: unknown, record: EventRecord) => record.age_category === value,
+      render: (category: string | null) =>
+        category ? <StatusPill>{category}</StatusPill> : <span className="text-muted-foreground">All</span>,
     },
     {
-      title: 'Actions',
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      width: 150,
+      render: (status: string, record: EventRecord) => (
+        <Select
+          value={status}
+          onChange={(value) => updateEventStatus(record.id, value)}
+          disabled={isLocked(record)}
+          size="small"
+          className="w-full"
+          options={STATUSES.map((option) => ({
+            value: option,
+            label: <span className="capitalize">{option}</span>,
+          }))}
+        />
+      ),
+    },
+    {
+      title: '',
       key: 'actions',
-      render: (_: any, record: Event) => {
-        const level = eventLevels.find(l => l.id === record.level_id);
-        const isInactive = level && !level.is_active;
+      width: 150,
+      fixed: 'right' as const,
+      render: (_: unknown, record: EventRecord) => {
+        const locked = isLocked(record);
         return (
-          <Space>
-            <Button 
-              type="text" 
-              icon={<Eye size={16} />} 
+          <div className="flex justify-end gap-1">
+            <RowButton
+              label="Open event"
+              icon={<Eye size={15} />}
+              disabled={locked}
               onClick={() => navigate(`/admin/events/${record.id}`)}
-              title="View Details"
-              disabled={isInactive}
-              style={{ opacity: isInactive ? 0.6 : 1 }}
             />
-            <Button 
-              type="text" 
-              icon={<Edit size={16} />} 
+            <RowButton
+              label="Edit event"
+              icon={<PencilSimple size={15} />}
+              disabled={locked}
               onClick={() => openModal(record)}
-              title="Edit Event"
-              disabled={isInactive}
-              style={{ opacity: isInactive ? 0.6 : 1 }}
             />
-            <Button 
-              type="text" 
-              icon={<Copy size={16} />} 
+            <RowButton
+              label="Duplicate event"
+              icon={<Copy size={15} />}
+              disabled={locked}
               onClick={() => openModal(record, true)}
-              title="Duplicate Event"
-              disabled={isInactive}
-              style={{ opacity: isInactive ? 0.6 : 1 }}
             />
-            <Popconfirm
-              title="Delete Event"
-              description="Are you sure you want to delete this event? This action cannot be undone."
-              onConfirm={() => deleteEvent(record.id)}
-              okText="Yes"
-              cancelText="No"
-              disabled={isInactive}
-            >
-              <Button 
-                type="text" 
-                danger 
-                icon={<Trash2 size={16} />} 
-                disabled={isInactive}
-                style={{ opacity: isInactive ? 0.6 : 1 }}
-              />
-            </Popconfirm>
-          </Space>
+            <RowButton
+              label="Delete event"
+              icon={<Trash size={15} />}
+              danger
+              disabled={locked}
+              onClick={() => deleteEvent(record)}
+            />
+          </div>
         );
       },
     },
   ];
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Navigation />
-      <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <Title level={2} style={{ margin: 0 }}>Event Management</Title>
-              <Space>
-                <Button 
-                  icon={<UploadIcon size={16} />} 
-                  onClick={() => setIsBulkImportModalOpen(true)}
-                  className="md:inline-flex hidden:flex"
+    <AppShell
+      variant="admin"
+      title="Events"
+      subtitle={`${events.length} events across ${eventLevels.length} levels`}
+      maxWidth="wide"
+      actions={
+        <>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<UploadSimple size={15} />}
+            onClick={openEventImport}
+          >
+            <span className="hidden sm:inline">Import events</span>
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<UploadSimple size={15} />}
+            onClick={() => setIsBulkImportModalOpen(true)}
+          >
+            <span className="hidden sm:inline">Import event participants</span>
+          </Button>
+          <Button size="sm" icon={<Plus size={15} />} onClick={() => openModal()}>
+            <span className="hidden sm:inline">Add event</span>
+          </Button>
+        </>
+      }
+    >
+      <DataTable
+        columns={columns}
+        dataSource={visibleEvents}
+        rowKey="id"
+        loading={loading}
+        scrollX={980}
+        rowSelection={{ selectedRowKeys, onChange: setSelectedRowKeys }}
+        toolbar={
+          <Toolbar
+            selectionCount={selectedRowKeys.length}
+            selectionActions={
+              <>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  icon={<Trash size={14} />}
+                  loading={batchDeleting}
+                  onClick={handleBatchDelete}
                 >
-                  <span className="hidden md:inline">Bulk Import Participants</span>
+                  Delete
                 </Button>
-                <Button 
-                  type="primary" 
-                  icon={<Plus size={16} />} 
-                  onClick={() => openModal()}
-                  className="md:inline-flex hidden:flex"
-                >
-                  <span className="hidden md:inline">Add Event</span>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedRowKeys([])}>
+                  Clear
                 </Button>
-              </Space>
-              {selectedRowKeys.length > 0 && (
-                <Popconfirm
-                  title={`Delete ${selectedRowKeys.length} event(s)?`}
-                  description="This action cannot be undone."
-                  onConfirm={handleBatchDelete}
-                  okText="Yes, Delete"
-                  cancelText="Cancel"
-                >
-                  <Button 
-                    danger 
-                    icon={<Trash2 size={16} />}
-                    loading={batchDeleting}
-                    className="md:inline-flex hidden:flex"
-                  >
-                    <span className="hidden md:inline">Delete Selected ({selectedRowKeys.length})</span>
-                  </Button>
-                </Popconfirm>
-              )}
-            </div>
-            <Text type="secondary">Create and manage competition events</Text>
-          </div>
-
-          <Card>
-            <ResponsiveTable
-              columns={columns}
-              dataSource={filteredEvents}
-              loading={loading}
-              rowKey="id"
-              rowSelection={rowSelection}
-              cardTitle={(record) => record.name}
-              cardExtra={(record) => (
-                <Space>
-                  <Badge color="blue" text={record.status} />
-                  <Button 
-                    size="small" 
-                    icon={<Eye size={14} />} 
-                    onClick={() => navigate(`/admin/events/${record.id}`)}
-                    title="View Details"
-                  />
-                  <Button 
-                    size="small" 
-                    icon={<Edit size={14} />} 
-                    onClick={() => openModal(record)}
-                    title="Edit Event"
-                  />
-                  <Button 
-                    size="small" 
-                    icon={<Copy size={14} />} 
-                    onClick={() => openModal(record, true)}
-                    title="Duplicate Event"
-                  />
-                  <Popconfirm
-                    title="Delete Event"
-                    description="Are you sure you want to delete this event?"
-                    onConfirm={() => deleteEvent(record.id)}
-                    okText="Yes"
-                    cancelText="No"
-                  >
-                    <Button size="small" danger icon={<Trash2 size={14} />} />
-                  </Popconfirm>
-                </Space>
-              )}
+              </>
+            }
+          >
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search events"
+              className="w-full max-w-xs"
             />
-          </Card>
-        </Content>
-      </Layout>
+            <Select
+              value={selectedLevelId}
+              onChange={setSelectedLevelId}
+              className="w-48"
+              options={[
+                { value: 'all', label: 'All event levels' },
+                ...eventLevels.map((level) => ({
+                  value: level.id,
+                  label: `${level.name} ${level.year}${level.is_active ? '' : ' (inactive)'}`,
+                })),
+              ]}
+            />
+          </Toolbar>
+        }
+        emptyIcon={<CalendarBlank size={22} />}
+        emptyTitle={search || selectedLevelId !== 'all' ? 'No matching events' : 'No events yet'}
+        emptyDescription={
+          search || selectedLevelId !== 'all'
+            ? 'Try a different search or event level.'
+            : 'Create an event and give it scoring criteria.'
+        }
+        emptyAction={
+          <Button size="sm" icon={<Plus size={14} />} onClick={() => openModal()}>
+            Add event
+          </Button>
+        }
+      />
 
-      {/* Event Modal */}
-      <Modal
-        title={editingEvent ? 'Edit Event' : duplicatingEvent ? 'Duplicate Event' : 'Create New Event'}
+      {/* ------------------------------------------------ event form */}
+      <Sheet
         open={isModalOpen}
-        onCancel={closeModal}
-        footer={null}
-        width={800}
-        destroyOnClose
+        onClose={closeModal}
+        dismissable={!submitting}
+        size="lg"
+        title={editingEvent ? 'Edit event' : duplicatingEvent ? 'Duplicate event' : 'Add event'}
+        description="Criteria decide what judges score and how much each part counts."
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" size="lg" onClick={closeModal} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button size="lg" block loading={submitting} onClick={() => form.submit()}>
+              {editingEvent ? 'Save changes' : 'Create event'}
+            </Button>
+          </div>
+        }
       >
-        <Form
-          form={form}
-          onFinish={onSubmit}
-          layout="vertical"
-          style={{ marginTop: '16px' }}
-        >
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <Form.Item
-              label="Event Name"
-              name="name"
-              rules={[{ required: true, message: 'Event name is required' }]}
-            >
-              <Input placeholder="Enter event name" />
-            </Form.Item>
+        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+          <Form.Item
+            label="Event name"
+            name="name"
+            rules={[{ required: true, message: 'Event name is required' }]}
+          >
+            <AntInput placeholder="Solo Song Female" />
+          </Form.Item>
 
+          <div className="grid gap-3 sm:grid-cols-2">
             <Form.Item
-              label="Event Type"
+              label="Format"
               name="type"
-              rules={[{ required: true, message: 'Event type is required' }]}
+              rules={[{ required: true, message: 'Format is required' }]}
             >
-              <Select>
-                <Select.Option value="writing">Writing</Select.Option>
-                <Select.Option value="stage">Stage Performance</Select.Option>
-              </Select>
+              <Select
+                options={[
+                  { value: 'stage', label: 'Stage' },
+                  { value: 'writing', label: 'Writing' },
+                ]}
+              />
             </Form.Item>
 
             <Form.Item
-              label="Event Category"
+              label="Entrant"
               name="event_type"
-              rules={[{ required: true, message: 'Event category is required' }]}
+              rules={[{ required: true, message: 'Entrant type is required' }]}
             >
-              <Select onChange={handleEventTypeChange}>
-                <Select.Option value="individual">Individual Event</Select.Option>
-                <Select.Option value="group">Group Event</Select.Option>
-              </Select>
+              <Select
+                options={[
+                  { value: 'individual', label: 'Individual' },
+                  { value: 'group', label: 'Group' },
+                ]}
+              />
             </Form.Item>
 
             <Form.Item
-              label="Event Level"
+              label="Event level"
               name="level_id"
               rules={[{ required: true, message: 'Event level is required' }]}
             >
-              <Select placeholder="Select event level">
-                {eventLevels.map(level => (
-                  <Select.Option 
-                    key={level.id} 
-                    value={level.id}
-                    disabled={!level.is_active && !editingEvent}
-                  >
-                    {level.name} ({level.year}) {!level.is_active ? '(Inactive)' : ''}
-                  </Select.Option>
-                ))}
-              </Select>
+              <Select
+                placeholder="Select level"
+                options={eventLevels.map((level) => ({
+                  value: level.id,
+                  label: `${level.name} ${level.year}${level.is_active ? '' : ' (inactive)'}`,
+                  disabled: !level.is_active,
+                }))}
+              />
             </Form.Item>
 
-            <Form.Item
-              label="Age Category"
-              name="age_category"
-              rules={[
-                { 
-                  required: eventType === 'individual', 
-                  message: 'Age category is required for individual events' 
-                }
-              ]}
-            >
-              <Select 
-                placeholder={eventType === 'group' ? 'Optional' : 'Select age category'}
+            <Form.Item label="Age category" name="age_category">
+              <Select
                 allowClear
-              >
-                <Select.Option value="Sub Juniors">Sub Juniors</Select.Option>
-                <Select.Option value="Juniors">Juniors</Select.Option>
-                <Select.Option value="Intermediates">Intermediates</Select.Option>
-                <Select.Option value="Seniors">Seniors</Select.Option>
-              </Select>
+                placeholder="All categories"
+                options={AGE_CATEGORIES.map((category) => ({ value: category, label: category }))}
+              />
             </Form.Item>
 
             <Form.Item
@@ -897,234 +876,291 @@ const EventManagement = () => {
               name="status"
               rules={[{ required: true, message: 'Status is required' }]}
             >
-              <Select>
-                <Select.Option value="upcoming">Upcoming</Select.Option>
-                <Select.Option value="active">Active</Select.Option>
-                <Select.Option value="completed">Completed</Select.Option>
-              </Select>
+              <Select
+                options={STATUSES.map((status) => ({
+                  value: status,
+                  label: <span className="capitalize">{status}</span>,
+                }))}
+              />
             </Form.Item>
 
-            <Form.Item
-              label="Time Limit (minutes)"
-              name="time_limit"
-              normalize={(value) => value ? parseInt(value) : undefined}
-              rules={[{ type: 'number', min: 1, message: 'Time limit must be at least 1 minute' }]}
-            >
-              <Input type="number" placeholder="Optional" />
+            <Form.Item label="Running order" name="event_order">
+              <InputNumber className="w-full" min={1} placeholder="Optional" />
             </Form.Item>
 
-            <Form.Item
-              label="Max Participants"
-              name="max_participants"
-              normalize={(value) => value ? parseInt(value) : undefined}
-              rules={[{ type: 'number', min: 1, message: 'Max participants must be at least 1' }]}
-            >
-              <Input type="number" placeholder="Optional" />
+            <Form.Item label="Time limit (minutes)" name="time_limit">
+              <InputNumber className="w-full" min={1} placeholder="Optional" />
             </Form.Item>
 
-            <Form.Item
-              label="Event Order"
-              name="event_order"
-              normalize={(value) => value ? parseInt(value) : undefined}
-              rules={[{ type: 'number', min: 1, message: 'Event order must be at least 1' }]}
-            >
-              <Input type="number" placeholder="Optional" />
+            <Form.Item label="Max participants" name="max_participants">
+              <InputNumber className="w-full" min={1} placeholder="Optional" />
             </Form.Item>
           </div>
 
-          <Form.Item
-            label="Rules"
-            name="rules"
-          >
-            <TextArea rows={3} placeholder="Enter event rules (optional)" />
+          <Form.Item label="Rules" name="rules">
+            <AntInput.TextArea rows={2} placeholder="Optional notes shown to organisers" />
           </Form.Item>
+        </Form>
 
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <Text strong>Scoring Criteria</Text>
-              <Button 
-                type="dashed" 
-                size="small" 
-                icon={<Plus size={14} />} 
-                onClick={addCriteria}
+        <div className="mb-3">
+          <div className="mb-2 flex items-center justify-between">
+            <div>
+              <p className="text-caption font-medium text-foreground">Scoring criteria</p>
+              <p className="text-caption text-muted-foreground">
+                Judges score each criterion out of its maximum.
+              </p>
+            </div>
+            <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={addCriteria}>
+              Add
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            {criteria.map((criterion, index) => (
+              <div
+                key={index}
+                className="flex items-end gap-2 rounded-xl border border-border bg-surface-sunken p-2.5"
               >
-                Add Criteria
+                <label className="min-w-0 flex-1">
+                  <span className="mb-1 block text-caption text-muted-foreground">Name</span>
+                  <AntInput
+                    value={criterion.name}
+                    onChange={(changeEvent) => updateCriteria(index, 'name', changeEvent.target.value)}
+                    placeholder="Voice quality"
+                  />
+                </label>
+                <label className="w-20">
+                  <span className="mb-1 block text-caption text-muted-foreground">Max</span>
+                  <InputNumber
+                    className="w-full"
+                    min={1}
+                    value={criterion.max_score}
+                    onChange={(value) => updateCriteria(index, 'max_score', Number(value ?? 10))}
+                  />
+                </label>
+                <label className="w-20">
+                  <span className="mb-1 block text-caption text-muted-foreground">Weight</span>
+                  <InputNumber
+                    className="w-full"
+                    min={0.1}
+                    step={0.1}
+                    value={criterion.weight}
+                    onChange={(value) => updateCriteria(index, 'weight', Number(value ?? 1))}
+                  />
+                </label>
+                <button
+                  type="button"
+                  aria-label="Remove criterion"
+                  disabled={criteria.length === 1}
+                  onClick={() => removeCriteria(index)}
+                  className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive-soft hover:text-destructive disabled:opacity-40"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Sheet>
+
+      <Sheet
+        open={isEventImportOpen}
+        onClose={() => {
+          setIsEventImportOpen(false);
+          resetEventImport();
+        }}
+        dismissable={!importingEvents}
+        size="lg"
+        title="Import events"
+        description="One row per criterion; rows sharing an event name and age category build one event."
+        footer={
+          eventImportFile ? (
+            <div className="flex gap-2">
+              <Button variant="secondary" size="lg" onClick={resetEventImport} disabled={importingEvents}>
+                Change file
+              </Button>
+              <Button
+                size="lg"
+                block
+                loading={importingEvents}
+                disabled={eventImportErrors.length > 0 || parsedEvents.length === 0}
+                onClick={runEventImport}
+              >
+                Import {parsedEvents.length} events
               </Button>
             </div>
-            <Text type="secondary">Define the scoring criteria for this event</Text>
-          </div>
-
-          {criteria.map((criterion, index) => (
-            <div key={index} style={{ 
-              display: 'grid', 
-              gridTemplateColumns: '2fr 1fr 1fr auto', 
-              gap: '8px', 
-              alignItems: 'end',
-              marginBottom: '8px',
-              padding: '12px',
-              border: '1px solid #f0f0f0',
-              borderRadius: '6px'
-            }}>
-              <div>
-                <Text strong style={{ display: 'block', marginBottom: '4px' }}>
-                  Criteria Name <Text type="danger">*</Text>
-                </Text>
-                <Input 
-                  placeholder="e.g., Voice Quality" 
-                  value={criterion.name}
-                  onChange={(e) => updateCriteria(index, 'name', e.target.value)}
-                />
-              </div>
-
-              <div>
-                <Text strong style={{ display: 'block', marginBottom: '4px' }}>Max Score</Text>
-                <Input 
-                  type="number" 
-                  min={1}
-                  value={criterion.max_score}
-                  onChange={(e) => updateCriteria(index, 'max_score', parseInt(e.target.value) || 1)}
-                />
-              </div>
-
-              <div>
-                <Text strong style={{ display: 'block', marginBottom: '4px' }}>Weight</Text>
-                <Input 
-                  type="number" 
-                  min={0.1} 
-                  step={0.1}
-                  value={criterion.weight}
-                  onChange={(e) => updateCriteria(index, 'weight', parseFloat(e.target.value) || 1.0)}
-                />
-              </div>
-
-              <Button
-                type="text"
-                danger
-                icon={<X size={14} />}
-                onClick={() => removeCriteria(index)}
-                disabled={criteria.length === 1}
-                style={{ marginBottom: '4px' }}
-              />
-            </div>
-          ))}
-
-
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
-            <Button onClick={closeModal}>
-              Cancel
-            </Button>
-            <Button type="primary" htmlType="submit" loading={submitting}>
-              {editingEvent ? 'Update Event' : duplicatingEvent ? 'Create Duplicate Event' : 'Create Event'}
-            </Button>
-          </div>
-        </Form>
-      </Modal>
-
-      {/* Bulk Import Modal */}
-      <Modal
-        title="Bulk Import Participants to Events"
-        open={isBulkImportModalOpen}
-        onCancel={closeBulkImportModal}
-        footer={null}
-        width={600}
-        destroyOnClose
+          ) : undefined
+        }
       >
-        <div style={{ marginTop: '16px' }}>
-          <div style={{ marginBottom: '16px' }}>
-            <Text strong>CSV Format Requirements:</Text>
-            <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
-              <li>First column: <Text code>chest_number</Text></li>
-              <li>Second column: <Text code>age_category</Text> (Sub Juniors, Juniors, Intermediates, Seniors)</li>
-              <li>Third column: <Text code>events</Text> (comma-separated event names)</li>
-              <li>Example: <Text code>201,Juniors,"Solo Song Female, Bible Quiz"</Text></li>
-            </ul>
-          </div>
-
-          <div style={{ marginBottom: '16px' }}>
-            <Text strong>Important Notes:</Text>
-            <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
-              <li>Age category in CSV must match the participant's age category in the database</li>
-              <li>Events are matched by name + age category combination</li>
-              <li>Same event name can exist for different age categories (e.g., "Solo Song Female" for Juniors, Intermediates, Seniors)</li>
-            </ul>
-          </div>
-
-          {!importResults && (
-            <Upload.Dragger
-              accept=".csv"
-              beforeUpload={(file) => {
-                handleBulkImport(file);
-                return false; // Prevent default upload
-              }}
-              disabled={bulkImportLoading}
-              style={{ marginBottom: '16px' }}
-            >
-              <p className="ant-upload-drag-icon">
-                <UploadIcon size={48} />
-              </p>
-              <p className="ant-upload-text">
-                Click or drag CSV file to this area to upload
-              </p>
-              <p className="ant-upload-hint">
-                Only CSV files are supported
-              </p>
-            </Upload.Dragger>
-          )}
-
-          {bulkImportLoading && (
-            <div style={{ marginBottom: '16px' }}>
-              <Text>Processing CSV file...</Text>
-              <Progress percent={importProgress} style={{ marginTop: '8px' }} />
-            </div>
-          )}
-
-          {importResults && (
-            <div>
-              <Text strong>Import Results:</Text>
-              <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '6px' }}>
-                <div style={{ marginBottom: '8px' }}>
-                  <Text style={{ color: '#52c41a' }}>✓ Successfully added: {importResults.success}</Text>
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                  <Text style={{ color: '#faad14' }}>⚠ Already registered: {importResults.skipped}</Text>
-                </div>
-                <div>
-                  <Text style={{ color: '#ff4d4f' }}>✗ Errors: {importResults.errors.length}</Text>
-                </div>
-              </div>
-
-              {importResults.errors.length > 0 && (
-                <div style={{ marginTop: '16px' }}>
-                  <Text strong>Error Details:</Text>
-                  <div style={{ 
-                    marginTop: '8px', 
-                    maxHeight: '200px', 
-                    overflowY: 'auto', 
-                    border: '1px solid #d9d9d9', 
-                    borderRadius: '6px',
-                    padding: '8px'
-                  }}>
-                    {importResults.errors.map((error, index) => (
-                      <div key={index} style={{ marginBottom: '4px', fontSize: '12px' }}>
-                        <Text code>{error.chest_number}</Text>: {error.error}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div style={{ marginTop: '16px', textAlign: 'right' }}>
-                <Button onClick={closeBulkImportModal}>
-                  Close
-                </Button>
-              </div>
-            </div>
-          )}
+        <div className="mb-3">
+          <label className="mb-1.5 block text-caption font-medium text-foreground">Event level</label>
+          <Select
+            value={eventImportLevel || undefined}
+            onChange={(value) => {
+              setEventImportLevel(value);
+              resetEventImport();
+            }}
+            className="w-full"
+            placeholder="Which level do these events belong to?"
+            options={eventLevels.map((level) => ({
+              value: level.id,
+              label: `${level.name} ${level.year}${level.is_active ? '' : ' (inactive)'}`,
+              disabled: !level.is_active,
+            }))}
+          />
         </div>
-      </Modal>
-    </Layout>
+
+        {!eventImportFile ? (
+          <ImportPanel
+            template="events"
+            onFile={handleEventImportFile}
+            disabled={importingEvents || !eventImportLevel}
+          />
+        ) : (
+          <div className="space-y-3">
+            <ImportSummary file={eventImportFile} rows={parsedEvents.length} label="events" />
+            <ImportIssues
+              errors={eventImportErrors}
+              title={`${eventImportErrors.length} problems — fix these and upload again`}
+            />
+
+            {eventImportErrors.length === 0 && (
+              <ul className="divide-y divide-border rounded-xl border border-border">
+                {parsedEvents.map((event) => (
+                  <li key={`${event.name}-${event.age_category}`} className="px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-body font-medium text-foreground">
+                        {event.name}
+                      </span>
+                      <span className="shrink-0 text-caption capitalize text-muted-foreground">
+                        {event.age_category ?? 'All categories'} · {event.type} · {event.event_type}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 truncate text-caption text-muted-foreground">
+                      {event.criteria
+                        .map((criterion) => `${criterion.name} /${criterion.max_score}`)
+                        .join(' · ')}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <p className="pb-2 text-caption text-muted-foreground">
+              Imported events start as upcoming, with no judges or entrants attached yet.
+            </p>
+          </div>
+        )}
+      </Sheet>
+
+      {/* --------------------------------------------- entrant import */}
+      <Sheet
+        open={isBulkImportModalOpen}
+        onClose={closeBulkImportModal}
+        dismissable={!bulkImportLoading}
+        size="lg"
+        title="Import event participants"
+        description="Adds participants who already exist to events that already exist."
+        footer={
+          importResults ? (
+            <Button size="lg" block onClick={closeBulkImportModal}>
+              Done
+            </Button>
+          ) : undefined
+        }
+      >
+        <ImportPanel
+          template="eventParticipants"
+          onFile={handleBulkImport}
+          disabled={bulkImportLoading || Boolean(importResults)}
+        />
+
+        {bulkImportLoading && (
+          <div className="mb-3">
+            <p className="mb-2 text-caption text-muted-foreground">
+              Processing… {importProgress}%
+            </p>
+            <ProgressBar value={importProgress} />
+          </div>
+        )}
+
+        {importResults && (
+          <div className="mb-2 space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              <ResultTile label="Added" value={importResults.success} tone="success" />
+              <ResultTile label="Already in" value={importResults.skipped} tone="warning" />
+              <ResultTile label="Failed" value={importResults.errors.length} tone="danger" />
+            </div>
+
+            {importResults.errors.length > 0 && (
+              <div className="rounded-xl border border-destructive/30 bg-destructive-soft p-3">
+                <p className="mb-1 text-caption font-semibold text-destructive">Errors</p>
+                <ul className="scrollbar-thin max-h-48 space-y-0.5 overflow-y-auto">
+                  {importResults.errors.map((error, index) => (
+                    <li key={`${error.chest_number}-${index}`} className="text-caption text-destructive/90">
+                      <span className="font-medium">#{error.chest_number}</span>: {error.error}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </Sheet>
+    </AppShell>
   );
 };
+
+const RowButton = ({
+  label,
+  icon,
+  onClick,
+  danger,
+  disabled,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+  disabled?: boolean;
+}) => (
+  <button
+    type="button"
+    title={label}
+    aria-label={label}
+    onClick={onClick}
+    disabled={disabled}
+    className={cn(
+      'flex h-9 w-9 items-center justify-center rounded-lg transition-colors disabled:text-muted-foreground/45 disabled:hover:bg-transparent',
+      danger
+        ? 'text-muted-foreground hover:bg-destructive-soft hover:text-destructive'
+        : 'text-muted-foreground hover:bg-surface-sunken hover:text-foreground',
+    )}
+  >
+    {icon}
+  </button>
+);
+
+const ResultTile = ({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: 'success' | 'warning' | 'danger';
+}) => (
+  <div
+    className={cn(
+      'rounded-xl p-3 text-center',
+      tone === 'success' && 'bg-success-soft text-success',
+      tone === 'warning' && 'bg-warning-soft text-warning',
+      tone === 'danger' && 'bg-destructive-soft text-destructive',
+    )}
+  >
+    <p className="tnum text-title font-semibold">{value}</p>
+    <p className="text-caption">{label}</p>
+  </div>
+);
 
 export default EventManagement;

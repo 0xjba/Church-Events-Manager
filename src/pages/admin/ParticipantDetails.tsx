@@ -1,13 +1,20 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Modal, message } from 'antd';
+import { ArrowLeft, CalendarBlank, Trash, Trophy } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
-import Navigation from '@/components/Navigation';
-import ResponsiveTable from '@/components/ResponsiveTable';
-import { Layout, Card, Button, message, Spin, Space, Typography, Badge, Popconfirm } from 'antd';
-import { ArrowLeft, Edit, Trash2 } from 'lucide-react';
-
-const { Content } = Layout;
-const { Title, Text } = Typography;
+import { AppShell } from '@/components/shell/AppShell';
+import { DataTable } from '@/components/admin/DataTable';
+import { formatScore } from '@/lib/utils';
+import {
+  Button,
+  Card,
+  CardHeader,
+  Skeleton,
+  StatTile,
+  StatusPill,
+  statusTone,
+} from '@/components/ui/primitives';
 
 interface Participant {
   id: string;
@@ -20,7 +27,7 @@ interface Participant {
   created_at: string;
 }
 
-interface Event {
+interface EventRecord {
   id: string;
   name: string;
   type: string;
@@ -34,7 +41,7 @@ interface EventParticipant {
   event_id: string;
   participant_id: string;
   registered_at: string;
-  event: Event;
+  event: EventRecord;
 }
 
 interface Result {
@@ -50,23 +57,16 @@ interface Result {
 const ParticipantDetails = () => {
   const { participantId } = useParams<{ participantId: string }>();
   const navigate = useNavigate();
-  
+
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [eventParticipants, setEventParticipants] = useState<EventParticipant[]>([]);
   const [results, setResults] = useState<Result[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (participantId) {
-      fetchParticipantDetails();
-    }
-  }, [participantId]);
-
-  const fetchParticipantDetails = async () => {
+  const fetchParticipantDetails = useCallback(async () => {
     try {
       setLoading(true);
 
-      // Fetch participant details
       const { data: participantData, error: participantError } = await supabase
         .from('participants')
         .select('*')
@@ -74,261 +74,227 @@ const ParticipantDetails = () => {
         .single();
 
       if (participantError) throw participantError;
-      setParticipant(participantData);
+      setParticipant(participantData as Participant);
 
-      // Fetch participant's events
       const { data: eventsData, error: eventsError } = await supabase
         .from('event_participants')
-        .select(`
-          *,
-          event:events (
-            id,
-            name,
-            type,
-            status,
-            age_category,
-            created_at
-          )
-        `)
+        .select(`*, event:events ( id, name, type, status, age_category, created_at )`)
         .eq('participant_id', participantId)
         .order('registered_at', { ascending: false });
 
       if (eventsError) throw eventsError;
-      setEventParticipants(eventsData || []);
+      setEventParticipants((eventsData || []) as unknown as EventParticipant[]);
 
-      // Fetch results for this participant
       const { data: resultsData, error: resultsError } = await supabase
         .from('results')
         .select('*')
         .eq('participant_id', participantId);
 
       if (resultsError) throw resultsError;
-      setResults(resultsData || []);
-
-    } catch (error: any) {
-      message.error(error.message || 'Failed to fetch participant details');
+      setResults((resultsData || []) as Result[]);
+    } catch (error) {
+      message.error(
+        error instanceof Error ? error.message : 'Failed to fetch participant details',
+      );
       navigate('/admin/participants');
     } finally {
       setLoading(false);
     }
+  }, [participantId, navigate]);
+
+  useEffect(() => {
+    if (participantId) fetchParticipantDetails();
+  }, [participantId, fetchParticipantDetails]);
+
+  const removeFromEvent = (eventId: string, eventName: string) => {
+    Modal.confirm({
+      title: `Remove from ${eventName}?`,
+      content: 'Scores already recorded for this event are removed as well.',
+      okText: 'Remove',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const { error } = await supabase
+            .from('event_participants')
+            .delete()
+            .eq('event_id', eventId)
+            .eq('participant_id', participantId);
+
+          if (error) throw error;
+          message.success(`Removed from ${eventName}`);
+          fetchParticipantDetails();
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : 'Failed to remove participant');
+        }
+      },
+    });
   };
 
-  const removeFromEvent = async (eventId: string, eventName: string) => {
-    try {
-      const { error } = await supabase
-        .from('event_participants')
-        .delete()
-        .eq('event_id', eventId)
-        .eq('participant_id', participantId);
-
-      if (error) throw error;
-
-      message.success(`Removed from ${eventName}`);
-      fetchParticipantDetails(); // Refresh data
-    } catch (error: any) {
-      message.error(error.message || 'Failed to remove from event');
-    }
-  };
-
-  const getResultForEvent = (eventId: string) => {
-    return results.find(result => result.event_id === eventId);
-  };
-
-
-  const getRankDisplay = (rank: number | null) => {
-    if (rank === null) return 'No rank';
-    if (rank === 1) return '🥇 1st Place';
-    if (rank === 2) return '🥈 2nd Place';
-    if (rank === 3) return '🥉 3rd Place';
-    return `${rank}th Place`;
-  };
+  const bestRank = results.reduce<number | null>(
+    (best, result) =>
+      result.rank === null ? best : best === null ? result.rank : Math.min(best, result.rank),
+    null,
+  );
 
   const columns = [
     {
       title: 'Event',
       dataIndex: ['event', 'name'],
-      key: 'event_name',
-      width: 200,
-      render: (name: string, record: EventParticipant) => (
-        <div>
-          <div style={{ fontWeight: 500 }}>{name}</div>
-          <div style={{ fontSize: '12px', color: '#666' }}>
-            {record.event.type} • {record.event.age_category || 'All Categories'}
+      key: 'event',
+      render: (_: unknown, record: EventParticipant) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium text-foreground">{record.event?.name}</div>
+          <div className="truncate text-caption capitalize text-muted-foreground">
+            {record.event?.age_category || 'All categories'} · {record.event?.type}
           </div>
         </div>
-      )
+      ),
     },
     {
       title: 'Status',
       dataIndex: ['event', 'status'],
       key: 'status',
-      width: 120,
-      render: (status: string) => (
-        <Text>{status.charAt(0).toUpperCase() + status.slice(1)}</Text>
-      )
+      width: 130,
+      render: (_: unknown, record: EventParticipant) => (
+        <StatusPill tone={statusTone(record.event?.status)} dot>
+          {record.event?.status}
+        </StatusPill>
+      ),
     },
     {
       title: 'Result',
       key: 'result',
-      width: 150,
-      render: (_: any, record: EventParticipant) => {
-        const result = getResultForEvent(record.event_id);
-        if (!result) {
-          return <Text type="secondary">No result yet</Text>;
-        }
+      width: 160,
+      render: (_: unknown, record: EventParticipant) => {
+        const result = results.find((candidate) => candidate.event_id === record.event_id);
+        if (!result) return <span className="text-muted-foreground">Not published</span>;
         return (
-          <div>
-            <div style={{ fontWeight: 500 }}>
-              {getRankDisplay(result.rank)}
-            </div>
-            <div style={{ fontSize: '12px', color: '#666' }}>
-              Score: {result.total_score}
-            </div>
+          <div className="tnum">
+            <span className="font-semibold text-foreground">
+              {result.rank ? `Rank ${result.rank}` : '—'}
+            </span>
+            <span className="ml-2 text-caption text-muted-foreground">{formatScore(result.total_score)} pts</span>
           </div>
         );
-      }
+      },
     },
     {
       title: 'Registered',
       dataIndex: 'registered_at',
       key: 'registered_at',
-      width: 120,
-      render: (date: string) => new Date(date).toLocaleDateString()
+      width: 130,
+      render: (date: string) => (
+        <span className="text-muted-foreground">{new Date(date).toLocaleDateString()}</span>
+      ),
     },
     {
-      title: 'Actions',
+      title: '',
       key: 'actions',
-      width: 100,
-      render: (_: any, record: EventParticipant) => (
-        <Popconfirm
-          title="Remove from Event"
-          description={`Are you sure you want to remove ${participant?.full_name} from ${record.event.name}?`}
-          onConfirm={() => removeFromEvent(record.event_id, record.event.name)}
-          okText="Yes"
-          cancelText="No"
+      width: 60,
+      fixed: 'right' as const,
+      render: (_: unknown, record: EventParticipant) => (
+        <button
+          type="button"
+          aria-label="Remove from event"
+          title="Remove from event"
+          onClick={() => removeFromEvent(record.event_id, record.event?.name)}
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive-soft hover:text-destructive"
         >
-          <Button
-            type="text"
-            danger
-            icon={<Trash2 size={16} />}
-            title="Remove from event"
-          />
-        </Popconfirm>
-      )
-    }
+          <Trash size={15} />
+        </button>
+      ),
+    },
   ];
 
-  if (loading) {
-    return (
-      <Layout style={{ minHeight: '100vh' }}>
-        <Navigation />
-        <Layout className="md:ml-64">
-          <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
-              <Spin size="large" />
-            </div>
-          </Content>
-        </Layout>
-      </Layout>
-    );
-  }
-
-  if (!participant) {
-    return (
-      <Layout style={{ minHeight: '100vh' }}>
-        <Navigation />
-        <Layout className="md:ml-64">
-          <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
-            <div style={{ textAlign: 'center', padding: '40px' }}>
-              <Title level={3}>Participant not found</Title>
-              <Button onClick={() => navigate('/admin/participants')}>
-                Back to Participants
-              </Button>
-            </div>
-          </Content>
-        </Layout>
-      </Layout>
-    );
-  }
-
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Navigation />
-      <Layout className="md:ml-64">
-        <Content style={{ padding: '16px', paddingBottom: '80px', paddingTop: '80px' }} className="md:px-6 md:pt-4">
-          {/* Header */}
-          <div style={{ marginBottom: '24px' }}>
-            <Button 
-              icon={<ArrowLeft size={16} />} 
-              onClick={() => navigate('/admin/participants')}
-              style={{ marginBottom: '16px' }}
-            >
-              Back to Participants
-            </Button>
-            
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <Title level={2} style={{ margin: 0 }}>
-                {participant.full_name}
-              </Title>
+    <AppShell
+      variant="admin"
+      title={participant?.full_name ?? 'Participant'}
+      subtitle={participant ? `#${participant.chest_number} · ${participant.church}` : undefined}
+      maxWidth="wide"
+      actions={
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={<ArrowLeft size={15} />}
+          onClick={() => navigate('/admin/participants')}
+        >
+          <span className="hidden sm:inline">All participants</span>
+        </Button>
+      }
+    >
+      {loading ? (
+        <div className="space-y-4">
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      ) : (
+        participant && (
+          <>
+            <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <StatTile
+                label="Events"
+                value={eventParticipants.length}
+                hint="Registered"
+                icon={<CalendarBlank size={15} />}
+                tone="primary"
+              />
+              <StatTile
+                label="Results"
+                value={results.length}
+                hint="Published"
+                icon={<Trophy size={15} />}
+                tone="success"
+              />
+              <StatTile label="Best rank" value={bestRank ?? '—'} hint="Across events" />
+              <StatTile
+                label="Age category"
+                value={<span className="text-title">{participant.age_category}</span>}
+                hint={participant.district}
+              />
             </div>
-            
-            {/* Participant Info */}
-            <Card style={{ marginBottom: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                <div>
-                  <Text type="secondary">Chest Number</Text>
-                  <div style={{ fontWeight: 500, fontSize: '16px' }}>#{participant.chest_number}</div>
-                </div>
-                <div>
-                  <Text type="secondary">Age Category</Text>
-                  <div style={{ fontWeight: 500, fontSize: '16px' }}>{participant.age_category}</div>
-                </div>
-                <div>
-                  <Text type="secondary">Church</Text>
-                  <div style={{ fontWeight: 500, fontSize: '16px' }}>{participant.church}</div>
-                </div>
-                <div>
-                  <Text type="secondary">District</Text>
-                  <div style={{ fontWeight: 500, fontSize: '16px' }}>{participant.district}</div>
-                </div>
-              </div>
+
+            <Card className="mb-4">
+              <CardHeader title="Details" subtitle="Registration record" />
+              <dl className="grid gap-x-8 gap-y-3 px-4 pb-5 pt-1 md:grid-cols-3 md:px-5">
+                <Detail label="Full name" value={participant.full_name} />
+                <Detail label="Chest number" value={`#${participant.chest_number}`} />
+                <Detail label="Username" value={participant.username} />
+                <Detail label="Church" value={participant.church} />
+                <Detail label="District" value={participant.district} />
+                <Detail
+                  label="Registered"
+                  value={new Date(participant.created_at).toLocaleDateString()}
+                />
+              </dl>
             </Card>
-          </div>
 
-          {/* Events Table */}
-          <Card>
-            <div style={{ marginBottom: '16px' }}>
-              <Title level={4} style={{ margin: 0 }}>Participating Events</Title>
-              <Text type="secondary">
-                {eventParticipants.length} event{eventParticipants.length !== 1 ? 's' : ''} registered
-              </Text>
-            </div>
-
-            <ResponsiveTable
+            <DataTable
               columns={columns}
               dataSource={eventParticipants}
-              loading={loading}
               rowKey="id"
-              cardTitle={(record) => record.event.name}
-              cardExtra={(record) => (
-                <Space>
-                  <Text>{record.event.status.charAt(0).toUpperCase() + record.event.status.slice(1)}</Text>
-                  {getResultForEvent(record.event_id) && (
-                    <Text type="secondary">
-                      {getRankDisplay(getResultForEvent(record.event_id)?.rank || null)}
-                    </Text>
-                  )}
-                </Space>
-              )}
-              locale={{
-                emptyText: 'No events registered yet'
-              }}
+              scrollX={720}
+              toolbar={
+                <span className="text-caption text-muted-foreground">
+                  Events this participant is entered in
+                </span>
+              }
+              emptyIcon={<CalendarBlank size={22} />}
+              emptyTitle="Not entered in any events"
+              emptyDescription="Add this participant to an event from the event's page."
             />
-          </Card>
-        </Content>
-      </Layout>
-    </Layout>
+          </>
+        )
+      )}
+    </AppShell>
   );
 };
+
+const Detail = ({ label, value }: { label: string; value: string }) => (
+  <div className="min-w-0">
+    <dt className="text-caption text-muted-foreground">{label}</dt>
+    <dd className="truncate text-body font-medium text-foreground">{value}</dd>
+  </div>
+);
 
 export default ParticipantDetails;
