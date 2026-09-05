@@ -1,17 +1,17 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Table } from 'antd';
 import type { TableProps } from 'antd';
-import { ArrowsInLineVertical, ArrowsOutLineVertical } from '@phosphor-icons/react';
 import { EmptyState } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
 
 /**
  * Admin tables.
  *
- * Density is a preference, not a house style, so the toggle ships rather than
- * guessing whether this admin wants air or rows. The table keeps its own
- * horizontal scroll so a wide table never widens the page.
+ * The table keeps its own horizontal scroll so a wide table never widens the
+ * page. Pass `onReorder` to let an admin drag rows into a new order; the table
+ * only reports the move, the page owns what the order means and how it is
+ * saved.
  */
 export function DataTable<T extends object>({
   columns,
@@ -25,9 +25,11 @@ export function DataTable<T extends object>({
   emptyIcon,
   emptyAction,
   toolbar,
+  actions,
   footer,
   scrollX = 900,
   className,
+  onReorder,
 }: {
   columns: TableProps<T>['columns'];
   dataSource: T[];
@@ -40,31 +42,46 @@ export function DataTable<T extends object>({
   emptyIcon?: ReactNode;
   emptyAction?: ReactNode;
   toolbar?: ReactNode;
+  actions?: ReactNode;
   footer?: ReactNode;
   scrollX?: number;
   className?: string;
+  onReorder?: (from: number, to: number) => void;
 }) {
-  const [compact, setCompact] = useState(false);
+  // The row being dragged lives in a ref: it changes on every dragover and
+  // re-rendering the table mid-drag drops the drag.
+  const dragFrom = useRef<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+
+  const rowProps: TableProps<Record<string, unknown>>['onRow'] = onReorder
+    ? (_record, index) => ({
+        draggable: true,
+        onDragStart: () => {
+          dragFrom.current = index ?? null;
+        },
+        onDragOver: (dragEvent) => {
+          dragEvent.preventDefault();
+          if (index !== dragOver) setDragOver(index ?? null);
+        },
+        onDrop: () => {
+          const from = dragFrom.current;
+          if (from !== null && index !== undefined && from !== index) onReorder(from, index);
+          dragFrom.current = null;
+          setDragOver(null);
+        },
+        onDragEnd: () => {
+          dragFrom.current = null;
+          setDragOver(null);
+        },
+      })
+    : undefined;
 
   return (
     <div className={cn('overflow-hidden rounded-xl border border-border bg-surface shadow-card', className)}>
-      {(toolbar || dataSource.length > 0) && (
+      {(toolbar || actions) && (
         <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
           <div className="min-w-0 flex-1">{toolbar}</div>
-          <div className="flex shrink-0 items-center gap-1 rounded-lg bg-surface-sunken p-0.5">
-            <DensityButton
-              active={!compact}
-              label="Comfortable rows"
-              onClick={() => setCompact(false)}
-              icon={<ArrowsOutLineVertical size={15} />}
-            />
-            <DensityButton
-              active={compact}
-              label="Compact rows"
-              onClick={() => setCompact(true)}
-              icon={<ArrowsInLineVertical size={15} />}
-            />
-          </div>
+          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
         </div>
       )}
 
@@ -76,12 +93,18 @@ export function DataTable<T extends object>({
         rowKey={rowKey}
         loading={loading}
         rowSelection={rowSelection as TableProps<Record<string, unknown>>['rowSelection']}
-        size={compact ? 'small' : 'middle'}
+        size="middle"
+        onRow={rowProps}
+        rowClassName={(_row, index) =>
+          onReorder
+            ? cn('cursor-grab active:cursor-grabbing', index === dragOver && 'bg-primary/10')
+            : ''
+        }
         pagination={
           pagination === false
             ? false
             : {
-                pageSize: compact ? 25 : 12,
+                pageSize: 12,
                 showSizeChanger: false,
                 hideOnSinglePage: true,
                 ...(typeof pagination === 'object' ? pagination : {}),
@@ -104,29 +127,3 @@ export function DataTable<T extends object>({
     </div>
   );
 }
-
-const DensityButton = ({
-  active,
-  label,
-  onClick,
-  icon,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-  icon: ReactNode;
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    aria-label={label}
-    aria-pressed={active}
-    title={label}
-    className={cn(
-      'flex h-8 w-8 items-center justify-center rounded-md transition-colors',
-      active ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-    )}
-  >
-    {icon}
-  </button>
-);

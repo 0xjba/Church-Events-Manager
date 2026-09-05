@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Form, Input as AntInput, InputNumber, Modal, Select, message } from 'antd';
-import { CalendarBlank, Copy, Eye, FileCsv, PencilSimple, Plus, Trash, UploadSimple, X } from '@phosphor-icons/react';
+import { ArrowsDownUp, CalendarBlank, Check, Copy, DotsSixVertical, Eye, FileCsv, PencilSimple, Plus, Trash, UploadSimple, X } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import type { FormValues } from '@/lib/types';
 import { useEventLevel } from '@/hooks/useEventLevel';
@@ -68,6 +68,9 @@ const EventManagement = () => {
   const [form] = Form.useForm();
   const [criteria, setCriteria] = useState<Criteria[]>([{ name: '', max_score: 10, weight: 1.0 }]);
 
+  const [reordering, setReordering] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false);
+
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [batchDeleting, setBatchDeleting] = useState(false);
 
@@ -113,15 +116,72 @@ const EventManagement = () => {
     }
   };
 
+  // The running order is what an admin manages here, so the table shows it.
+  // Events with no order yet sink to the bottom, newest first.
+  const orderedEvents = useMemo(
+    () =>
+      [...events].sort((a, b) => {
+        if (a.event_order == null && b.event_order == null) {
+          return b.created_at.localeCompare(a.created_at);
+        }
+        if (a.event_order == null) return 1;
+        if (b.event_order == null) return -1;
+        return a.event_order - b.event_order;
+      }),
+    [events],
+  );
+
   const visibleEvents = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return events;
-    return events.filter((event) =>
+    if (!query) return orderedEvents;
+    return orderedEvents.filter((event) =>
       [event.name, event.age_category, event.type].filter(Boolean).some((field) =>
         String(field).toLowerCase().includes(query),
       ),
     );
-  }, [events, search]);
+  }, [orderedEvents, search]);
+
+  /* ----------------------------------------------------- running order */
+
+  // Dragging renumbers the whole level from 1, so an order stays a plain
+  // sequence however many times it is rearranged. Only the rows that actually
+  // moved are written back.
+  const moveEvent = async (from: number, to: number) => {
+    // Row indices count against what is on screen, so a filtered table would
+    // renumber the wrong events. Reorder mode clears the search; this is the
+    // belt to that braces.
+    if (visibleEvents.length !== orderedEvents.length) return;
+
+    const next = [...orderedEvents];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+
+    const changed = next
+      .map((event, index) => ({ event, order: index + 1 }))
+      .filter(({ event, order }) => event.event_order !== order);
+
+    if (changed.length === 0) return;
+
+    const previous = events;
+    setEvents(next.map((event, index) => ({ ...event, event_order: index + 1 })));
+    setSavingOrder(true);
+
+    try {
+      const results = await Promise.all(
+        changed.map(({ event, order }) =>
+          supabase.from('events').update({ event_order: order }).eq('id', event.id),
+        ),
+      );
+
+      const failed = results.find((result) => result.error);
+      if (failed?.error) throw failed.error;
+    } catch (error) {
+      setEvents(previous);
+      message.error(error instanceof Error ? error.message : 'Could not save the new order');
+    } finally {
+      setSavingOrder(false);
+    }
+  };
 
   /* ------------------------------------------------------- event form */
 
@@ -652,6 +712,46 @@ const EventManagement = () => {
     },
   ];
 
+  // Reordering strips the table back to what tells one event from another, so
+  // the drag target is the whole row and nothing on it invites a click.
+  const reorderColumns = [
+    {
+      title: '',
+      key: 'handle',
+      width: 44,
+      render: () => <DotsSixVertical size={18} className="text-muted-foreground" />,
+    },
+    {
+      title: 'Order',
+      key: 'order',
+      width: 72,
+      render: (_: unknown, __: EventRecord, index: number) => (
+        <span className="tnum font-semibold text-foreground">{index + 1}</span>
+      ),
+    },
+    {
+      title: 'Event',
+      dataIndex: 'name',
+      key: 'name',
+      render: (name: string, record: EventRecord) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium text-foreground">{name}</div>
+          <div className="truncate text-caption capitalize text-muted-foreground">
+            {record.type} · {record.event_criteria?.length ?? 0} criteria
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: 'Age category',
+      dataIndex: 'age_category',
+      key: 'age_category',
+      width: 150,
+      render: (category: string | null) =>
+        category ? <StatusPill>{category}</StatusPill> : <span className="text-muted-foreground">All</span>,
+    },
+  ];
+
   return (
     <AppShell
       variant="admin"
@@ -683,12 +783,29 @@ const EventManagement = () => {
       }
     >
       <DataTable
-        columns={columns}
+        columns={reordering ? reorderColumns : columns}
         dataSource={visibleEvents}
         rowKey="id"
         loading={loading}
-        scrollX={980}
-        rowSelection={{ selectedRowKeys, onChange: setSelectedRowKeys }}
+        scrollX={reordering ? 640 : 980}
+        pagination={reordering ? false : undefined}
+        onReorder={reordering ? moveEvent : undefined}
+        rowSelection={reordering ? undefined : { selectedRowKeys, onChange: setSelectedRowKeys }}
+        actions={
+          <Button
+            variant={reordering ? 'primary' : 'secondary'}
+            size="sm"
+            icon={reordering ? <Check size={14} /> : <ArrowsDownUp size={14} />}
+            loading={savingOrder}
+            onClick={() => {
+              setReordering((on) => !on);
+              setSelectedRowKeys([]);
+              setSearch('');
+            }}
+          >
+            {reordering ? 'Done' : 'Reorder'}
+          </Button>
+        }
         toolbar={
           <Toolbar
             selectionCount={selectedRowKeys.length}
@@ -709,12 +826,18 @@ const EventManagement = () => {
               </>
             }
           >
-            <SearchInput
-              value={search}
-              onChange={setSearch}
-              placeholder="Search events"
-              className="w-full max-w-xs"
-            />
+            {reordering ? (
+              <p className="text-caption text-muted-foreground">
+                Drag a row to set the running order. Judges and results follow it.
+              </p>
+            ) : (
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder="Search events"
+                className="w-full max-w-xs"
+              />
+            )}
           </Toolbar>
         }
         emptyIcon={<CalendarBlank size={22} />}
