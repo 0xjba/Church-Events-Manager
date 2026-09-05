@@ -164,8 +164,10 @@ const EVENTS = [
     status: 'completed', order: 4, time_limit: 45, criteria: QUIZ_CRITERIA, entrants: 12, scoring: 'full',
     tie: true },
 
+  // Finished and published, so its placings feed the champion church on the
+  // group scale — the half of the championship individual events cannot show.
   { key: 'jr-action', name: 'Action Song', category: 'Juniors', type: 'stage', event_type: 'group',
-    status: 'active', order: 5, time_limit: 6, criteria: STAGE_CRITERIA, scoring: 'partial-group' },
+    status: 'completed', order: 5, time_limit: 6, criteria: STAGE_CRITERIA, scoring: 'full' },
 
   { key: 'im-speech', name: 'Speech', category: 'Intermediates', type: 'stage', event_type: 'individual',
     status: 'completed', order: 6, time_limit: 5, criteria: STAGE_CRITERIA, entrants: 11, scoring: 'full' },
@@ -181,6 +183,11 @@ const EVENTS = [
 
   { key: 'sr-quiz', name: 'Bible Quiz', category: 'Seniors', type: 'writing', event_type: 'individual',
     status: 'upcoming', order: 10, time_limit: 45, criteria: QUIZ_CRITERIA, entrants: 12, scoring: 'none' },
+
+  // A second group event, left mid-scoring, so a judge still has group scoring
+  // to demonstrate now that Action Song is finished.
+  { key: 'im-group', name: 'Group Song', category: 'Intermediates', type: 'stage', event_type: 'group',
+    status: 'active', order: 11, time_limit: 6, criteria: STAGE_CRITERIA, scoring: 'partial-group' },
 ];
 
 // A group is an entrant in its own right: one chest number, competing for a
