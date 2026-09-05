@@ -52,7 +52,8 @@ export const parseCsv = (text: string, required: string[]): ParsedCsv => {
     throw new Error('The file needs a header row and at least one row of data');
   }
 
-  const headers = splitLine(lines[0]).map((header) => header.replace(/^﻿/, ''));
+  // Spreadsheets often save a byte-order mark onto the first header.
+  const headers = splitLine(lines[0]).map((header) => header.replace(/^\uFEFF/, ''));
   const missing = required.filter((header) => !headers.includes(header));
   if (missing.length > 0) {
     throw new Error(`Missing required columns: ${missing.join(', ')}`);

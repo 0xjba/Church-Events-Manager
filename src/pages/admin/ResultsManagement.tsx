@@ -5,7 +5,13 @@ import { supabase } from '@/integrations/supabase/client';
 import type { FormValues, SupabaseRow } from '@/lib/types';
 import { ResultsCalculator } from '@/utils/resultsCalculator';
 import { ExportUtils, WinnersExportData } from '@/utils/exportUtils';
-import { individualStandings, type PlacedResult } from '@/utils/championship';
+import {
+  churchStandings,
+  districtStandings,
+  individualStandings,
+  type PlacedResult,
+  type Standing,
+} from '@/utils/championship';
 import { AppShell } from '@/components/shell/AppShell';
 import { DataTable } from '@/components/admin/DataTable';
 import {
@@ -118,6 +124,46 @@ const rankTone = (rank: number) =>
         ? 'bg-bronze/15 text-bronze'
         : 'bg-muted text-muted-foreground';
 
+/** Top few standings for a champion trophy, in the order they would be read out. */
+const ChampionBoard = ({
+  title,
+  subtitle,
+  standings,
+}: {
+  title: string;
+  subtitle: string;
+  standings: Array<Standing<string>>;
+}) => (
+  <Card>
+    <CardHeader title={title} subtitle={subtitle} />
+    <ol className="divide-y divide-border px-4 pb-4 md:px-5">
+      {standings.map((standing) => (
+        <li key={standing.key} className="flex items-center gap-3 py-2.5">
+          <span
+            className={cn(
+              'tnum flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-caption font-bold',
+              rankTone(standing.rank),
+            )}
+          >
+            {standing.rank}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-body font-medium text-foreground">
+              {standing.subject}
+            </span>
+            <span className="block truncate text-caption text-muted-foreground">
+              {standing.placings.first} firsts · {standing.placings.second} seconds
+            </span>
+          </span>
+          <span className="tnum shrink-0 text-body font-semibold text-primary">
+            {standing.points}
+          </span>
+        </li>
+      ))}
+    </ol>
+  </Card>
+);
+
 const ResultsManagement = () => {
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [levels, setLevels] = useState<LevelRecord[]>([]);
@@ -136,6 +182,10 @@ const ResultsManagement = () => {
   const [winnersData, setWinnersData] = useState<WinnersExportData | null>(null);
   const [showScoresForEvent, setShowScoresForEvent] = useState<Record<string, boolean>>({});
   const [individualChampion, setIndividualChampion] = useState<Champion | null>(null);
+  const [affiliationChampions, setAffiliationChampions] = useState<{
+    churches: Array<Standing<string>>;
+    districts: Array<Standing<string>>;
+  } | null>(null);
 
   const [isScoreImportOpen, setIsScoreImportOpen] = useState(false);
   const [scoreImportLevel, setScoreImportLevel] = useState<string>('');
@@ -422,6 +472,7 @@ const ResultsManagement = () => {
     const placed: PlacedResult[] = winnerEvents.flatMap((event) =>
       event.winners.map((winner) => ({
         event_id: event.event_id,
+        event_type: (event.event_type === 'group' ? 'group' : 'individual') as 'group' | 'individual',
         rank: winner.rank,
         participant: {
           full_name: winner.participant.full_name,
@@ -521,6 +572,32 @@ const ResultsManagement = () => {
 
       setWinnersData(winners);
       setIndividualChampion(calculateIndividualChampion(winners.events));
+
+      // Champion church, and champion district above it, combine individual and
+      // group placings — a group's points belong to the body it represents.
+      const placed: PlacedResult[] = winners.events.flatMap((event) =>
+        event.winners.map((winner) => ({
+          event_id: event.event_id,
+          event_type: (event.event_type === 'group' ? 'group' : 'individual') as 'group' | 'individual',
+          rank: winner.rank,
+          participant: {
+            full_name: winner.participant.full_name,
+            chest_number: winner.participant.chest_number,
+            church: winner.participant.church,
+            district: winner.participant.district,
+          },
+          group: {
+            name: winner.participant.full_name,
+            church: winner.participant.church,
+            district: winner.participant.district,
+          },
+        })),
+      );
+
+      setAffiliationChampions({
+        churches: churchStandings(placed),
+        districts: districtStandings(placed),
+      });
       setShowScoresForEvent({});
       setViewingWinners(true);
     } catch (error) {
@@ -1137,6 +1214,23 @@ const ResultsManagement = () => {
       >
         {winnersData && (
           <div className="space-y-4 pb-2">
+            {affiliationChampions && affiliationChampions.churches.length > 0 && (
+              <div className="grid gap-3 md:grid-cols-2">
+                <ChampionBoard
+                  title="Champion church"
+                  subtitle="Individual and group placings combined"
+                  standings={affiliationChampions.churches.slice(0, 5)}
+                />
+                {affiliationChampions.districts.length > 1 && (
+                  <ChampionBoard
+                    title="Champion district"
+                    subtitle="Every church in the district"
+                    standings={affiliationChampions.districts.slice(0, 5)}
+                  />
+                )}
+              </div>
+            )}
+
             {individualChampion && individualChampion.champions.length > 0 && (
               <Card className="border-primary/30 bg-primary-soft/40">
                 <CardHeader

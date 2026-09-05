@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Checkbox, Form, Input as AntInput, Modal, Select, Spin, message } from 'antd';
+import { Form, Input as AntInput, Modal, Select, Spin, message } from 'antd';
 import { Eye, FileCsv, PencilSimple, Plus, Trash, UploadSimple, UserPlus, UsersThree } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import type { FormValues } from '@/lib/types';
@@ -36,12 +36,11 @@ interface Group {
   id: string;
   name: string;
   description: string | null;
+  chest_number: string | null;
+  church: string | null;
+  district: string | null;
+  level_id: string | null;
   created_at: string;
-  members?: Array<{
-    id: string;
-    participant_id: string;
-    participant: { full_name: string; chest_number: string; church: string };
-  }>;
 }
 
 const AGE_CATEGORIES = ['Sub Juniors', 'Juniors', 'Intermediates', 'Seniors'];
@@ -65,7 +64,6 @@ const ParticipantManagement = () => {
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [submittingGroup, setSubmittingGroup] = useState(false);
   const [groupForm] = Form.useForm();
-  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -141,9 +139,7 @@ const ParticipantManagement = () => {
     try {
       const { data, error } = await supabase
         .from('groups')
-        .select(
-          `*, members:group_members( id, participant_id, participant:participants( full_name, chest_number, church ) )`,
-        )
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -292,12 +288,16 @@ const ParticipantManagement = () => {
   const openGroupModal = (group?: Group) => {
     if (group) {
       setEditingGroup(group);
-      groupForm.setFieldsValue({ name: group.name, description: group.description || '' });
-      setSelectedParticipants(group.members?.map((member) => member.participant_id) || []);
+      groupForm.setFieldsValue({
+        name: group.name,
+        chest_number: group.chest_number ?? '',
+        church: group.church ?? '',
+        district: group.district ?? '',
+        description: group.description || '',
+      });
     } else {
       setEditingGroup(null);
       groupForm.resetFields();
-      setSelectedParticipants([]);
     }
     setIsGroupModalOpen(true);
   };
@@ -306,50 +306,28 @@ const ParticipantManagement = () => {
     setIsGroupModalOpen(false);
     setEditingGroup(null);
     groupForm.resetFields();
-    setSelectedParticipants([]);
-  };
-
-  const replaceGroupMembers = async (groupId: string, participantIds: string[]) => {
-    await supabase.from('group_members').delete().eq('group_id', groupId);
-
-    if (participantIds.length > 0) {
-      const { error } = await supabase.from('group_members').insert(
-        participantIds.map((participantId) => ({
-          group_id: groupId,
-          participant_id: participantId,
-        })),
-      );
-      if (error) throw error;
-    }
   };
 
   const onSubmitGroup = async (values: FormValues) => {
     try {
       setSubmittingGroup(true);
 
-      if (selectedParticipants.length === 0) {
-        message.error('Select at least one participant for the group');
-        return;
-      }
+      const details = {
+        name: values.name,
+        chest_number: values.chest_number || null,
+        church: values.church || null,
+        district: values.district || null,
+        description: values.description || null,
+        level_id: levelId,
+      };
 
       if (editingGroup) {
-        const { error } = await supabase
-          .from('groups')
-          .update({ name: values.name, description: values.description || null })
-          .eq('id', editingGroup.id);
-
+        const { error } = await supabase.from('groups').update(details).eq('id', editingGroup.id);
         if (error) throw error;
-        await replaceGroupMembers(editingGroup.id, selectedParticipants);
         message.success('Group updated');
       } else {
-        const { data: newGroup, error } = await supabase
-          .from('groups')
-          .insert({ name: values.name, description: values.description || null })
-          .select()
-          .single();
-
+        const { error } = await supabase.from('groups').insert(details);
         if (error) throw error;
-        await replaceGroupMembers(newGroup.id, selectedParticipants);
         message.success('Group created');
       }
 
@@ -718,6 +696,18 @@ const ParticipantManagement = () => {
 
   const groupColumns = [
     {
+      title: 'Chest',
+      dataIndex: 'chest_number',
+      key: 'chest_number',
+      width: 88,
+      render: (chestNumber: string | null) =>
+        chestNumber ? (
+          <span className="tnum font-semibold text-foreground">{chestNumber}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
       title: 'Group',
       dataIndex: 'name',
       key: 'name',
@@ -730,25 +720,8 @@ const ParticipantManagement = () => {
         </div>
       ),
     },
-    {
-      title: 'Members',
-      dataIndex: 'members',
-      key: 'members',
-      render: (members: Group['members']) => (
-        <div className="min-w-0">
-          <div className="tnum font-medium text-foreground">{members?.length || 0}</div>
-          {members && members.length > 0 && (
-            <div className="truncate text-caption text-muted-foreground">
-              {members
-                .slice(0, 3)
-                .map((member) => member.participant?.full_name)
-                .join(', ')}
-              {members.length > 3 && ` +${members.length - 3} more`}
-            </div>
-          )}
-        </div>
-      ),
-    },
+    { title: 'Church', dataIndex: 'church', key: 'church', ellipsis: true },
+    { title: 'District', dataIndex: 'district', key: 'district', ellipsis: true },
     {
       title: '',
       key: 'actions',
@@ -1029,9 +1002,8 @@ const ParticipantManagement = () => {
         open={isGroupModalOpen}
         onClose={closeGroupModal}
         dismissable={!submittingGroup}
-        size="lg"
         title={editingGroup ? 'Edit group' : 'Create group'}
-        description="Groups are scored as a single entrant."
+        description="A group competes under its own chest number, for its church or district."
         footer={
           <div className="flex gap-2">
             <Button variant="secondary" size="lg" onClick={closeGroupModal} disabled={submittingGroup}>
@@ -1044,52 +1016,44 @@ const ParticipantManagement = () => {
         }
       >
         <Form form={groupForm} layout="vertical" onFinish={onSubmitGroup} requiredMark={false}>
-          <Form.Item
-            label="Group name"
-            name="name"
-            rules={[{ required: true, message: 'Group name is required' }]}
-          >
-            <AntInput placeholder="Group name" />
-          </Form.Item>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Form.Item
+              label="Group name"
+              name="name"
+              rules={[{ required: true, message: 'Group name is required' }]}
+            >
+              <AntInput placeholder="Zion Youth Team" />
+            </Form.Item>
+
+            <Form.Item
+              label="Chest number"
+              name="chest_number"
+              rules={[{ required: true, message: 'Chest number is required' }]}
+            >
+              <AntInput placeholder="G01" />
+            </Form.Item>
+
+            <Form.Item
+              label="Church"
+              name="church"
+              rules={[{ required: true, message: 'Church is required' }]}
+            >
+              <AntInput />
+            </Form.Item>
+
+            <Form.Item label="District" name="district">
+              <AntInput placeholder="Needed for the district championship" />
+            </Form.Item>
+          </div>
 
           <Form.Item label="Description" name="description">
             <AntInput.TextArea rows={2} placeholder="Optional" />
           </Form.Item>
         </Form>
 
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-caption font-medium text-foreground">Members</span>
-          <span className="tnum text-caption text-muted-foreground">
-            {selectedParticipants.length} selected
-          </span>
-        </div>
-        <div className="scrollbar-thin max-h-64 overflow-y-auto rounded-xl border border-border">
-          {participants.map((participant) => (
-            <label
-              key={participant.id}
-              className="flex cursor-pointer items-center gap-3 border-b border-border px-3 py-2.5 last:border-b-0 hover:bg-surface-sunken"
-            >
-              <Checkbox
-                checked={selectedParticipants.includes(participant.id)}
-                onChange={(changeEvent) =>
-                  setSelectedParticipants((current) =>
-                    changeEvent.target.checked
-                      ? [...current, participant.id]
-                      : current.filter((id) => id !== participant.id),
-                  )
-                }
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-body text-foreground">
-                  {participant.full_name}
-                </span>
-                <span className="block truncate text-caption text-muted-foreground">
-                  #{participant.chest_number} · {participant.church}
-                </span>
-              </span>
-            </label>
-          ))}
-        </div>
+        <p className="pb-2 text-caption text-muted-foreground">
+          Placings earned by this group count towards its church, and its district above that.
+        </p>
       </Sheet>
 
       {/* ----------------------------------------------- bulk import */}

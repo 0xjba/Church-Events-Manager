@@ -50,17 +50,14 @@ interface EventParticipant {
   participant: Participant;
 }
 
-interface GroupMember {
-  id: string;
-  participant_id: string;
-  participant: { full_name: string; chest_number: string; church: string };
-}
-
 interface Group {
   id: string;
   name: string;
   description: string | null;
-  members?: GroupMember[];
+  chest_number: string | null;
+  church: string | null;
+  district: string | null;
+  level_id: string | null;
 }
 
 interface EventGroup {
@@ -208,10 +205,9 @@ const EventDetails = () => {
     try {
       const { data, error } = await supabase
         .from('groups')
-        .select(
-          `*, members:group_members( id, participant_id, participant:participants( full_name, chest_number, church ) )`,
-        )
-        .order('created_at', { ascending: false });
+        .select('*')
+        .eq('level_id', event?.level?.id ?? '')
+        .order('chest_number');
 
       if (error) throw error;
       setGroups((data || []) as unknown as Group[]);
@@ -224,9 +220,7 @@ const EventDetails = () => {
     try {
       const { data, error } = await supabase
         .from('event_groups')
-        .select(
-          `*, group:groups( *, members:group_members( id, participant_id, participant:participants( full_name, chest_number, church ) ) )`,
-        )
+        .select('*, group:groups(*)')
         .eq('event_id', eventId);
 
       if (error) throw error;
@@ -633,22 +627,19 @@ const EventDetails = () => {
         <div className="min-w-0">
           <div className="truncate font-medium text-foreground">{record.group?.name}</div>
           <div className="truncate text-caption text-muted-foreground">
-            {record.group?.members?.length || 0} members
+            {[record.group?.chest_number ? `#${record.group.chest_number}` : null, record.group?.church]
+              .filter(Boolean)
+              .join(' · ')}
           </div>
         </div>
       ),
     },
     {
-      title: 'Members',
-      key: 'members',
+      title: 'District',
+      key: 'district',
       ellipsis: true,
       render: (_: unknown, record: EventGroup) => (
-        <span className="text-caption text-muted-foreground">
-          {(record.group?.members ?? [])
-            .map((member) => member.participant?.full_name)
-            .filter(Boolean)
-            .join(', ') || '—'}
-        </span>
+        <span className="text-caption text-muted-foreground">{record.group?.district || '—'}</span>
       ),
     },
     {
@@ -1033,7 +1024,9 @@ const EventDetails = () => {
                 items={groups.map((group) => ({
                   id: group.id,
                   title: group.name,
-                  subtitle: `${group.members?.length || 0} members`,
+                  subtitle: [group.chest_number ? `#${group.chest_number}` : null, group.church]
+                    .filter(Boolean)
+                    .join(' · ') || 'No chest number',
                   disabled: isGroupRegistered(group.id),
                   disabledLabel: 'Already in',
                 }))}

@@ -6,6 +6,9 @@ order does not matter. Values containing a comma must be quoted.
 Age categories are always one of: `Sub Juniors`, `Juniors`, `Intermediates`,
 `Seniors`.
 
+Chest numbers — for individuals and for groups alike — are issued per event
+level, so the same number can be reused at the next level.
+
 ---
 
 ## 1. Participants
@@ -129,7 +132,7 @@ One row per **judge, per entrant, per criterion**.
 | `event_name` | yes | must already exist |
 | `age_category` | yes | identifies which event of that name |
 | `chest_number` | yes | the entrant; leave blank for a group event |
-| `group_name` | only for group events | instead of `chest_number` |
+| `group_name` | only for group events | the group's name; groups have their own chest number and church |
 | `judge_username` | yes | must be assigned to that event |
 | `criterion_name` | yes | must match a criterion on that event |
 | `score` | yes | 0 to the criterion's maximum, halves allowed |

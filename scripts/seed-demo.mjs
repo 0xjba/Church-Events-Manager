@@ -183,14 +183,14 @@ const EVENTS = [
     status: 'upcoming', order: 10, time_limit: 45, criteria: QUIZ_CRITERIA, entrants: 12, scoring: 'none' },
 ];
 
-// Four groups of three, which is exactly the twelve Juniors — a group cannot
-// borrow an entrant from another age category.
-const JUNIORS_FIRST_CHEST = 901 + CATEGORIES.indexOf('Juniors') * PER_CATEGORY;
-
+// A group is an entrant in its own right: one chest number, competing for a
+// church. Who stands on the stage under that number is not recorded.
 const GROUPS = Array.from({ length: 4 }, (_, index) => ({
   name: ['Zion Youth Team', 'Bethel Singers', 'Grace Ensemble', 'Hope Chorus'][index],
-  description: 'Junior group entry',
-  members: [0, 1, 2].map((seat) => String(JUNIORS_FIRST_CHEST + index * 3 + seat)),
+  chest_number: `G0${index + 1}`,
+  church: CHURCHES[index],
+  district: DISTRICTS[index % DISTRICTS.length],
+  description: 'Group entry',
 }));
 
 /* -------------------------------------------------------------- helpers */
@@ -273,7 +273,7 @@ const main = async () => {
     console.log(`Would create, under one event level:`);
     console.log(`  ${JUDGES.length} judges (${JUDGES.filter((j) => j.is_active).length} active)`);
     console.log(`  ${PARTICIPANTS.length} participants across ${CATEGORIES.length} age categories`);
-    console.log(`  ${GROUPS.length} groups of ${GROUPS[0].members.length}`);
+    console.log(`  ${GROUPS.length} groups, each with its own chest number`);
     console.log(`  ${EVENTS.length} events — ${published.length} published, ` +
       `${EVENTS.filter((e) => e.scoring.startsWith('partial')).length} part-scored, ` +
       `${EVENTS.filter((e) => e.status === 'upcoming').length} upcoming`);
@@ -337,20 +337,11 @@ const main = async () => {
   await setPasswords(token, 'participant', participants.map((participant) => participant.id));
   console.log(`✓ ${participants.length} participants across ${CATEGORIES.length} age categories`);
 
-  const byChest = new Map(participants.map((participant) => [participant.chest_number, participant]));
-
   const groups = check('create groups', await supabase
     .from('groups')
-    .insert(GROUPS.map(({ name, description }) => ({ name, description })))
+    .insert(GROUPS.map((group) => ({ ...group, level_id: level.id })))
     .select());
-
-  await insertAll('group_members', GROUPS.flatMap((group, index) =>
-    group.members.map((chest) => ({
-      group_id: groups[index].id,
-      participant_id: byChest.get(chest).id,
-    })),
-  ), 'add group members');
-  console.log(`✓ ${groups.length} groups of ${GROUPS[0].members.length}`);
+  console.log(`✓ ${groups.length} groups (chest ${GROUPS[0].chest_number}–${GROUPS[GROUPS.length - 1].chest_number})`);
 
   let scoreCount = 0;
   let publishedCount = 0;

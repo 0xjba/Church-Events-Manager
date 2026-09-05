@@ -19,11 +19,13 @@ import {
 } from '@/components/ui/primitives';
 import { SegmentedControl } from '@/components/ui/inputs';
 import { cn } from '@/lib/utils';
+import type { SupabaseRow } from '@/lib/types';
 
 interface EventSummary {
   id: string;
   name: string;
   type: string;
+  event_type: string;
   status: string;
   age_category: string | null;
   results_published: boolean;
@@ -32,7 +34,8 @@ interface EventSummary {
 interface EventResult {
   id: string;
   event_id: string;
-  participant_id: string;
+  participant_id: string | null;
+  group_id: string | null;
   rank: number;
   tie_breaker_reason: string | null;
   participants: {
@@ -41,6 +44,13 @@ interface EventResult {
     chest_number: string;
     church: string;
     district: string;
+  } | null;
+  groups: {
+    id: string;
+    name: string;
+    chest_number: string | null;
+    church: string | null;
+    district: string | null;
   } | null;
 }
 
@@ -81,7 +91,7 @@ const Leaderboard = () => {
     try {
       const { data, error } = await supabase
         .from('events')
-        .select('id, name, type, status, age_category, results_published')
+        .select('id, name, type, event_type, status, age_category, results_published')
         .eq('results_published', true)
         .order('event_order', { ascending: true, nullsFirst: false });
 
@@ -102,8 +112,9 @@ const Leaderboard = () => {
       const { data, error } = await supabase
         .from('results')
         .select(
-          `id, event_id, participant_id, rank, tie_breaker_reason,
-           participants ( id, full_name, chest_number, church, district )`,
+          `id, event_id, participant_id, group_id, rank, tie_breaker_reason,
+           participants ( id, full_name, chest_number, church, district ),
+           groups ( id, name, chest_number, church, district )`,
         )
         .eq('event_id', eventId)
         .order('rank', { ascending: true });
@@ -135,14 +146,26 @@ const Leaderboard = () => {
         .from('results')
         .select(
           `event_id, rank,
-           participants ( id, full_name, chest_number, church, district )`,
+           participants ( id, full_name, chest_number, church, district ),
+           groups ( id, name, chest_number, church, district )`,
         )
         .in('event_id', events.map((event) => event.id))
         .not('rank', 'is', null);
 
       if (error) throw error;
 
-      const placed = (data ?? []) as unknown as PlacedResult[];
+      // A group placing counts for the church or district the group represents,
+      // and on the group scale, so each row needs to know which kind of event
+      // it came from.
+      const typeByEvent = new Map(events.map((event) => [event.id, event.event_type]));
+
+      const placed: PlacedResult[] = (data ?? []).map((row: SupabaseRow) => ({
+        event_id: row.event_id,
+        event_type: typeByEvent.get(row.event_id) === 'group' ? 'group' : 'individual',
+        rank: row.rank,
+        participant: row.participants,
+        group: row.groups,
+      }));
 
       setChampionship({
         individuals: individualStandings(placed) as Array<
@@ -260,16 +283,20 @@ const Leaderboard = () => {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <p className="truncate text-body font-medium text-foreground">
-                                {result.participants?.full_name ?? 'Unknown'}
+                                {result.groups?.name ?? result.participants?.full_name ?? 'Unknown'}
                               </p>
                               {result.tie_breaker_reason && <StatusPill tone="warning">Tie</StatusPill>}
                             </div>
                             <p className="truncate text-caption text-muted-foreground">
-                              {result.participants?.chest_number
-                                ? `#${result.participants.chest_number} · `
-                                : ''}
-                              {result.participants?.church}
-                              {result.participants?.district ? ` · ${result.participants.district}` : ''}
+                              {[
+                                (result.groups?.chest_number ?? result.participants?.chest_number)
+                                  ? `#${result.groups?.chest_number ?? result.participants?.chest_number}`
+                                  : null,
+                                result.groups?.church ?? result.participants?.church,
+                                result.groups?.district ?? result.participants?.district,
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
                             </p>
                           </div>
                           {result.rank <= 3 && (
@@ -319,8 +346,8 @@ const Leaderboard = () => {
                   )}
 
                   <p className="mb-3 text-caption text-muted-foreground">
-                    Rank points across {championship.events_count} published events · first 5,
-                    second 3, third 1
+                    Rank points across {championship.events_count} published events · individual
+                    events 5 and 3, group events 10 and 5
                   </p>
 
                   <ol className="space-y-2">

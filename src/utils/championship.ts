@@ -1,26 +1,47 @@
 /*
  * Championship standings.
  *
- * A placing is worth rank points; the entrant, church or district with the most
- * points wins. This is the single source of truth — the leaderboard and the
- * admin winners view previously each had their own scheme (110 - rank*10 and
- * 5/3/1), so who was champion depended on which screen you opened.
+ * A placing is worth rank points; whoever holds the most wins. Individual and
+ * group events are scored on different scales, because a group placing
+ * represents a whole church or district rather than one entrant:
  *
- * Only placings score. Everything below third is worth nothing.
+ *   individual   1st = 5, 2nd = 3
+ *   group        1st = 10, 2nd = 5
+ *
+ * Third place is a placing, shown as such, but it earns nothing.
+ *
+ * This is the single source of truth for both the leaderboard and the admin
+ * winners view, which previously each had their own scheme.
  */
 
-export const RANK_POINTS: Record<number, number> = { 1: 5, 2: 3, 3: 1 };
+export const INDIVIDUAL_RANK_POINTS: Record<number, number> = { 1: 5, 2: 3 };
+export const GROUP_RANK_POINTS: Record<number, number> = { 1: 10, 2: 5 };
 
-export const pointsForRank = (rank: number | null | undefined): number =>
-  rank == null ? 0 : (RANK_POINTS[rank] ?? 0);
+export type EntrantType = 'individual' | 'group';
+
+export const pointsForRank = (rank: number | null | undefined, entrant: EntrantType): number => {
+  if (rank == null) return 0;
+  const table = entrant === 'group' ? GROUP_RANK_POINTS : INDIVIDUAL_RANK_POINTS;
+  return table[rank] ?? 0;
+};
 
 export interface PlacedResult {
   event_id: string;
+  event_type: EntrantType;
   rank: number | null;
-  participant: {
+  /** Set for individual events. */
+  participant?: {
     id?: string;
     full_name: string;
     chest_number: string;
+    church?: string | null;
+    district?: string | null;
+  } | null;
+  /** Set for group events. A group represents its church or district. */
+  group?: {
+    id?: string;
+    name: string;
+    chest_number?: string | null;
     church?: string | null;
     district?: string | null;
   } | null;
@@ -50,8 +71,7 @@ const rankStandings = <T>(rows: Array<Standing<T>>): Array<Standing<T>> => {
       ...row,
       rank: current,
       tied:
-        tiedWithPrevious ||
-        (index + 1 < sorted.length && sorted[index + 1].points === row.points),
+        tiedWithPrevious || (index + 1 < sorted.length && sorted[index + 1].points === row.points),
     };
   });
 };
@@ -64,7 +84,7 @@ const tally = <T>(
   const accumulator = new Map<string, Standing<T>>();
 
   for (const result of results) {
-    const points = pointsForRank(result.rank);
+    const points = pointsForRank(result.rank, result.event_type);
     if (points === 0) continue;
 
     const key = keyOf(result);
@@ -94,18 +114,26 @@ const tally = <T>(
 
 export type ParticipantSubject = NonNullable<PlacedResult['participant']>;
 
-/** Individual champion of the event level. */
+/**
+ * Individual champion of the event level — individual events only, since a
+ * group placing belongs to the group rather than to any one entrant.
+ */
 export const individualStandings = (results: PlacedResult[]) =>
   tally(
-    results,
+    results.filter((result) => result.event_type === 'individual'),
     (result) => result.participant?.id ?? result.participant?.chest_number,
     (result) => result.participant as ParticipantSubject,
   );
 
-/** Champion church — every placing its participants earned, added up. */
-export const churchStandings = (results: PlacedResult[]) =>
-  tally(results, (result) => result.participant?.church, (_, key) => key);
+const affiliation = (result: PlacedResult, field: 'church' | 'district') =>
+  result.event_type === 'group' ? result.group?.[field] : result.participant?.[field];
 
-/** Champion district, once the competition is above district level. */
+/**
+ * Champion church, and champion district above it: every placing earned by that
+ * church's entrants, individual and group alike, added together.
+ */
+export const churchStandings = (results: PlacedResult[]) =>
+  tally(results, (result) => affiliation(result, 'church'), (_, key) => key);
+
 export const districtStandings = (results: PlacedResult[]) =>
-  tally(results, (result) => result.participant?.district, (_, key) => key);
+  tally(results, (result) => affiliation(result, 'district'), (_, key) => key);
