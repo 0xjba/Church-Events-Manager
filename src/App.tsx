@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from '@/hooks/useAuth';
 import { ParticipantAuthProvider } from '@/hooks/useParticipantAuth';
 import { EventLevelProvider } from '@/hooks/useEventLevel';
+import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ParticipantProtectedRoute from "@/components/ParticipantProtectedRoute";
 import JudgeProtectedRoute from "@/components/JudgeProtectedRoute";
@@ -46,6 +47,7 @@ const App = () => (
           <ConfigProvider theme={antdTheme}>
             <AntApp>
               <BrowserRouter>
+          <ChunkErrorBoundary>
           <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route path="/" element={<Index />} />
@@ -131,6 +133,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>
+          </ChunkErrorBoundary>
               </BrowserRouter>
             </AntApp>
           </ConfigProvider>

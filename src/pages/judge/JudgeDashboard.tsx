@@ -6,6 +6,7 @@ import { useParticipantAuth } from '@/hooks/useParticipantAuth';
 import { supabase } from '@/integrations/supabase/client';
 import type { FormValues } from '@/lib/types';
 import { AppShell } from '@/components/shell/AppShell';
+import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 import {
   Card,
   EmptyState,
@@ -163,6 +164,7 @@ const JudgeDashboard = () => {
 
   return (
     <AppShell title="My events" subtitle={participant?.full_name ?? 'Judge'}>
+      <PWAInstallPrompt />
       {loading ? (
         <div className="space-y-3">
           <Skeleton className="h-11 w-full" />

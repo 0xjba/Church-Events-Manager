@@ -6,10 +6,19 @@ interface PWAInstallPrompt {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+// iOS fires no beforeinstallprompt and exposes no install API: the only route
+// onto the home screen is the Share sheet, so the prompt has to tell people
+// what to tap instead of offering a button.
+const isIos = () =>
+  /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+  // iPadOS 13+ reports itself as a Mac; a touch-capable one is an iPad.
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
 export function usePWA() {
   const [isInstallable, setIsInstallable] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<PWAInstallPrompt | null>(null);
+  const [needsIosInstructions, setNeedsIosInstructions] = useState(false);
 
   useEffect(() => {
     // Initialize notifications
@@ -17,15 +26,17 @@ export function usePWA() {
 
     // Check if already installed (running as PWA)
     const isRunningStandalone = window.matchMedia('(display-mode: standalone)').matches ||
-                               (window.navigator as any).standalone ||
+                               // Safari's own standalone flag, which is not in lib.dom.
+                               (window.navigator as Navigator & { standalone?: boolean }).standalone ||
                                document.referrer.includes('android-app://');
     
     setIsInstalled(isRunningStandalone);
+    setNeedsIosInstructions(!isRunningStandalone && isIos());
 
     // Listen for install prompt
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e as any);
+      setDeferredPrompt(e as unknown as PWAInstallPrompt);
       setIsInstallable(true);
     };
 
@@ -69,6 +80,7 @@ export function usePWA() {
   return {
     isInstallable,
     isInstalled,
+    needsIosInstructions,
     installApp
   };
 }

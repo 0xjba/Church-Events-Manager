@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { CalendarBlank, CaretRight, ChartBar, Trophy } from '@phosphor-icons/react';
 import { useParticipantAuth } from '@/hooks/useParticipantAuth';
 import { AppShell } from '@/components/shell/AppShell';
+import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 import { Card, CardHeader, EmptyState } from '@/components/ui/primitives';
 
 const ParticipantDashboard = () => {
@@ -29,6 +30,7 @@ const ParticipantDashboard = () => {
 
   return (
     <AppShell title={participant.full_name} subtitle="Participant">
+      <PWAInstallPrompt />
       {/* Identity card: the chest number is what officials ask for, so it leads. */}
       <div className="mb-4 rounded-2xl bg-primary p-5 text-primary-foreground shadow-raised">
         <p className="text-caption uppercase tracking-wide opacity-80">Chest number</p>

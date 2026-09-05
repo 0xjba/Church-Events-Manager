@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover is what makes env(safe-area-inset-*) resolve to real
+         numbers; without it the tab bar sits under the home indicator once the
+         app is installed and there is no browser chrome to push it up. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>PYPA Devotional Events</title>
     <meta name="description" content="Professional devotional events management platform with real-time scoring and results" />
     <meta name="author" content="Devotional Events Pro" />
@@ -15,15 +18,18 @@
       rel="stylesheet"
     />
     <meta name="mobile-web-app-capable" content="yes" />
+    <!-- iOS below 16.4 ignores the manifest's display member and reads this
+         instead; without it the home-screen app opens inside Safari. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="DevEvents" />
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
     
-    <!-- iOS Icons -->
-    <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
+    <!-- iOS Icons. iOS applies no mask, so this one is deliberately the
+         full-bleed crest rather than the padded maskable variant. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png" />
     
     <!-- Favicon -->
     <link rel="icon" type="image/png" sizes="32x32" href="/icon-192.png" />
@@ -32,12 +38,12 @@
     <meta property="og:title" content="Devotional Events Pro" />
     <meta property="og:description" content="Professional devotional events management platform with real-time scoring and results" />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="/icon-512.png" />
+    <meta property="og:image" content="https://pypaportal.netlify.app/icon-512.png" />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Devotional Events Pro" />
     <meta name="twitter:description" content="Professional devotional events management platform" />
-    <meta name="twitter:image" content="/icon-512.png" />
+    <meta name="twitter:image" content="https://pypaportal.netlify.app/icon-512.png" />
   </head>
 
   <body>

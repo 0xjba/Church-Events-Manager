@@ -1,4 +1,9 @@
-const CACHE_NAME = 'devotional-events-v3';
+// Stamped with the build's asset hash by scripts/stamp-sw.mjs, so every deploy
+// ships a byte-different worker. That is what makes the browser install the new
+// one, and what lets activate() drop the previous build's assets instead of
+// letting every release pile up in one cache forever.
+const BUILD_ID = '__BUILD_ID__';
+const CACHE_NAME = `devotional-events-${BUILD_ID}`;
 const urlsToCache = [
   '/',
   '/manifest.json',
@@ -70,7 +75,16 @@ self.addEventListener('fetch', (event) => {
         return cached;
       }
 
-      return fetch(event.request).then((response) => {
+      return fetch(event.request).then(async (response) => {
+        // A chunk from a previous build no longer exists on the server, and the
+        // SPA catch-all answers it with index.html under a 200 and a
+        // JavaScript content type. Content type cannot be trusted here, so the
+        // body is what gets checked. Caching that would poison the entry for
+        // good, and returning it makes the browser parse HTML as a script.
+        if (isAsset(event.request.url) && (await looksLikeHtml(response))) {
+          return Response.error();
+        }
+
         if (response.status === 200 && !response.headers.get('content-type')?.includes('text/html')) {
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
@@ -80,6 +94,17 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+const isAsset = (url) => /\.(js|css)$/i.test(new URL(url).pathname);
+
+const looksLikeHtml = async (response) => {
+  try {
+    const text = await response.clone().text();
+    return /^\s*<(!doctype|html)/i.test(text.slice(0, 60));
+  } catch {
+    return false;
+  }
+};
 
 // Notification handling
 self.addEventListener('notificationclick', (event) => {
