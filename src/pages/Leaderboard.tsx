@@ -106,9 +106,11 @@ const Leaderboard = () => {
         .from('events')
         .select(
           `id, name, type, event_type, status, age_category, results_published,
-           event_levels ( id, name, scope )`,
+           event_levels!inner ( id, name, scope, is_active )`,
         )
         .eq('results_published', true)
+        // An event level that has been put away takes its results with it.
+        .eq('event_levels.is_active', true)
         .order('event_order', { ascending: true, nullsFirst: false });
 
       if (error) throw error;

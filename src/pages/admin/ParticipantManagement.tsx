@@ -88,9 +88,11 @@ const ParticipantManagement = () => {
 
   const fetchLevels = async () => {
     try {
+      // Inactive levels are put away, here as everywhere but the levels page.
       const { data, error } = await supabase
         .from('event_levels')
         .select('id, name, year, is_active')
+        .eq('is_active', true)
         .order('year', { ascending: false });
 
       if (error) throw error;

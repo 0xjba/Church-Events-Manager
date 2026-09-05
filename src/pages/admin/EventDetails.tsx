@@ -31,7 +31,7 @@ interface EventRecord {
   status: string;
   event_order: number | null;
   results_published: boolean;
-  level?: { id: string; name: string };
+  level?: { id: string; name: string; is_active?: boolean };
 }
 
 interface Participant {
@@ -137,6 +137,15 @@ const EventDetails = () => {
         .single();
 
       if (error) throw error;
+
+      // Reachable by URL even when its level has been put away.
+      const level = data?.level as { id: string; name: string; is_active?: boolean } | null;
+      if (level && level.is_active === false) {
+        message.warning(`${data.name} belongs to an inactive event level`);
+        navigate('/admin/events');
+        return;
+      }
+
       setEvent(data as unknown as EventRecord);
     } catch {
       message.error('Failed to load event details');

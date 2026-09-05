@@ -93,9 +93,12 @@ const EventManagement = () => {
 
   const fetchEventLevels = async () => {
     try {
+      // An inactive level is put away: it and everything under it disappear
+      // from every screen except the event levels page itself.
       const { data, error } = await supabase
         .from('event_levels')
         .select('id, name, year, is_active')
+        .eq('is_active', true)
         .order('year', { ascending: false });
 
       if (error) throw error;
@@ -109,7 +112,11 @@ const EventManagement = () => {
     try {
       const { data, error } = await supabase
         .from('events')
-        .select(`*, event_levels (id, name, year), event_criteria (id, name, max_score, weight)`)
+        .select(
+          `*, event_levels!inner (id, name, year, is_active),
+           event_criteria (id, name, max_score, weight)`,
+        )
+        .eq('event_levels.is_active', true)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -122,10 +129,6 @@ const EventManagement = () => {
   };
 
   const levelOf = (event: EventRecord) => eventLevels.find((level) => level.id === event.level_id);
-  const isLocked = (event: EventRecord) => {
-    const level = levelOf(event);
-    return Boolean(level && !level.is_active);
-  };
 
   const visibleEvents = useMemo(() => {
     const byLevel =
@@ -601,7 +604,7 @@ const EventManagement = () => {
       key: 'name',
       sorter: (a: EventRecord, b: EventRecord) => a.name.localeCompare(b.name),
       render: (name: string, record: EventRecord) => (
-        <div className={cn('min-w-0', isLocked(record) && 'opacity-60')}>
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
             {record.event_order !== null && (
               <span className="tnum rounded bg-muted px-1.5 text-caption font-semibold text-muted-foreground">
@@ -621,17 +624,9 @@ const EventManagement = () => {
       dataIndex: ['event_levels', 'name'],
       key: 'level',
       width: 170,
-      render: (_: unknown, record: EventRecord) => {
-        const level = levelOf(record);
-        return (
-          <div className="min-w-0">
-            <div className="truncate text-foreground">{record.event_levels?.name ?? '—'}</div>
-            {level && !level.is_active && (
-              <span className="text-caption text-warning">Inactive level</span>
-            )}
-          </div>
-        );
-      },
+      render: (_: unknown, record: EventRecord) => (
+        <div className="min-w-0 truncate text-foreground">{record.event_levels?.name ?? '—'}</div>
+      ),
     },
     {
       title: 'Age category',
@@ -652,7 +647,6 @@ const EventManagement = () => {
         <Select
           value={status}
           onChange={(value) => updateEventStatus(record.id, value)}
-          disabled={isLocked(record)}
           size="small"
           className="w-full"
           options={STATUSES.map((option) => ({
@@ -667,38 +661,31 @@ const EventManagement = () => {
       key: 'actions',
       width: 150,
       fixed: 'right' as const,
-      render: (_: unknown, record: EventRecord) => {
-        const locked = isLocked(record);
-        return (
-          <div className="flex justify-end gap-1">
-            <RowButton
-              label="Open event"
-              icon={<Eye size={15} />}
-              disabled={locked}
-              onClick={() => navigate(`/admin/events/${record.id}`)}
-            />
-            <RowButton
-              label="Edit event"
-              icon={<PencilSimple size={15} />}
-              disabled={locked}
-              onClick={() => openModal(record)}
-            />
-            <RowButton
-              label="Duplicate event"
-              icon={<Copy size={15} />}
-              disabled={locked}
-              onClick={() => openModal(record, true)}
-            />
-            <RowButton
-              label="Delete event"
-              icon={<Trash size={15} />}
-              danger
-              disabled={locked}
-              onClick={() => deleteEvent(record)}
-            />
-          </div>
-        );
-      },
+      render: (_: unknown, record: EventRecord) => (
+        <div className="flex justify-end gap-1">
+          <RowButton
+            label="Open event"
+            icon={<Eye size={15} />}
+            onClick={() => navigate(`/admin/events/${record.id}`)}
+          />
+          <RowButton
+            label="Edit event"
+            icon={<PencilSimple size={15} />}
+            onClick={() => openModal(record)}
+          />
+          <RowButton
+            label="Duplicate event"
+            icon={<Copy size={15} />}
+            onClick={() => openModal(record, true)}
+          />
+          <RowButton
+            label="Delete event"
+            icon={<Trash size={15} />}
+            danger
+            onClick={() => deleteEvent(record)}
+          />
+        </div>
+      ),
     },
   ];
 
@@ -773,7 +760,7 @@ const EventManagement = () => {
                 { value: 'all', label: 'All event levels' },
                 ...eventLevels.map((level) => ({
                   value: level.id,
-                  label: `${level.name} ${level.year}${level.is_active ? '' : ' (inactive)'}`,
+                  label: `${level.name} ${level.year}`,
                 })),
               ]}
             />
@@ -857,8 +844,7 @@ const EventManagement = () => {
                 placeholder="Select level"
                 options={eventLevels.map((level) => ({
                   value: level.id,
-                  label: `${level.name} ${level.year}${level.is_active ? '' : ' (inactive)'}`,
-                  disabled: !level.is_active,
+                  label: `${level.name} ${level.year}`,
                 }))}
               />
             </Form.Item>
@@ -1004,8 +990,7 @@ const EventManagement = () => {
             placeholder="Which level do these events belong to?"
             options={eventLevels.map((level) => ({
               value: level.id,
-              label: `${level.name} ${level.year}${level.is_active ? '' : ' (inactive)'}`,
-              disabled: !level.is_active,
+              label: `${level.name} ${level.year}`,
             }))}
           />
         </div>

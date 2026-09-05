@@ -191,16 +191,11 @@ const JudgeDashboard = () => {
               {visible.map((event) => {
                 const progress = progressOf(event);
                 const complete = isComplete(event);
-                const levelInactive = event.event_levels && !event.event_levels.is_active;
-                const scorable = event.status === 'active' && !levelInactive && !complete;
+                const scorable = event.status === 'active' && !complete;
                 const expected = event.participants_count * event.total_criteria;
 
                 const body = (
-                  <Card
-                    className={
-                      levelInactive ? 'opacity-60' : scorable ? 'border-primary/40' : undefined
-                    }
-                  >
+                  <Card className={scorable ? 'border-primary/40' : undefined}>
                     <div className="p-4">
                       <div className="flex items-start gap-3">
                         <div className="min-w-0 flex-1">
@@ -247,11 +242,9 @@ const JudgeDashboard = () => {
 
                       <div className="mt-4 flex items-center justify-between gap-3">
                         <span className="text-caption text-muted-foreground">
-                          {levelInactive
-                            ? 'Event level is inactive'
-                            : complete
-                              ? 'No entrants left to score'
-                              : event.status === 'active'
+                          {complete
+                            ? 'No entrants left to score'
+                            : event.status === 'active'
                                 ? progress > 0
                                   ? 'Continue where you left off'
                                   : 'Ready to score'

@@ -206,10 +206,15 @@ const ResultsManagement = () => {
   const fetchEvents = async () => {
     try {
       const [eventsResponse, levelsResponse, resultsResponse] = await Promise.all([
-        supabase.from('events').select('*').order('event_order', { ascending: true, nullsFirst: false }),
+        supabase
+          .from('events')
+          .select('*, event_levels!inner(is_active)')
+          .eq('event_levels.is_active', true)
+          .order('event_order', { ascending: true, nullsFirst: false }),
         supabase
           .from('event_levels')
           .select('id, name, year, is_active, results_published, scope')
+          .eq('is_active', true)
           .order('year', { ascending: false }),
         supabase.from('results').select('event_id'),
       ]);
