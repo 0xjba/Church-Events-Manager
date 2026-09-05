@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Checkbox, Form, Input as AntInput, Modal, Select, Spin, message } from 'antd';
-import { DownloadSimple, Eye, FileCsv, PencilSimple, Plus, Trash, UploadSimple, UserPlus, UsersThree } from '@phosphor-icons/react';
+import { Eye, FileCsv, PencilSimple, Plus, Trash, UploadSimple, UserPlus, UsersThree } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import type { FormValues } from '@/lib/types';
 import { setPassword, setPasswords } from '@/utils/credentials';
@@ -10,6 +10,7 @@ import { DataTable } from '@/components/admin/DataTable';
 import { Toolbar } from '@/components/admin/Toolbar';
 import { Button, Card, StatusPill } from '@/components/ui/primitives';
 import { SearchInput, SegmentedControl } from '@/components/ui/inputs';
+import { ImportPanel } from '@/components/admin/ImportPanel';
 import { Sheet } from '@/components/ui/Sheet';
 
 interface Participant {
@@ -69,7 +70,6 @@ const ParticipantManagement = () => {
   const [batchDeletingGroups, setBatchDeletingGroups] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchParticipants();
@@ -555,20 +555,6 @@ const ParticipantManagement = () => {
     }
   };
 
-  const downloadTemplate = () => {
-    const template =
-      'full_name,age_category,chest_number,church,district,username,password\n' +
-      'John Doe,Juniors,001,Grace Church,District A,john.doe,password123\n' +
-      'Jane Smith,Intermediates,002,Hope Church,District B,jane.smith,password456';
-    const blob = new Blob([template], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = 'participants_template.csv';
-    anchor.click();
-    window.URL.revokeObjectURL(url);
-  };
-
   const handleBulkImport = async () => {
     try {
       setIsValidating(true);
@@ -893,7 +879,7 @@ const ParticipantManagement = () => {
         open={isModalOpen}
         onClose={closeParticipantModal}
         dismissable={!submitting}
-        title={editingParticipant ? 'PencilSimple participant' : 'Add participant'}
+        title={editingParticipant ? 'Edit participant' : 'Add participant'}
         description={
           editingParticipant
             ? 'Leave the password blank to keep the current one.'
@@ -991,7 +977,7 @@ const ParticipantManagement = () => {
         onClose={closeGroupModal}
         dismissable={!submittingGroup}
         size="lg"
-        title={editingGroup ? 'PencilSimple group' : 'Create group'}
+        title={editingGroup ? 'Edit group' : 'Create group'}
         description="Groups are scored as a single entrant."
         footer={
           <div className="flex gap-2">
@@ -1080,42 +1066,11 @@ const ParticipantManagement = () => {
                 Import {previewRows.length} participants
               </Button>
             </div>
-          ) : (
-            <Button
-              variant="secondary"
-              size="lg"
-              block
-              icon={<DownloadSimple size={15} />}
-              onClick={downloadTemplate}
-            >
-              DownloadSimple CSV template
-            </Button>
-          )
+          ) : undefined
         }
       >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv"
-          className="hidden"
-          onChange={(changeEvent) => {
-            const file = changeEvent.target.files?.[0];
-            if (file) handleFileUpload(file);
-          }}
-        />
-
         {!csvFile ? (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border px-6 py-10 text-center transition-colors hover:border-primary hover:bg-primary-soft/40"
-          >
-            <FileCsv size={28} className="text-muted-foreground" />
-            <span className="text-body font-medium text-foreground">Choose a CSV file</span>
-            <span className="text-caption text-muted-foreground">
-              Columns: full_name, age_category, chest_number, church, district, username, password
-            </span>
-          </button>
+          <ImportPanel template="participants" onFile={handleFileUpload} disabled={isValidating} />
         ) : (
           <div className="space-y-3">
             <div className="flex items-center gap-2 rounded-lg bg-surface-sunken px-3 py-2">

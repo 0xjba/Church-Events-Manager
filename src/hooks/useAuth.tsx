@@ -16,6 +16,7 @@ interface Profile {
 interface AuthContextType {
   user: User | null;
   session: Session | null;
+  profileChecked: boolean;
   profile: Profile | null;
   loading: boolean;
   signIn: (username: string, password: string) => Promise<{ error?: any }>;
@@ -56,6 +57,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  // Distinguishes "the profile has not come back yet" from "this account has
+  // no readable profile", so a failed read cannot leave the app spinning.
+  const [profileChecked, setProfileChecked] = useState(false);
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -71,7 +75,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.error('Error fetching profile:', error);
       setProfile(null);
     } finally {
-      // Always set loading to false after profile fetch completes
+      setProfileChecked(true);
       setLoading(false);
     }
   };
@@ -84,10 +88,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          // Fetch profile immediately but keep loading true until profile is loaded
+          // The profile decides where a signed-in user belongs, so nothing may
+          // route until it has arrived. Without this the sign-in redirect
+          // bounced off Index and back to the login page.
+          setLoading(true);
+          setProfileChecked(false);
           fetchProfile(session.user.id);
         } else {
           setProfile(null);
+          setProfileChecked(true);
           setLoading(false);
         }
       }
@@ -98,8 +107,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        setLoading(true);
+        setProfileChecked(false);
         fetchProfile(session.user.id);
       } else {
+        setProfileChecked(true);
         setLoading(false);
       }
     });
@@ -204,6 +216,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     signIn,
     signUp,
     signOut,
+    profileChecked,
     isAdmin: profile?.role === 'admin',
     isJudge: profile?.role === 'judge',
   };

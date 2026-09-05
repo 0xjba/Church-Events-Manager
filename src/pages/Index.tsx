@@ -1,14 +1,17 @@
 import { useAuth } from '@/hooks/useAuth';
 import { Navigate } from 'react-router-dom';
-import { Spin } from 'antd';
+import { CircleNotch } from '@phosphor-icons/react';
 
 const Index = () => {
-  const { user, profile, loading, isAdmin, isJudge } = useAuth();
+  const { user, profile, loading, profileChecked, isAdmin, isJudge } = useAuth();
 
-  if (loading) {
+  // A signed-in user whose profile is still on its way waits here rather than
+  // being bounced back to the login page; once the read has been attempted,
+  // a missing profile falls through as before.
+  if (loading || (user && !profile && !profileChecked)) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Spin size="large" />
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <CircleNotch className="h-7 w-7 animate-spin text-primary" />
       </div>
     );
   }

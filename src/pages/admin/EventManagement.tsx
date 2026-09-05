@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Form, Input as AntInput, InputNumber, Modal, Select, message } from 'antd';
 import { CalendarBlank, Copy, Eye, FileCsv, PencilSimple, Plus, Trash, UploadSimple, X } from '@phosphor-icons/react';
@@ -9,6 +9,7 @@ import { DataTable } from '@/components/admin/DataTable';
 import { Toolbar } from '@/components/admin/Toolbar';
 import { Button, ProgressBar, StatusPill, statusTone } from '@/components/ui/primitives';
 import { SearchInput } from '@/components/ui/inputs';
+import { ImportPanel } from '@/components/admin/ImportPanel';
 import { Sheet } from '@/components/ui/Sheet';
 import { cn } from '@/lib/utils';
 
@@ -72,7 +73,6 @@ const EventManagement = () => {
     skipped: number;
     errors: Array<{ chest_number: string; error: string }>;
   } | null>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchEvents();
@@ -563,7 +563,7 @@ const EventManagement = () => {
               onClick={() => navigate(`/admin/events/${record.id}`)}
             />
             <RowButton
-              label="PencilSimple event"
+              label="Edit event"
               icon={<PencilSimple size={15} />}
               disabled={locked}
               onClick={() => openModal(record)}
@@ -676,7 +676,7 @@ const EventManagement = () => {
         onClose={closeModal}
         dismissable={!submitting}
         size="lg"
-        title={editingEvent ? 'PencilSimple event' : duplicatingEvent ? 'Duplicate event' : 'Add event'}
+        title={editingEvent ? 'Edit event' : duplicatingEvent ? 'Duplicate event' : 'Add event'}
         description="Criteria decide what judges score and how much each part counts."
         footer={
           <div className="flex gap-2">
@@ -856,40 +856,11 @@ const EventManagement = () => {
           ) : undefined
         }
       >
-        <input
-          ref={importInputRef}
-          type="file"
-          accept=".csv"
-          className="hidden"
-          onChange={(changeEvent) => {
-            const file = changeEvent.target.files?.[0];
-            if (file) handleBulkImport(file);
-          }}
+        <ImportPanel
+          template="entrants"
+          onFile={handleBulkImport}
+          disabled={bulkImportLoading || Boolean(importResults)}
         />
-
-        <div className="mb-3 rounded-xl bg-surface-sunken p-3">
-          <p className="mb-1 text-caption font-medium text-foreground">CSV format</p>
-          <ul className="space-y-0.5 text-caption text-muted-foreground">
-            <li>
-              Columns: <code>chest_number</code>, <code>age_category</code>, <code>events</code>
-            </li>
-            <li>
-              Example: <code>201,Juniors,&quot;Solo Song Female, Bible Quiz&quot;</code>
-            </li>
-            <li>Events match on name plus age category; the category must match the participant.</li>
-          </ul>
-        </div>
-
-        {!importResults && !bulkImportLoading && (
-          <button
-            type="button"
-            onClick={() => importInputRef.current?.click()}
-            className="mb-2 flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border px-6 py-10 text-center transition-colors hover:border-primary hover:bg-primary-soft/40"
-          >
-            <FileCsv size={28} className="text-muted-foreground" />
-            <span className="text-body font-medium text-foreground">Choose a CSV file</span>
-          </button>
-        )}
 
         {bulkImportLoading && (
           <div className="mb-3">

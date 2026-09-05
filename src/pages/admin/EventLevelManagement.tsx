@@ -188,8 +188,8 @@ const EventLevelManagement = () => {
         <div className="flex justify-end gap-1">
           <button
             type="button"
-            aria-label="PencilSimple event level"
-            title="PencilSimple event level"
+            aria-label="Edit event level"
+            title="Edit event level"
             onClick={() => openModal(record)}
             className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-sunken hover:text-foreground"
           >
@@ -246,7 +246,7 @@ const EventLevelManagement = () => {
         open={isModalOpen}
         onClose={closeModal}
         dismissable={!submitting}
-        title={editingLevel ? 'PencilSimple event level' : 'Add event level'}
+        title={editingLevel ? 'Edit event level' : 'Add event level'}
         description="Levels group a year's events and control whether they can be scored."
         footer={
           <div className="flex gap-2">

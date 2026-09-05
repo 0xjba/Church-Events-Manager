@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Form, Input as AntInput, Modal, message } from 'antd';
-import { Gavel, PencilSimple, Plus, Trash } from '@phosphor-icons/react';
+import { Gavel, PencilSimple, Plus, Trash, UploadSimple } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import type { FormValues } from '@/lib/types';
-import { setPassword } from '@/utils/credentials';
+import { setPassword, setPasswords } from '@/utils/credentials';
+import { cell, parseCsv, type CsvRow } from '@/utils/csv';
+import { TEMPLATES } from '@/utils/importTemplates';
+import { ImportIssues, ImportPanel, ImportSummary } from '@/components/admin/ImportPanel';
 import { AppShell } from '@/components/shell/AppShell';
 import { DataTable } from '@/components/admin/DataTable';
 import { Toolbar } from '@/components/admin/Toolbar';
@@ -33,6 +36,12 @@ const JudgeManagement = () => {
 
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [batchDeleting, setBatchDeleting] = useState(false);
+
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importRows, setImportRows] = useState<CsvRow[]>([]);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     fetchJudges();
@@ -138,6 +147,107 @@ const JudgeManagement = () => {
     }
   };
 
+  const resetImport = () => {
+    setImportFile(null);
+    setImportRows([]);
+    setImportErrors([]);
+  };
+
+  const validateJudgeRows = (rows: CsvRow[]) => {
+    const errors: string[] = [];
+    const seenUsernames = new Set(judges.map((judge) => judge.username));
+    const seenEmails = new Set(judges.map((judge) => judge.email));
+
+    rows.forEach((row) => {
+      const username = cell(row, 'username');
+      const email = cell(row, 'email');
+
+      if (!cell(row, 'full_name')) errors.push(`Row ${row._row}: missing full_name`);
+      if (!username) errors.push(`Row ${row._row}: missing username`);
+      else if (username.length < 3) errors.push(`Row ${row._row}: username must be at least 3 characters`);
+      else if (seenUsernames.has(username)) errors.push(`Row ${row._row}: username ${username} is already taken`);
+
+      if (!cell(row, 'password')) errors.push(`Row ${row._row}: missing password`);
+      else if (cell(row, 'password').length < 8) {
+        errors.push(`Row ${row._row}: password must be at least 8 characters`);
+      }
+
+      if (!email) errors.push(`Row ${row._row}: missing email`);
+      else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        errors.push(`Row ${row._row}: ${email} is not a valid email`);
+      } else if (seenEmails.has(email)) {
+        errors.push(`Row ${row._row}: email ${email} is already used`);
+      }
+
+      if (!cell(row, 'church')) errors.push(`Row ${row._row}: missing church`);
+
+      seenUsernames.add(username);
+      seenEmails.add(email);
+    });
+
+    return errors;
+  };
+
+  const handleImportFile = async (file: File) => {
+    try {
+      setImporting(true);
+      const parsed = parseCsv(await file.text(), TEMPLATES.judges.headers.filter((header) => header !== 'contact'));
+      const errors = validateJudgeRows(parsed.rows);
+
+      setImportFile(file);
+      setImportRows(parsed.rows);
+      setImportErrors(errors);
+
+      if (errors.length > 0) message.warning(`${errors.length} rows need fixing before import`);
+      else message.success(`${parsed.rows.length} judges ready to import`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Could not read that file');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const runImport = async () => {
+    try {
+      setImporting(true);
+
+      const { data: created, error } = await supabase
+        .from('judges')
+        .insert(importRows.map((row) => ({
+          full_name: cell(row, 'full_name'),
+          username: cell(row, 'username'),
+          email: cell(row, 'email'),
+          church: cell(row, 'church'),
+          contact: cell(row, 'contact') || null,
+          is_active: true,
+        })))
+        .select();
+
+      if (error) throw new Error(error.message);
+
+      try {
+        await setPasswords(created.map((judge) => {
+          const row = importRows.find((candidate) => cell(candidate, 'username') === judge.username);
+          if (!row) throw new Error(`Could not match a password to ${judge.username}`);
+          return { user_type: 'judge' as const, user_id: judge.id, password: cell(row, 'password') };
+        }));
+      } catch (credentialError) {
+        // Don't leave judges behind that nobody can log in as.
+        await supabase.from('judges').delete().in('id', created.map((judge) => judge.id));
+        throw credentialError;
+      }
+
+      message.success(`Imported ${created.length} judges`);
+      setIsImportOpen(false);
+      resetImport();
+      fetchJudges();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to import judges');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleDelete = (judge: Judge) => {
     Modal.confirm({
       title: `Delete ${judge.full_name}?`,
@@ -230,8 +340,8 @@ const JudgeManagement = () => {
         <div className="flex justify-end gap-1">
           <button
             type="button"
-            aria-label="PencilSimple judge"
-            title="PencilSimple judge"
+            aria-label="Edit judge"
+            title="Edit judge"
             onClick={() => openModal(record)}
             className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-sunken hover:text-foreground"
           >
@@ -258,9 +368,19 @@ const JudgeManagement = () => {
       subtitle={`${judges.length} accounts`}
       maxWidth="wide"
       actions={
-        <Button size="sm" icon={<Plus size={15} />} onClick={() => openModal()}>
-          <span className="hidden sm:inline">Add judge</span>
-        </Button>
+        <>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<UploadSimple size={15} />}
+            onClick={() => setIsImportOpen(true)}
+          >
+            <span className="hidden sm:inline">Import</span>
+          </Button>
+          <Button size="sm" icon={<Plus size={15} />} onClick={() => openModal()}>
+            <span className="hidden sm:inline">Add judge</span>
+          </Button>
+        </>
       }
     >
       <DataTable
@@ -318,7 +438,7 @@ const JudgeManagement = () => {
         open={isModalOpen}
         onClose={closeModal}
         dismissable={!submitting}
-        title={editingJudge ? 'PencilSimple judge' : 'Add judge'}
+        title={editingJudge ? 'Edit judge' : 'Add judge'}
         description={
           editingJudge
             ? 'Leave the password blank to keep the current one.'
@@ -392,6 +512,73 @@ const JudgeManagement = () => {
             </Form.Item>
           </div>
         </Form>
+      </Sheet>
+
+      <Sheet
+        open={isImportOpen}
+        onClose={() => {
+          setIsImportOpen(false);
+          resetImport();
+        }}
+        dismissable={!importing}
+        size="lg"
+        title="Import judges"
+        description="One row per judge, with the login they will use."
+        footer={
+          importFile ? (
+            <div className="flex gap-2">
+              <Button variant="secondary" size="lg" onClick={resetImport} disabled={importing}>
+                Change file
+              </Button>
+              <Button
+                size="lg"
+                block
+                loading={importing}
+                disabled={importErrors.length > 0 || importRows.length === 0}
+                onClick={runImport}
+              >
+                Import {importRows.length} judges
+              </Button>
+            </div>
+          ) : undefined
+        }
+      >
+        {!importFile ? (
+          <ImportPanel template="judges" onFile={handleImportFile} disabled={importing} />
+        ) : (
+          <div className="space-y-3">
+            <ImportSummary file={importFile} rows={importRows.length} label="judges" />
+            <ImportIssues
+              errors={importErrors}
+              title={`${importErrors.length} problems — fix these and upload again`}
+            />
+
+            {importErrors.length === 0 && (
+              <div className="scrollbar-thin max-h-72 overflow-auto rounded-xl border border-border">
+                <table className="w-full text-caption">
+                  <thead className="sticky top-0 bg-surface-sunken text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Name</th>
+                      <th className="px-3 py-2 text-left font-medium">Username</th>
+                      <th className="px-3 py-2 text-left font-medium">Email</th>
+                      <th className="px-3 py-2 text-left font-medium">Church</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importRows.slice(0, 25).map((row) => (
+                      <tr key={row._row} className="border-t border-border">
+                        <td className="truncate px-3 py-2 text-foreground">{cell(row, 'full_name')}</td>
+                        <td className="truncate px-3 py-2 text-foreground">{cell(row, 'username')}</td>
+                        <td className="truncate px-3 py-2 text-foreground">{cell(row, 'email')}</td>
+                        <td className="truncate px-3 py-2 text-foreground">{cell(row, 'church')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </Sheet>
     </AppShell>
   );

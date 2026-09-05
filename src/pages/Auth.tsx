@@ -25,7 +25,7 @@ const errorText = (error: unknown, fallback: string) => {
 };
 
 const Auth = () => {
-  const { user: adminUser, signIn: adminSignIn, loading: adminLoading } = useAuth();
+  const { user: adminUser, profile: adminProfile, signIn: adminSignIn, loading: adminLoading } = useAuth();
   const { participant, signIn: participantSignIn, loading: participantLoading } = useParticipantAuth();
   const navigate = useNavigate();
 
@@ -38,11 +38,12 @@ const Auth = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (adminUser && !adminLoading) navigate('/', { replace: true });
+    // Wait for the profile too: Index cannot route on a user alone.
+    if (adminUser && adminProfile && !adminLoading) navigate('/', { replace: true });
     if (participant && !participantLoading) {
       navigate(participant.role === 'judge' ? '/judge' : '/participant', { replace: true });
     }
-  }, [adminUser, participant, adminLoading, participantLoading, navigate]);
+  }, [adminUser, adminProfile, participant, adminLoading, participantLoading, navigate]);
 
   const submit = async (formEvent: React.FormEvent) => {
     formEvent.preventDefault();
