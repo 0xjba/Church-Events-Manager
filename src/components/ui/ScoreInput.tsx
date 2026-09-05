@@ -17,7 +17,6 @@ export const ScoreInput = ({
   onChange,
   disabled,
   label,
-  hint,
 }: {
   value: number | null;
   max: number;
@@ -25,7 +24,6 @@ export const ScoreInput = ({
   onChange: (value: number) => void;
   disabled?: boolean;
   label: string;
-  hint?: string;
 }) => {
   const [draft, setDraft] = useState<string>(value === null ? '' : String(value));
 
@@ -68,14 +66,7 @@ export const ScoreInput = ({
     >
       {/* The maximum is shown once, beside the value, rather than repeated in
           a corner label at a third type size. */}
-      <div className="mb-3 flex items-center gap-2">
-        <p className="min-w-0 flex-1 truncate text-body font-medium text-foreground">{label}</p>
-        {hint && (
-          <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-caption text-muted-foreground">
-            {hint}
-          </span>
-        )}
-      </div>
+      <p className="mb-3 truncate text-body font-medium text-foreground">{label}</p>
 
       <div className="flex items-center gap-3">
         <button

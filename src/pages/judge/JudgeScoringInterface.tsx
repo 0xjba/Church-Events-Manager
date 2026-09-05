@@ -595,7 +595,6 @@ const JudgeScoringInterface = () => {
               <ScoreInput
                 key={criterion.id}
                 label={criterion.name}
-                hint={criterion.weight !== 1 ? `Weight ×${criterion.weight}` : undefined}
                 max={criterion.max_score}
                 value={draft[criterion.id] ?? null}
                 disabled={submitting}
