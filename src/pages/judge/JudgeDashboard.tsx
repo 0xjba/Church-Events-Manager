@@ -76,8 +76,13 @@ const JudgeDashboard = () => {
       });
       const scoreCounts: Record<string, number> = summary?.counts ?? {};
 
+      // Events under a level that has been put away are not the judge's concern.
+      const assignments = (eventsData ?? []).filter((eventJudge: FormValues) =>
+        runningLevels.has(eventJudge.events?.level_id),
+      );
+
       const enrichedEvents = await Promise.all(
-        (eventsData ?? []).map(async (eventJudge: FormValues) => {
+        assignments.map(async (eventJudge: FormValues) => {
           const event = eventJudge.events;
 
           const [{ count: participantCount }, { count: criteriaCount }] = await Promise.all([

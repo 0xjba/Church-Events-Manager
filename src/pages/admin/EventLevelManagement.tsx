@@ -7,7 +7,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { DataTable } from '@/components/admin/DataTable';
 import { Button, StatusPill } from '@/components/ui/primitives';
 import { Sheet } from '@/components/ui/Sheet';
-import { SCOPE_LABELS, scopeAllows, type LevelScope } from '@/utils/championship';
+import { SCOPE_LABELS, type LevelScope } from '@/utils/championship';
 
 interface EventLevel {
   id: string;
@@ -294,7 +294,6 @@ const EventLevelManagement = () => {
               label="What is this level?"
               name="scope"
               rules={[{ required: true, message: 'Choose the level' }]}
-              extra="Decides which champions are crowned"
             >
               <Select
                 options={(['church', 'district', 'state'] as LevelScope[]).map((scope) => ({
@@ -313,31 +312,6 @@ const EventLevelManagement = () => {
             <Switch />
           </Form.Item>
 
-          <Form.Item noStyle shouldUpdate>
-            {({ getFieldValue }) => {
-              const allows = scopeAllows(getFieldValue('scope'));
-              return (
-                <p className="mb-2 rounded-lg bg-surface-sunken p-3 text-caption text-muted-foreground">
-                  Crowns an <span className="font-medium text-foreground">individual champion</span>
-                  {allows.church && (
-                    <>
-                      {' '}and a <span className="font-medium text-foreground">champion church</span>
-                    </>
-                  )}
-                  {allows.district && (
-                    <>
-                      {' '}and a <span className="font-medium text-foreground">champion district</span>
-                    </>
-                  )}
-                  .
-                  {!allows.church &&
-                    ' Every entrant comes from the same church, so there is nothing to compare above the individual.'}
-                  {allows.church && !allows.district &&
-                    ' Churches are compared against each other; districts only matter at state level.'}
-                </p>
-              );
-            }}
-          </Form.Item>
         </Form>
       </Sheet>
 
