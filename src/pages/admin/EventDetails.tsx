@@ -856,7 +856,7 @@ const EventDetails = () => {
                     else setIsParticipantModalOpen(true);
                   }}
                 >
-                  Add {isGroupEvent ? 'groups' : 'entrants'}
+                  Add {isGroupEvent ? 'groups' : 'participants'}
                 </Button>
               )}
               {tab === 'judges' && (
@@ -967,11 +967,11 @@ const EventDetails = () => {
               onClose={() => setIsParticipantModalOpen(false)}
               dismissable={!working}
               size="lg"
-              title="Add entrants"
+              title="Add participants"
               description={
                 event.age_category
-                  ? `Only ${event.age_category} participants can enter this event.`
-                  : 'All active participants are eligible.'
+                  ? `Only ${event.age_category} participants from this event level can enter.`
+                  : 'Participants registered in this event level.'
               }
               footer={
                 <Button

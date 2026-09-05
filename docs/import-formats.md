@@ -58,7 +58,7 @@ Mrs. Leah Mathew,leah.mathew,changeme456,leah@example.org,Hope Church,
 
 ## 3. Events and their criteria
 
-**Where:** Events → Import events
+**Where:** Events → Import events (choose the event level in the sheet)
 **Creates:** events under one event level, each with its scoring criteria.
 
 One row per **criterion**. Rows sharing an event name and age category belong to
@@ -92,9 +92,9 @@ only contribute their criterion.
 
 ---
 
-## 4. Entrants into events
+## 4. Event participants
 
-**Where:** Events → Import entrants
+**Where:** Events → Import event participants
 **Adds:** existing participants to existing events. Creates nothing.
 
 | Column | Required | Notes |
@@ -117,7 +117,7 @@ not duplicated.
 
 ## 5. Scores for events held off the app
 
-**Where:** Results → Import scores
+**Where:** Results → Import scores (choose the event level in the sheet)
 **Adds:** judge scores for an event that was run on paper, exactly as if the
 judges had entered them in the app. Results are then calculated normally, so
 placings, ties and championship points all follow the usual rules.
@@ -145,3 +145,12 @@ Action Song,Juniors,,Zion Youth Team,samuel.george,Voice quality,9
 An entrant must have a score from a judge for **every** criterion, the same rule
 the app applies to a judge scoring on a phone. Partial sheets are rejected with
 the row numbers, so a half-typed import cannot skew an average.
+
+A judge who scored an event they were never assigned to, and an entrant who was
+scored without being registered, are both attached as part of the import — a
+paper event will not have had either set up in the app. Both lists are shown
+before you confirm. Afterwards, calculate the event to turn the scores into
+placings.
+
+Every template downloads with its example rows filled in, so a sheet can be
+edited straight over them.

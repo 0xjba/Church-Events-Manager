@@ -52,14 +52,14 @@ export const TEMPLATES = {
     note: 'One row per criterion. Rows sharing an event name and age category build one event, and the event columns are read from its first row.',
   },
 
-  entrants: {
-    file: 'entrants-template.csv',
+  eventParticipants: {
+    file: 'event-participants-template.csv',
     headers: ['chest_number', 'age_category', 'events'],
     examples: [
       ['201', 'Juniors', 'Solo Song Female, Bible Quiz'],
       ['202', 'Seniors', 'Speech'],
     ],
-    note: 'Adds existing participants to existing events. Events match on name plus age category, and the category must match the participant\'s own.',
+    note: 'Adds participants who already exist to events that already exist; it creates neither. Events match on name plus age category, and the category must match the participant\'s own.',
   },
 
   offlineScores: {

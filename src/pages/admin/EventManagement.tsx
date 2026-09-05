@@ -9,7 +9,10 @@ import { DataTable } from '@/components/admin/DataTable';
 import { Toolbar } from '@/components/admin/Toolbar';
 import { Button, ProgressBar, StatusPill, statusTone } from '@/components/ui/primitives';
 import { SearchInput } from '@/components/ui/inputs';
-import { ImportPanel } from '@/components/admin/ImportPanel';
+import { ImportIssues, ImportPanel, ImportSummary } from '@/components/admin/ImportPanel';
+import { parseCsv } from '@/utils/csv';
+import { TEMPLATES } from '@/utils/importTemplates';
+import { parseEventRows, type ParsedEvent } from '@/utils/importEvents';
 import { Sheet } from '@/components/ui/Sheet';
 import { cn } from '@/lib/utils';
 
@@ -44,7 +47,9 @@ interface Criteria {
   weight: number;
 }
 
-const AGE_CATEGORIES = ['Sub Juniors', 'Juniors', 'Intermediates', 'Seniors'];
+type AgeCategory = 'Sub Juniors' | 'Juniors' | 'Intermediates' | 'Seniors';
+
+const AGE_CATEGORIES: AgeCategory[] = ['Sub Juniors', 'Juniors', 'Intermediates', 'Seniors'];
 const STATUSES = ['upcoming', 'active', 'completed'];
 
 const EventManagement = () => {
@@ -64,6 +69,13 @@ const EventManagement = () => {
 
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [batchDeleting, setBatchDeleting] = useState(false);
+
+  const [isEventImportOpen, setIsEventImportOpen] = useState(false);
+  const [eventImportLevel, setEventImportLevel] = useState<string>('');
+  const [eventImportFile, setEventImportFile] = useState<File | null>(null);
+  const [parsedEvents, setParsedEvents] = useState<ParsedEvent[]>([]);
+  const [eventImportErrors, setEventImportErrors] = useState<string[]>([]);
+  const [importingEvents, setImportingEvents] = useState(false);
 
   const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState(false);
   const [bulkImportLoading, setBulkImportLoading] = useState(false);
@@ -325,6 +337,109 @@ const EventManagement = () => {
         }
       },
     });
+  };
+
+  /* --------------------------------------------------- event import */
+
+  const resetEventImport = () => {
+    setEventImportFile(null);
+    setParsedEvents([]);
+    setEventImportErrors([]);
+  };
+
+  const openEventImport = () => {
+    setEventImportLevel(
+      selectedLevelId !== 'all'
+        ? selectedLevelId
+        : eventLevels.find((level) => level.is_active)?.id ?? eventLevels[0]?.id ?? '',
+    );
+    resetEventImport();
+    setIsEventImportOpen(true);
+  };
+
+  const handleEventImportFile = async (file: File) => {
+    try {
+      setImportingEvents(true);
+
+      const parsed = parseCsv(await file.text(), [
+        'event_name', 'age_category', 'event_format', 'entrant_type', 'criterion_name', 'criterion_max',
+      ]);
+
+      // Only events already in the target level count as duplicates.
+      const existing = events
+        .filter((event) => event.level_id === eventImportLevel)
+        .map((event) => ({ name: event.name, age_category: event.age_category }));
+
+      const { events: parsedList, errors } = parseEventRows(parsed.rows, existing);
+
+      setEventImportFile(file);
+      setParsedEvents(parsedList);
+      setEventImportErrors(errors);
+
+      if (errors.length > 0) message.warning(`${errors.length} problems to fix before import`);
+      else message.success(`${parsedList.length} events ready to import`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Could not read that file');
+    } finally {
+      setImportingEvents(false);
+    }
+  };
+
+  const runEventImport = async () => {
+    try {
+      setImportingEvents(true);
+
+      const { data: created, error } = await supabase
+        .from('events')
+        .insert(parsedEvents.map((event) => ({
+          name: event.name,
+          type: event.type,
+          event_type: event.event_type,
+          level_id: eventImportLevel,
+          age_category: event.age_category as AgeCategory | null,
+          rules: event.rules,
+          time_limit: event.time_limit,
+          max_participants: event.max_participants,
+          status: 'upcoming',
+          event_order: event.event_order,
+        })))
+        .select();
+
+      if (error) throw new Error(error.message);
+
+      try {
+        const criteria = created.flatMap((event) => {
+          const source = parsedEvents.find(
+            (candidate) =>
+              candidate.name === event.name && (candidate.age_category ?? null) === event.age_category,
+          );
+          if (!source) throw new Error(`Could not match criteria to ${event.name}`);
+
+          return source.criteria.map((criterion) => ({
+            event_id: event.id,
+            name: criterion.name,
+            max_score: criterion.max_score,
+            weight: criterion.weight,
+          }));
+        });
+
+        const { error: criteriaError } = await supabase.from('event_criteria').insert(criteria);
+        if (criteriaError) throw new Error(criteriaError.message);
+      } catch (criteriaError) {
+        // An event without criteria cannot be scored, so it should not survive.
+        await supabase.from('events').delete().in('id', created.map((event) => event.id));
+        throw criteriaError;
+      }
+
+      message.success(`Imported ${created.length} events`);
+      setIsEventImportOpen(false);
+      resetEventImport();
+      fetchEvents();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to import events');
+    } finally {
+      setImportingEvents(false);
+    }
   };
 
   /* ---------------------------------------------------- bulk import */
@@ -599,9 +714,17 @@ const EventManagement = () => {
             variant="secondary"
             size="sm"
             icon={<UploadSimple size={15} />}
+            onClick={openEventImport}
+          >
+            <span className="hidden sm:inline">Import events</span>
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<UploadSimple size={15} />}
             onClick={() => setIsBulkImportModalOpen(true)}
           >
-            <span className="hidden sm:inline">Import entrants</span>
+            <span className="hidden sm:inline">Import event participants</span>
           </Button>
           <Button size="sm" icon={<Plus size={15} />} onClick={() => openModal()}>
             <span className="hidden sm:inline">Add event</span>
@@ -840,14 +963,104 @@ const EventManagement = () => {
         </div>
       </Sheet>
 
+      <Sheet
+        open={isEventImportOpen}
+        onClose={() => {
+          setIsEventImportOpen(false);
+          resetEventImport();
+        }}
+        dismissable={!importingEvents}
+        size="lg"
+        title="Import events"
+        description="One row per criterion; rows sharing an event name and age category build one event."
+        footer={
+          eventImportFile ? (
+            <div className="flex gap-2">
+              <Button variant="secondary" size="lg" onClick={resetEventImport} disabled={importingEvents}>
+                Change file
+              </Button>
+              <Button
+                size="lg"
+                block
+                loading={importingEvents}
+                disabled={eventImportErrors.length > 0 || parsedEvents.length === 0}
+                onClick={runEventImport}
+              >
+                Import {parsedEvents.length} events
+              </Button>
+            </div>
+          ) : undefined
+        }
+      >
+        <div className="mb-3">
+          <label className="mb-1.5 block text-caption font-medium text-foreground">Event level</label>
+          <Select
+            value={eventImportLevel || undefined}
+            onChange={(value) => {
+              setEventImportLevel(value);
+              resetEventImport();
+            }}
+            className="w-full"
+            placeholder="Which level do these events belong to?"
+            options={eventLevels.map((level) => ({
+              value: level.id,
+              label: `${level.name} ${level.year}${level.is_active ? '' : ' (inactive)'}`,
+              disabled: !level.is_active,
+            }))}
+          />
+        </div>
+
+        {!eventImportFile ? (
+          <ImportPanel
+            template="events"
+            onFile={handleEventImportFile}
+            disabled={importingEvents || !eventImportLevel}
+          />
+        ) : (
+          <div className="space-y-3">
+            <ImportSummary file={eventImportFile} rows={parsedEvents.length} label="events" />
+            <ImportIssues
+              errors={eventImportErrors}
+              title={`${eventImportErrors.length} problems — fix these and upload again`}
+            />
+
+            {eventImportErrors.length === 0 && (
+              <ul className="divide-y divide-border rounded-xl border border-border">
+                {parsedEvents.map((event) => (
+                  <li key={`${event.name}-${event.age_category}`} className="px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-body font-medium text-foreground">
+                        {event.name}
+                      </span>
+                      <span className="shrink-0 text-caption capitalize text-muted-foreground">
+                        {event.age_category ?? 'All categories'} · {event.type} · {event.event_type}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 truncate text-caption text-muted-foreground">
+                      {event.criteria
+                        .map((criterion) => `${criterion.name} /${criterion.max_score}`)
+                        .join(' · ')}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <p className="pb-2 text-caption text-muted-foreground">
+              Imported events start as upcoming, with no judges or entrants attached yet.
+            </p>
+          </div>
+        )}
+      </Sheet>
+
       {/* --------------------------------------------- entrant import */}
       <Sheet
         open={isBulkImportModalOpen}
         onClose={closeBulkImportModal}
         dismissable={!bulkImportLoading}
         size="lg"
-        title="Import entrants into events"
-        description="Registers existing participants into individual events."
+        title="Import event participants"
+        description="Adds participants who already exist to events that already exist."
         footer={
           importResults ? (
             <Button size="lg" block onClick={closeBulkImportModal}>
@@ -857,7 +1070,7 @@ const EventManagement = () => {
         }
       >
         <ImportPanel
-          template="entrants"
+          template="eventParticipants"
           onFile={handleBulkImport}
           disabled={bulkImportLoading || Boolean(importResults)}
         />

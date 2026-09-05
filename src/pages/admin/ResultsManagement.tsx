@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { message } from 'antd';
-import { Calculator, DownloadSimple, Eye, EyeSlash, Medal, Trophy } from '@phosphor-icons/react';
+import { Select, message } from 'antd';
+import { Calculator, DownloadSimple, Eye, EyeSlash, Medal, Trophy, UploadSimple } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import type { FormValues, SupabaseRow } from '@/lib/types';
 import { ResultsCalculator } from '@/utils/resultsCalculator';
@@ -17,6 +17,9 @@ import {
   statusTone,
 } from '@/components/ui/primitives';
 import { Sheet } from '@/components/ui/Sheet';
+import { ImportIssues, ImportPanel, ImportSummary } from '@/components/admin/ImportPanel';
+import { parseCsv } from '@/utils/csv';
+import { prepareScoreImport, type ScoreImportContext, type ScoreImportPlan } from '@/utils/importScores';
 import { cn, formatScore } from '@/lib/utils';
 
 interface EventRecord {
@@ -133,6 +136,12 @@ const ResultsManagement = () => {
   const [winnersData, setWinnersData] = useState<WinnersExportData | null>(null);
   const [showScoresForEvent, setShowScoresForEvent] = useState<Record<string, boolean>>({});
   const [individualChampion, setIndividualChampion] = useState<Champion | null>(null);
+
+  const [isScoreImportOpen, setIsScoreImportOpen] = useState(false);
+  const [scoreImportLevel, setScoreImportLevel] = useState<string>('');
+  const [scoreImportFile, setScoreImportFile] = useState<File | null>(null);
+  const [scorePlan, setScorePlan] = useState<ScoreImportPlan | null>(null);
+  const [importingScores, setImportingScores] = useState(false);
 
   useEffect(() => {
     fetchEvents();
@@ -521,6 +530,140 @@ const ResultsManagement = () => {
     message.success(`Exported winners for ${winnersData.events.length} events`);
   };
 
+  /* ------------------------------------------- off-app score import */
+
+  const resetScoreImport = () => {
+    setScoreImportFile(null);
+    setScorePlan(null);
+  };
+
+  const openScoreImport = () => {
+    setScoreImportLevel(levels.find((level) => level.is_active)?.id ?? levels[0]?.id ?? '');
+    resetScoreImport();
+    setIsScoreImportOpen(true);
+  };
+
+  // Everything the sheet is checked against: which events exist in this level,
+  // who is assigned to them, and who is entered.
+  const buildScoreContext = async (levelId: string): Promise<ScoreImportContext> => {
+    const levelEvents = events.filter((event) => event.level_id === levelId);
+    const eventIds = levelEvents.map((event) => event.id);
+
+    const [criteriaResponse, judgeLinks, participantLinks, groupLinks, judgesResponse, participantsResponse, groupsResponse] =
+      await Promise.all([
+        supabase.from('event_criteria').select('id, event_id, name, max_score').in('event_id', eventIds),
+        supabase.from('event_judges').select('event_id, judge_id').in('event_id', eventIds),
+        supabase.from('event_participants').select('event_id, participant_id').in('event_id', eventIds),
+        supabase.from('event_groups').select('event_id, group_id').in('event_id', eventIds),
+        supabase.from('judges').select('id, username, full_name').eq('is_active', true),
+        supabase.from('participants').select('id, chest_number, full_name, level_id').eq('level_id', levelId),
+        supabase.from('groups').select('id, name'),
+      ]);
+
+    return {
+      events: levelEvents.map((event) => ({
+        id: event.id,
+        name: event.name,
+        age_category: event.age_category,
+        event_type: event.event_type,
+        criteria: (criteriaResponse.data ?? []).filter((criterion) => criterion.event_id === event.id),
+        judgeIds: new Set(
+          (judgeLinks.data ?? []).filter((row) => row.event_id === event.id).map((row) => row.judge_id),
+        ),
+        participantIds: new Set(
+          (participantLinks.data ?? [])
+            .filter((row) => row.event_id === event.id)
+            .map((row) => row.participant_id as string),
+        ),
+        groupIds: new Set(
+          (groupLinks.data ?? []).filter((row) => row.event_id === event.id).map((row) => row.group_id as string),
+        ),
+      })),
+      judgesByUsername: new Map((judgesResponse.data ?? []).map((judge) => [judge.username, judge])),
+      participantsByChest: new Map(
+        (participantsResponse.data ?? []).map((participant) => [participant.chest_number, participant]),
+      ),
+      groupsByName: new Map((groupsResponse.data ?? []).map((group) => [group.name.toLowerCase(), group])),
+    };
+  };
+
+  const handleScoreImportFile = async (file: File) => {
+    try {
+      setImportingScores(true);
+
+      const parsed = parseCsv(await file.text(), [
+        'event_name', 'age_category', 'judge_username', 'criterion_name', 'score',
+      ]);
+
+      const plan = prepareScoreImport(parsed.rows, await buildScoreContext(scoreImportLevel));
+
+      setScoreImportFile(file);
+      setScorePlan(plan);
+
+      if (plan.errors.length > 0) message.warning(`${plan.errors.length} problems to fix before import`);
+      else message.success(`${plan.scores.length} scores ready for ${plan.entrantCount} entrants`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Could not read that file');
+    } finally {
+      setImportingScores(false);
+    }
+  };
+
+  const runScoreImport = async () => {
+    if (!scorePlan) return;
+
+    try {
+      setImportingScores(true);
+
+      // A paper event may never have had its judges or entrants attached in the
+      // app, so the sheet's own contents fill those in.
+      if (scorePlan.judgeAssignments.length > 0) {
+        const { error } = await supabase.from('event_judges').insert(
+          scorePlan.judgeAssignments.map(({ event_id, judge_id }) => ({ event_id, judge_id })),
+        );
+        if (error) throw new Error(error.message);
+      }
+
+      const participantEntries = scorePlan.entrantRegistrations.filter((entry) => entry.participant_id);
+      if (participantEntries.length > 0) {
+        const { error } = await supabase.from('event_participants').insert(
+          participantEntries.map(({ event_id, participant_id }) => ({ event_id, participant_id })),
+        );
+        if (error) throw new Error(error.message);
+      }
+
+      const groupEntries = scorePlan.entrantRegistrations.filter((entry) => entry.group_id);
+      if (groupEntries.length > 0) {
+        const { error } = await supabase.from('event_groups').insert(
+          groupEntries.map(({ event_id, group_id }) => ({ event_id, group_id })),
+        );
+        if (error) throw new Error(error.message);
+      }
+
+      for (let index = 0; index < scorePlan.scores.length; index += 400) {
+        const { error } = await supabase.from('scores').insert(scorePlan.scores.slice(index, index + 400));
+        if (error) {
+          throw new Error(
+            error.code === '23505'
+              ? 'Some of these entrants already have scores from that judge; clear them before importing again'
+              : error.message,
+          );
+        }
+      }
+
+      message.success(
+        `Imported ${scorePlan.scores.length} scores — calculate the event to turn them into results`,
+      );
+      setIsScoreImportOpen(false);
+      resetScoreImport();
+      fetchEvents();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to import scores');
+    } finally {
+      setImportingScores(false);
+    }
+  };
+
   const columns = [
     {
       title: 'Event',
@@ -647,14 +790,24 @@ const ResultsManagement = () => {
       subtitle={`${published} of ${events.length} events published`}
       maxWidth="wide"
       actions={
-        <Button
-          size="sm"
-          icon={<Trophy size={15} />}
-          loading={exportingWinners}
-          onClick={fetchWinners}
-        >
-          <span className="hidden sm:inline">Winners</span>
-        </Button>
+        <>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<UploadSimple size={15} />}
+            onClick={openScoreImport}
+          >
+            <span className="hidden sm:inline">Import scores</span>
+          </Button>
+          <Button
+            size="sm"
+            icon={<Trophy size={15} />}
+            loading={exportingWinners}
+            onClick={fetchWinners}
+          >
+            <span className="hidden sm:inline">Winners</span>
+          </Button>
+        </>
       }
     >
       {levels.length > 0 && (
@@ -761,6 +914,102 @@ const ResultsManagement = () => {
                   </li>
                 ))}
             </ul>
+          </div>
+        )}
+      </Sheet>
+
+      <Sheet
+        open={isScoreImportOpen}
+        onClose={() => {
+          setIsScoreImportOpen(false);
+          resetScoreImport();
+        }}
+        dismissable={!importingScores}
+        size="lg"
+        title="Import scores from an off-app event"
+        description="One row per judge, per entrant, per criterion — the sheet a judge would have filled in."
+        footer={
+          scoreImportFile && scorePlan ? (
+            <div className="flex gap-2">
+              <Button variant="secondary" size="lg" onClick={resetScoreImport} disabled={importingScores}>
+                Change file
+              </Button>
+              <Button
+                size="lg"
+                block
+                loading={importingScores}
+                disabled={scorePlan.errors.length > 0 || scorePlan.scores.length === 0}
+                onClick={runScoreImport}
+              >
+                Import {scorePlan.scores.length} scores
+              </Button>
+            </div>
+          ) : undefined
+        }
+      >
+        <div className="mb-3">
+          <label className="mb-1.5 block text-caption font-medium text-foreground">Event level</label>
+          <Select
+            value={scoreImportLevel || undefined}
+            onChange={(value) => {
+              setScoreImportLevel(value);
+              resetScoreImport();
+            }}
+            className="w-full"
+            placeholder="Which level were these events part of?"
+            options={levels.map((level) => ({
+              value: level.id,
+              label: `${level.name} ${level.year}`,
+            }))}
+          />
+        </div>
+
+        {!scoreImportFile || !scorePlan ? (
+          <ImportPanel
+            template="offlineScores"
+            onFile={handleScoreImportFile}
+            disabled={importingScores || !scoreImportLevel}
+          />
+        ) : (
+          <div className="space-y-3">
+            <ImportSummary file={scoreImportFile} rows={scorePlan.scores.length} label="scores" />
+
+            <ImportIssues
+              errors={scorePlan.errors}
+              title={`${scorePlan.errors.length} problems — nothing is imported until these are fixed`}
+            />
+
+            {scorePlan.errors.length === 0 && (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-surface-sunken p-3 text-center">
+                    <p className="tnum text-title font-semibold text-foreground">{scorePlan.entrantCount}</p>
+                    <p className="text-caption text-muted-foreground">entrants scored</p>
+                  </div>
+                  <div className="rounded-xl bg-surface-sunken p-3 text-center">
+                    <p className="tnum text-title font-semibold text-foreground">{scorePlan.scores.length}</p>
+                    <p className="text-caption text-muted-foreground">scores</p>
+                  </div>
+                </div>
+
+                <ImportIssues
+                  tone="warning"
+                  errors={scorePlan.judgeAssignments.map((assignment) => assignment.label)}
+                  title="Judges to be assigned, since they scored an event they were not attached to"
+                />
+
+                <ImportIssues
+                  tone="warning"
+                  errors={scorePlan.entrantRegistrations.map((registration) => registration.label)}
+                  title="Entrants to be entered, since they were scored without being registered"
+                />
+
+                <p className="pb-2 text-caption text-muted-foreground">
+                  Scores import locked, exactly as a judge's submission would. Calculate the event
+                  afterwards to turn them into placings.
+                </p>
+              </>
+            )}
           </div>
         )}
       </Sheet>

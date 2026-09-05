@@ -77,7 +77,7 @@ export const ImportPanel = ({
       <div className="rounded-xl bg-surface-sunken p-3">
         <div className="mb-2 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-caption font-medium text-foreground">Required columns</p>
+            <p className="text-caption font-medium text-foreground">Columns, with an example</p>
             <p className="mt-0.5 text-caption text-muted-foreground">{definition.note}</p>
           </div>
           <Button
@@ -89,9 +89,35 @@ export const ImportPanel = ({
             Template
           </Button>
         </div>
-        <code className="block overflow-x-auto whitespace-nowrap rounded-lg bg-surface px-2.5 py-2 text-caption text-muted-foreground">
-          {definition.headers.join(',')}
-        </code>
+        <div className="scrollbar-thin overflow-x-auto rounded-lg bg-surface">
+          <table className="w-full text-caption">
+            <thead>
+              <tr className="border-b border-border">
+                {definition.headers.map((header) => (
+                  <th key={header} className="whitespace-nowrap px-2.5 py-1.5 text-left font-medium text-foreground">
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {/* The example rows are also what the downloaded file contains,
+                  so the sheet can be edited straight over them. */}
+              {definition.examples.map((example, index) => (
+                <tr key={index} className="border-b border-border last:border-b-0">
+                  {example.map((value, position) => (
+                    <td key={position} className="whitespace-nowrap px-2.5 py-1.5 text-muted-foreground">
+                      {value || <span className="opacity-40">—</span>}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-1.5 text-caption text-muted-foreground">
+          The template downloads with these example rows filled in; edit over them.
+        </p>
       </div>
 
       <input
