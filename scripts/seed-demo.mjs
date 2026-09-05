@@ -67,39 +67,57 @@ const check = (label, { data, error }) => {
 
 /* ------------------------------------------------------------ demo cast */
 
-// Chest numbers start at 900 so they cannot collide with real entrants.
-const PARTICIPANTS = [
-  ['Anna Mathew', 'Juniors', '901', 'Grace Church', 'North District'],
-  ['Jerry Thomas', 'Juniors', '902', 'Hope Church', 'North District'],
-  ['Blessy Ann Kurian', 'Juniors', '903', 'Bethel Church', 'South District'],
-  ['Rohan Philip', 'Juniors', '904', 'Zion Church', 'South District'],
-  ['Sarah Jacob', 'Juniors', '905', 'Grace Church', 'East District'],
-  ['Neil Varghese', 'Juniors', '906', 'Hope Church', 'East District'],
-  ['Elizabeth Rachel Samuel', 'Seniors', '907', 'Bethel Church', 'North District'],
-  ['Tom Abraham', 'Seniors', '908', 'Zion Church', 'North District'],
-  ['Grace Susan John', 'Seniors', '909', 'Grace Church', 'South District'],
-  ['Ivan Cherian', 'Seniors', '910', 'Hope Church', 'South District'],
-  ['Rebecca Mary Paul', 'Seniors', '911', 'Bethel Church', 'East District'],
-  ['Nathan Joseph', 'Seniors', '912', 'Zion Church', 'East District'],
-].map(([full_name, age_category, chest_number, church, district], index) => ({
-  full_name,
-  age_category,
-  chest_number,
-  church,
-  district,
-  username: `demo.p${index + 1}`,
-}));
+const CATEGORIES = ['Sub Juniors', 'Juniors', 'Intermediates', 'Seniors'];
+const CHURCHES = ['Grace Church', 'Hope Church', 'Bethel Church', 'Zion Church', 'Calvary Church', 'Emmanuel Church'];
+const DISTRICTS = ['North District', 'South District', 'East District', 'West District'];
 
+const FIRST_NAMES = [
+  'Anna', 'Jerry', 'Blessy', 'Rohan', 'Sarah', 'Neil', 'Elizabeth', 'Tom', 'Grace', 'Ivan',
+  'Rebecca', 'Nathan', 'Hannah', 'Daniel', 'Miriam', 'Joel', 'Esther', 'Philip', 'Naomi', 'Samuel',
+  'Ruth', 'Aaron', 'Lydia', 'Stephen', 'Priscilla', 'Mark', 'Deborah', 'Timothy', 'Abigail', 'Andrew',
+  'Rachel', 'Peter', 'Martha', 'Simon', 'Leah', 'Thomas', 'Susan', 'James', 'Mary', 'John',
+  'Tabitha', 'Luke', 'Joanna', 'Paul', 'Eunice', 'Silas', 'Dorcas', 'Barnabas',
+];
+
+const SURNAMES = [
+  'Mathew', 'Thomas', 'Kurian', 'Philip', 'Jacob', 'Varghese', 'Samuel', 'Abraham', 'John', 'Cherian',
+  'Paul', 'Joseph', 'Zachariah', 'Kuruvilla', 'George', 'Daniel', 'Alexander', 'Isaac',
+];
+
+// Twelve per age category: enough that the admin table paginates, search and
+// category filters do something, and a judge's list is worth filtering.
+const PER_CATEGORY = 12;
+
+const PARTICIPANTS = CATEGORIES.flatMap((age_category, categoryIndex) =>
+  Array.from({ length: PER_CATEGORY }, (_, seat) => {
+    const index = categoryIndex * PER_CATEGORY + seat;
+    return {
+      full_name: `${FIRST_NAMES[index % FIRST_NAMES.length]} ${SURNAMES[(index * 7) % SURNAMES.length]}`,
+      age_category,
+      // Chest numbers start at 900 so they cannot collide with real entrants.
+      chest_number: String(901 + index),
+      church: CHURCHES[index % CHURCHES.length],
+      district: DISTRICTS[index % DISTRICTS.length],
+      username: `demo.p${index + 1}`,
+    };
+  }),
+);
+
+// Four scoring judges — an odd panel is the norm, but four shows an admin what
+// a partially-returned panel looks like — plus one inactive account.
 const JUDGES = [
-  ['Pr. Samuel George', 'Grace Church', 'demo.judge1'],
-  ['Mrs. Leah Mathew', 'Hope Church', 'demo.judge2'],
-  ['Dr. Philip Varghese', 'Bethel Church', 'demo.judge3'],
-].map(([full_name, church, username]) => ({
+  ['Pr. Samuel George', 'Grace Church', 'demo.judge1', true],
+  ['Mrs. Leah Mathew', 'Hope Church', 'demo.judge2', true],
+  ['Dr. Philip Varghese', 'Bethel Church', 'demo.judge3', true],
+  ['Mrs. Susan Thomas', 'Zion Church', 'demo.judge4', true],
+  ['Pr. John Daniel', 'Calvary Church', 'demo.judge5', false],
+].map(([full_name, church, username, is_active]) => ({
   full_name,
   church,
   username,
   email: `${username}@example.org`,
   contact: null,
+  is_active,
 }));
 
 const STAGE_CRITERIA = [
@@ -114,88 +132,89 @@ const WRITTEN_CRITERIA = [
   { name: 'Handwriting', max_score: 5, weight: 1 },
 ];
 
-// One event per state a demo needs to show.
-const EVENTS = [
-  {
-    key: 'solo',
-    name: 'Solo Song Female',
-    type: 'stage',
-    event_type: 'individual',
-    age_category: 'Juniors',
-    status: 'active',
-    event_order: 1,
-    time_limit: 3,
-    rules: 'Three minutes maximum, no backing track.',
-    criteria: STAGE_CRITERIA,
-    scoring: 'partial', // a judge can pick up where they left off
-  },
-  {
-    key: 'quiz',
-    name: 'Bible Quiz',
-    type: 'writing',
-    event_type: 'individual',
-    age_category: 'Juniors',
-    status: 'active',
-    event_order: 2,
-    time_limit: 45,
-    rules: null,
-    criteria: WRITTEN_CRITERIA,
-    scoring: 'none', // a judge starting fresh
-  },
-  {
-    key: 'speech',
-    name: 'Speech',
-    type: 'stage',
-    event_type: 'individual',
-    age_category: 'Seniors',
-    status: 'completed',
-    event_order: 3,
-    time_limit: 5,
-    rules: null,
-    criteria: STAGE_CRITERIA,
-    scoring: 'full', // published results, leaderboard, winners
-  },
-  {
-    key: 'essay',
-    name: 'Essay',
-    type: 'writing',
-    event_type: 'individual',
-    age_category: 'Seniors',
-    status: 'upcoming',
-    event_order: 4,
-    time_limit: 60,
-    rules: null,
-    criteria: WRITTEN_CRITERIA,
-    scoring: 'none', // not yet open
-  },
-  {
-    key: 'action',
-    name: 'Action Song',
-    type: 'stage',
-    event_type: 'group',
-    age_category: 'Juniors',
-    status: 'active',
-    event_order: 5,
-    time_limit: 6,
-    rules: null,
-    criteria: STAGE_CRITERIA,
-    scoring: 'none', // group scoring
-  },
+const QUIZ_CRITERIA = [
+  { name: 'Round one', max_score: 20, weight: 1 },
+  { name: 'Round two', max_score: 20, weight: 1 },
+  { name: 'Rapid fire', max_score: 10, weight: 1 },
 ];
 
-const GROUPS = [
-  { name: 'Zion Youth Team', description: 'Junior group entry', members: ['901', '903', '905'] },
-  { name: 'Bethel Singers', description: 'Junior group entry', members: ['902', '904', '906'] },
+/*
+ * Ten events across all four age categories. Between them they cover every
+ * state a demo needs: published results in three categories (so the
+ * championship standings and the category grouping in the winners export both
+ * have something to show), a deliberate tie, an event a judge is midway
+ * through, two untouched, an upcoming one, and group scoring both finished and
+ * in progress.
+ */
+const EVENTS = [
+  { key: 'sj-solo', name: 'Solo Song', category: 'Sub Juniors', type: 'stage', event_type: 'individual',
+    status: 'completed', order: 1, time_limit: 3, criteria: STAGE_CRITERIA, entrants: 10, scoring: 'full' },
+
+  { key: 'sj-story', name: 'Story Telling', category: 'Sub Juniors', type: 'stage', event_type: 'individual',
+    status: 'active', order: 2, time_limit: 4, criteria: STAGE_CRITERIA, entrants: 10, scoring: 'none' },
+
+  { key: 'jr-solo', name: 'Solo Song Female', category: 'Juniors', type: 'stage', event_type: 'individual',
+    status: 'active', order: 3, time_limit: 3, criteria: STAGE_CRITERIA, entrants: 12, scoring: 'partial',
+    rules: 'Three minutes maximum, no backing track.' },
+
+  { key: 'jr-quiz', name: 'Bible Quiz', category: 'Juniors', type: 'writing', event_type: 'individual',
+    status: 'completed', order: 4, time_limit: 45, criteria: QUIZ_CRITERIA, entrants: 12, scoring: 'full',
+    tie: true },
+
+  { key: 'jr-action', name: 'Action Song', category: 'Juniors', type: 'stage', event_type: 'group',
+    status: 'active', order: 5, time_limit: 6, criteria: STAGE_CRITERIA, scoring: 'partial-group' },
+
+  { key: 'im-speech', name: 'Speech', category: 'Intermediates', type: 'stage', event_type: 'individual',
+    status: 'completed', order: 6, time_limit: 5, criteria: STAGE_CRITERIA, entrants: 11, scoring: 'full' },
+
+  { key: 'im-verses', name: 'Verses', category: 'Intermediates', type: 'writing', event_type: 'individual',
+    status: 'active', order: 7, time_limit: 30, criteria: WRITTEN_CRITERIA, entrants: 11, scoring: 'partial' },
+
+  { key: 'sr-speech', name: 'Speech', category: 'Seniors', type: 'stage', event_type: 'individual',
+    status: 'completed', order: 8, time_limit: 5, criteria: STAGE_CRITERIA, entrants: 12, scoring: 'full' },
+
+  { key: 'sr-essay', name: 'Essay', category: 'Seniors', type: 'writing', event_type: 'individual',
+    status: 'active', order: 9, time_limit: 60, criteria: WRITTEN_CRITERIA, entrants: 12, scoring: 'none' },
+
+  { key: 'sr-quiz', name: 'Bible Quiz', category: 'Seniors', type: 'writing', event_type: 'individual',
+    status: 'upcoming', order: 10, time_limit: 45, criteria: QUIZ_CRITERIA, entrants: 12, scoring: 'none' },
 ];
+
+// Four groups of three, which is exactly the twelve Juniors — a group cannot
+// borrow an entrant from another age category.
+const JUNIORS_FIRST_CHEST = 901 + CATEGORIES.indexOf('Juniors') * PER_CATEGORY;
+
+const GROUPS = Array.from({ length: 4 }, (_, index) => ({
+  name: ['Zion Youth Team', 'Bethel Singers', 'Grace Ensemble', 'Hope Chorus'][index],
+  description: 'Junior group entry',
+  members: [0, 1, 2].map((seat) => String(JUNIORS_FIRST_CHEST + index * 3 + seat)),
+}));
 
 /* -------------------------------------------------------------- helpers */
 
-// Deterministic so repeated seeds produce the same demo, and no two entrants
-// tie by accident at the top.
-const scoreFor = (participantIndex, judgeIndex, criterion) => {
-  const spread = ((participantIndex * 3 + judgeIndex) % 5) * 0.5;
-  const base = criterion.max_score - 2.5;
-  return Math.max(0, Math.min(criterion.max_score, Math.round((base + spread) * 2) / 2));
+// Deterministic, so re-seeding reproduces the same demo exactly. Spread is
+// wide enough that ranks are unambiguous except where a tie is asked for.
+const SPREAD_STEPS = 9;
+
+const scoreFor = (entrantIndex, judgeIndex, criterion) => {
+  const spread = ((entrantIndex * 5 + judgeIndex * 3) % SPREAD_STEPS) * 0.5;
+  const raw = criterion.max_score * 0.55 + spread;
+  return Math.max(0, Math.min(criterion.max_score, Math.round(raw * 2) / 2));
+};
+
+// A tie is only worth demonstrating at the top of the table, so the tied pair
+// gets the best sheet any entrant can score.
+const topScoreFor = (criterion) => {
+  const raw = criterion.max_score * 0.55 + (SPREAD_STEPS - 1) * 0.5;
+  return Math.max(0, Math.min(criterion.max_score, Math.round(raw * 2) / 2));
+};
+
+// PostgREST rejects very large payloads, so writes go in chunks.
+const insertAll = async (table, rows, label) => {
+  for (let index = 0; index < rows.length; index += 400) {
+    check(label, await supabase.from(table).insert(rows.slice(index, index + 400)));
+  }
+  return rows.length;
 };
 
 const setPassword = async (token, userType, userId) => {
@@ -207,6 +226,26 @@ const setPassword = async (token, userType, userId) => {
   if (data?.error) throw new Error(`set-password failed for ${userType} ${userId}: ${data.error}`);
 };
 
+// Ranks share a position when totals match, and the tied rows carry the same
+// note the results calculator would write.
+const rank = (standings) => {
+  const sorted = [...standings].sort((a, b) => b.total_score - a.total_score);
+  let current = 1;
+
+  return sorted.map((standing, index) => {
+    const tiedWithPrevious = index > 0 && sorted[index - 1].total_score === standing.total_score;
+    if (!tiedWithPrevious) current = index + 1;
+
+    return {
+      ...standing,
+      rank: current,
+      tie_breaker_reason: tiedWithPrevious
+        ? `Tied with ${current === 1 ? 'winner' : `rank ${current}`}`
+        : null,
+    };
+  });
+};
+
 /* ----------------------------------------------------------------- main */
 
 const main = async () => {
@@ -215,9 +254,17 @@ const main = async () => {
   console.log(`Mode    : ${DRY_RUN ? 'dry run' : RESET ? 'reset and seed' : 'seed'}\n`);
 
   if (DRY_RUN) {
-    console.log(`Would create ${JUDGES.length} judges, ${PARTICIPANTS.length} participants, ` +
-      `${GROUPS.length} groups, ${EVENTS.length} events (${EVENTS.map((e) => e.status).join(', ')}), ` +
-      `criteria and scores, all under one event level.`);
+    const published = EVENTS.filter((event) => event.scoring === 'full');
+    console.log(`Would create, under one event level:`);
+    console.log(`  ${JUDGES.length} judges (${JUDGES.filter((j) => j.is_active).length} active)`);
+    console.log(`  ${PARTICIPANTS.length} participants across ${CATEGORIES.length} age categories`);
+    console.log(`  ${GROUPS.length} groups of ${GROUPS[0].members.length}`);
+    console.log(`  ${EVENTS.length} events — ${published.length} published, ` +
+      `${EVENTS.filter((e) => e.scoring.startsWith('partial')).length} part-scored, ` +
+      `${EVENTS.filter((e) => e.status === 'upcoming').length} upcoming`);
+    for (const event of EVENTS) {
+      console.log(`    ${event.category.padEnd(14)} ${event.name.padEnd(18)} ${event.status.padEnd(10)} ${event.scoring}${event.tie ? ' (with a tie)' : ''}`);
+    }
     return;
   }
 
@@ -258,19 +305,17 @@ const main = async () => {
     .single());
   console.log(`✓ Event level: ${level.name} ${level.year}`);
 
-  const judges = check('create judges', await supabase
-    .from('judges')
-    .insert(JUDGES.map((judge) => ({ ...judge, is_active: true })))
-    .select());
+  const judges = check('create judges', await supabase.from('judges').insert(JUDGES).select());
+  const panel = judges.filter((judge) => judge.is_active);
   for (const judge of judges) await setPassword(token, 'judge', judge.id);
-  console.log(`✓ ${judges.length} judges (password: ${DEMO_PASSWORD})`);
+  console.log(`✓ ${judges.length} judges (${panel.length} active, 1 inactive)`);
 
   const participants = check('create participants', await supabase
     .from('participants')
     .insert(PARTICIPANTS.map((participant) => ({ ...participant, is_active: true, created_by: auth.user.id })))
     .select());
   for (const participant of participants) await setPassword(token, 'participant', participant.id);
-  console.log(`✓ ${participants.length} participants (password: ${DEMO_PASSWORD})`);
+  console.log(`✓ ${participants.length} participants across ${CATEGORIES.length} age categories`);
 
   const byChest = new Map(participants.map((participant) => [participant.chest_number, participant]));
 
@@ -279,15 +324,16 @@ const main = async () => {
     .insert(GROUPS.map(({ name, description }) => ({ name, description })))
     .select());
 
-  check('add group members', await supabase.from('group_members').insert(
-    GROUPS.flatMap((group, index) =>
-      group.members.map((chest) => ({
-        group_id: groups[index].id,
-        participant_id: byChest.get(chest).id,
-      })),
-    ),
-  ));
-  console.log(`✓ ${groups.length} groups`);
+  await insertAll('group_members', GROUPS.flatMap((group, index) =>
+    group.members.map((chest) => ({
+      group_id: groups[index].id,
+      participant_id: byChest.get(chest).id,
+    })),
+  ), 'add group members');
+  console.log(`✓ ${groups.length} groups of ${GROUPS[0].members.length}`);
+
+  let scoreCount = 0;
+  let publishedCount = 0;
 
   for (const definition of EVENTS) {
     const event = check(`create event ${definition.name}`, await supabase
@@ -297,12 +343,12 @@ const main = async () => {
         type: definition.type,
         event_type: definition.event_type,
         level_id: level.id,
-        age_category: definition.age_category,
-        rules: definition.rules,
+        age_category: definition.category,
+        rules: definition.rules ?? null,
         time_limit: definition.time_limit,
         max_participants: null,
         status: definition.status,
-        event_order: definition.event_order,
+        event_order: definition.order,
       })
       .select()
       .single());
@@ -312,91 +358,105 @@ const main = async () => {
       .insert(definition.criteria.map((criterion) => ({ ...criterion, event_id: event.id })))
       .select());
 
-    check('assign judges', await supabase
-      .from('event_judges')
-      .insert(judges.map((judge) => ({ event_id: event.id, judge_id: judge.id }))));
+    // Only the active panel judges; the inactive account stays unassigned.
+    await insertAll('event_judges', panel.map((judge) => ({ event_id: event.id, judge_id: judge.id })),
+      'assign judges');
 
-    const entrants = participants.filter((participant) => participant.age_category === definition.age_category);
+    const isGroupEvent = definition.event_type === 'group';
 
-    if (definition.event_type === 'group') {
-      check('enter groups', await supabase
-        .from('event_groups')
-        .insert(groups.map((group) => ({ event_id: event.id, group_id: group.id }))));
+    const entrants = isGroupEvent
+      ? groups
+      : participants
+          .filter((participant) => participant.age_category === definition.category)
+          .slice(0, definition.entrants);
+
+    if (isGroupEvent) {
+      await insertAll('event_groups', entrants.map((group) => ({ event_id: event.id, group_id: group.id })),
+        'enter groups');
     } else {
-      check('enter participants', await supabase
-        .from('event_participants')
-        .insert(entrants.map((participant) => ({ event_id: event.id, participant_id: participant.id }))));
+      await insertAll('event_participants',
+        entrants.map((participant) => ({ event_id: event.id, participant_id: participant.id })),
+        'enter participants');
     }
 
-    if (definition.scoring !== 'none' && definition.event_type === 'individual') {
-      // "partial" leaves most entrants unscored so a judge has something to do.
-      const scored = definition.scoring === 'full' ? entrants : entrants.slice(0, 2);
+    // "partial" leaves most of the field unscored, so a judge opening the event
+    // has something waiting.
+    const scored =
+      definition.scoring === 'full'
+        ? entrants
+        : definition.scoring === 'partial' || definition.scoring === 'partial-group'
+          ? entrants.slice(0, Math.max(2, Math.round(entrants.length / 3)))
+          : [];
 
-      const rows = scored.flatMap((participant, participantIndex) =>
-        judges.flatMap((judge, judgeIndex) =>
+    if (scored.length > 0) {
+      const rows = scored.flatMap((entrant, entrantIndex) =>
+        panel.flatMap((judge, judgeIndex) =>
           criteria.map((criterion) => ({
             event_id: event.id,
-            participant_id: participant.id,
-            judge_id: judge.id,
+            participant_id: isGroupEvent ? null : entrant.id,
+            group_id: isGroupEvent ? entrant.id : null,
             criteria_id: criterion.id,
-            score: scoreFor(participantIndex, judgeIndex, criterion),
+            judge_id: judge.id,
+            // The tie event gives its first two entrants identical winning sheets.
+            score:
+              definition.tie && entrantIndex < 2
+                ? topScoreFor(criterion)
+                : scoreFor(entrantIndex, judgeIndex, criterion),
             is_locked: true,
           })),
         ),
       );
 
-      check('insert scores', await supabase.from('scores').insert(rows));
+      scoreCount += await insertAll('scores', rows, 'insert scores');
 
       if (definition.scoring === 'full') {
-        // Same maths the results calculator uses: mean per criterion across
-        // judges, weighted, summed.
-        const standings = scored
-          .map((participant) => {
-            const perCriterion = criteria.map((criterion) => {
-              const forCriterion = rows.filter(
-                (row) => row.participant_id === participant.id && row.criteria_id === criterion.id,
-              );
-              return forCriterion.reduce((sum, row) => sum + row.score, 0) / forCriterion.length;
-            });
-
-            const total = perCriterion.reduce(
-              (sum, average, index) => sum + average * criteria[index].weight,
-              0,
+        const standings = scored.map((entrant) => {
+          const perCriterion = criteria.map((criterion) => {
+            const forCriterion = rows.filter(
+              (row) =>
+                row.criteria_id === criterion.id &&
+                (isGroupEvent ? row.group_id === entrant.id : row.participant_id === entrant.id),
             );
+            return forCriterion.reduce((sum, row) => sum + row.score, 0) / forCriterion.length;
+          });
 
-            return {
-              participant_id: participant.id,
-              total_score: Math.round(total * 100) / 100,
-              average_score:
-                Math.round((perCriterion.reduce((sum, value) => sum + value, 0) / criteria.length) * 100) / 100,
-            };
-          })
-          .sort((a, b) => b.total_score - a.total_score);
+          const total = perCriterion.reduce(
+            (sum, average, index) => sum + average * criteria[index].weight,
+            0,
+          );
 
-        check('insert results', await supabase.from('results').insert(
-          standings.map((standing, index) => ({
+          return {
             event_id: event.id,
-            participant_id: standing.participant_id,
-            total_score: standing.total_score,
-            average_score: standing.average_score,
-            rank: index + 1,
-            calculated_at: new Date().toISOString(),
-          })),
-        ));
+            participant_id: isGroupEvent ? null : entrant.id,
+            group_id: isGroupEvent ? entrant.id : null,
+            total_score: Math.round(total * 100) / 100,
+            average_score:
+              Math.round((perCriterion.reduce((sum, value) => sum + value, 0) / criteria.length) * 100) / 100,
+          };
+        });
+
+        await insertAll('results',
+          rank(standings).map((standing) => ({ ...standing, calculated_at: new Date().toISOString() })),
+          'insert results');
 
         check('publish results', await supabase
           .from('events')
           .update({ results_published: true })
           .eq('id', event.id));
+
+        publishedCount += 1;
       }
     }
 
-    console.log(`✓ ${definition.name} (${definition.status}, ${definition.scoring} scoring)`);
+    const shape = isGroupEvent ? `${entrants.length} groups` : `${entrants.length} entrants`;
+    console.log(`✓ ${definition.category} · ${definition.name} — ${definition.status}, ${shape}, ${scored.length} scored`);
   }
 
+  console.log(`\n✓ ${EVENTS.length} events, ${publishedCount} with published results, ${scoreCount} scores`);
+
   console.log('\nDemo accounts — password for all of them:', DEMO_PASSWORD);
-  console.log('  judges       : demo.judge1, demo.judge2, demo.judge3');
-  console.log('  participants : demo.p1 … demo.p12  (chest 901–912)');
+  console.log(`  judges       : demo.judge1 … demo.judge${JUDGES.length}  (judge${JUDGES.length} is inactive)`);
+  console.log(`  participants : demo.p1 … demo.p${PARTICIPANTS.length}  (chest 901–${900 + PARTICIPANTS.length})`);
   console.log('\nRe-seed or remove later: node scripts/seed-demo.mjs --reset');
 };
 
