@@ -29,8 +29,12 @@ Create a `.env` file in the root directory with the following variables:
 ```bash
 # Supabase Configuration
 VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key-here
+VITE_SUPABASE_PUBLISHABLE_KEY=your-anon-key-here
 ```
+
+The key variable is `VITE_SUPABASE_PUBLISHABLE_KEY`; the app refuses to start
+without it. Its value is the project's anon key, which is public by design —
+what protects the data is row-level security, not secrecy of that key.
 
 **⚠️ Security Note**: Never commit your `.env` file to version control. It's already added to `.gitignore`.
 
@@ -89,11 +93,21 @@ admin screens afterwards.
 ## 🚀 Deployment
 
 ### Netlify
-1. Connect your repository to Netlify
-2. Set environment variables in Netlify dashboard:
+
+1. Connect the repository; `netlify.toml` already sets the build command,
+   publish directory, SPA redirect and security headers.
+2. Set the build environment variables in the Netlify dashboard:
    - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-3. Deploy automatically on push to main branch
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`
+3. Deploy. Then tell the edge functions which origin to accept, or every call a
+   judge's browser makes is refused by CORS:
+
+   ```bash
+   supabase secrets set ALLOWED_ORIGINS=http://localhost:8080,https://your-site.netlify.app
+   ```
+
+4. Check the deployed site: sign in as an admin, and confirm the leaderboard
+   loads. A CORS failure shows as a login that never completes.
 
 ### Manual Deployment
 ```bash

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'devotional-events-v2';
+const CACHE_NAME = 'devotional-events-v3';
 const urlsToCache = [
   '/',
   '/manifest.json',
@@ -33,46 +33,51 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch event - serve from cache when offline
+// Fetch event
+//
+// The page shell is fetched from the network first, because index.html names
+// the hashed asset files: serving a cached shell after a deploy would pin the
+// browser to the previous release until the cache happened to be cleared.
+// Hashed assets themselves never change under a given name, so those come from
+// the cache when present.
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests
   if (event.request.method !== 'GET') {
     return;
   }
 
-  // Skip Supabase API calls - always fetch from network
+  // The API is never cached.
   if (event.request.url.includes('supabase.co')) {
     return;
   }
 
-  // Skip requests for non-existent assets that might cause issues
-  if (event.request.url.includes('/static/')) {
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put('/', copy));
+          return response;
+        })
+        // Offline: the last shell we saw is better than nothing.
+        .catch(() => caches.match('/').then((cached) => cached || Response.error()))
+    );
     return;
   }
 
   event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Return cached version or fetch from network
-        return response || fetch(event.request)
-          .then((fetchResponse) => {
-            // Only cache successful responses and avoid caching HTML error pages
-            if (fetchResponse.status === 200 && !fetchResponse.headers.get('content-type')?.includes('text/html')) {
-              const responseClone = fetchResponse.clone();
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(event.request, responseClone);
-              });
-            }
-            return fetchResponse;
-          })
-          .catch(() => {
-            // Return offline fallback for navigation requests
-            if (event.request.mode === 'navigate') {
-              return caches.match('/');
-            }
-            throw new Error('Network request failed');
-          });
-      })
+    caches.match(event.request).then((cached) => {
+      if (cached) {
+        return cached;
+      }
+
+      return fetch(event.request).then((response) => {
+        if (response.status === 200 && !response.headers.get('content-type')?.includes('text/html')) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return response;
+      });
+    })
   );
 });
 
