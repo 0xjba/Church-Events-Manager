@@ -67,6 +67,11 @@ Mrs. Leah Mathew,leah.mathew,changeme456,leah@example.org,Hope Church,
 One row per **criterion**. Rows sharing an event name and age category belong to
 the same event, so a three-criteria event is three rows.
 
+Repeat `event_name` and `age_category` on every row of the event — that pair is
+what ties the rows together. The other event columns only need filling in on the
+first row; leave them blank on the rest, or repeat them if you prefer, as long as
+they agree.
+
 | Column | Required | Notes |
 | --- | --- | --- |
 | `event_name` | yes | |
@@ -84,14 +89,14 @@ the same event, so a three-criteria event is three rows.
 ```csv
 event_name,age_category,event_format,entrant_type,event_order,time_limit,max_participants,rules,criterion_name,criterion_max,criterion_weight
 Solo Song Female,Juniors,stage,individual,1,3,20,Three minutes maximum,Voice quality,10,1
-Solo Song Female,Juniors,stage,individual,1,3,20,Three minutes maximum,Pronunciation,10,1
-Solo Song Female,Juniors,stage,individual,1,3,20,Three minutes maximum,Expression,5,1
+Solo Song Female,Juniors,,,,,,,Pronunciation,10,1
+Solo Song Female,Juniors,,,,,,,Expression,5,1
 Bible Quiz,Seniors,writing,individual,2,45,,,Round one,20,1
-Bible Quiz,Seniors,writing,individual,2,45,,,Round two,20,1
+Bible Quiz,Seniors,,,,,,,Round two,20,1
 ```
 
-The event-level columns are read from the first row of each event; later rows
-only contribute their criterion.
+That sheet creates two events: Solo Song Female with three criteria, and Bible
+Quiz with two.
 
 ---
 

@@ -47,9 +47,12 @@ export const TEMPLATES = {
     ],
     examples: [
       ['Solo Song Female', 'Juniors', 'stage', 'individual', '1', '3', '20', 'Three minutes maximum', 'Voice quality', '10', '1'],
-      ['Solo Song Female', 'Juniors', 'stage', 'individual', '1', '3', '20', 'Three minutes maximum', 'Pronunciation', '10', '1'],
+      ['Solo Song Female', 'Juniors', '', '', '', '', '', '', 'Pronunciation', '10', '1'],
+      ['Solo Song Female', 'Juniors', '', '', '', '', '', '', 'Expression', '5', '1'],
+      ['Bible Quiz', 'Seniors', 'writing', 'individual', '2', '45', '', '', 'Round one', '20', '1'],
+      ['Bible Quiz', 'Seniors', '', '', '', '', '', '', 'Round two', '20', '1'],
     ],
-    note: 'One row per criterion. Rows sharing an event name and age category build one event, and the event columns are read from its first row.',
+    note: 'One row per criterion: an event with three criteria is three rows. Repeat the event name and age category on each of them — the remaining event columns only need filling in on the first row, as the example shows.',
   },
 
   eventParticipants: {

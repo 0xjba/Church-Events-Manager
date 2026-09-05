@@ -62,13 +62,19 @@ export const parseEventRows = (
       errors.push(`Row ${row._row}: missing event_name`);
       continue;
     }
+
+    const key = `${name.toLowerCase()}::${ageCategory}`;
+    // The event's own columns only have to be filled in once. A second row for
+    // the same event may carry just its criterion.
+    const continuation = grouped.has(key);
+
     if (ageCategory && !AGE_CATEGORIES.includes(ageCategory as (typeof AGE_CATEGORIES)[number])) {
       errors.push(`Row ${row._row}: age_category must be blank or one of ${AGE_CATEGORIES.join(', ')}`);
     }
-    if (!FORMATS.includes(format)) {
+    if (!continuation && !FORMATS.includes(format)) {
       errors.push(`Row ${row._row}: event_format must be stage or writing`);
     }
-    if (!ENTRANTS.includes(entrantType)) {
+    if (!continuation && !ENTRANTS.includes(entrantType)) {
       errors.push(`Row ${row._row}: entrant_type must be individual or group`);
     }
     if (!criterionName) {
@@ -84,8 +90,6 @@ export const parseEventRows = (
     if (!Number.isFinite(weight) || weight <= 0) {
       errors.push(`Row ${row._row}: criterion_weight must be a number above zero`);
     }
-
-    const key = `${name.toLowerCase()}::${ageCategory}`;
 
     if (alreadyThere.has(key)) {
       errors.push(`Row ${row._row}: ${name}${ageCategory ? ` (${ageCategory})` : ''} already exists in this level`);
@@ -123,16 +127,21 @@ export const parseEventRows = (
     }
   }
 
-  // Two rows of the same event disagreeing about its running order or format is
-  // a copy-paste mistake worth catching before the event is created.
+  // A row that fills the event columns in again must agree with the first one;
+  // disagreeing rows are a copy-paste mistake worth catching before creation.
   for (const event of events) {
-    const conflicting = rows.filter(
-      (row) =>
-        cell(row, 'event_name').toLowerCase() === event.name.toLowerCase() &&
-        cell(row, 'age_category') === (event.age_category ?? '') &&
-        (cell(row, 'event_format').toLowerCase() !== event.type ||
-          cell(row, 'entrant_type').toLowerCase() !== event.event_type),
-    );
+    const conflicting = rows.filter((row) => {
+      if (cell(row, 'event_name').toLowerCase() !== event.name.toLowerCase()) return false;
+      if (cell(row, 'age_category') !== (event.age_category ?? '')) return false;
+
+      const format = cell(row, 'event_format').toLowerCase();
+      const entrantType = cell(row, 'entrant_type').toLowerCase();
+
+      return (
+        (format !== '' && format !== event.type) ||
+        (entrantType !== '' && entrantType !== event.event_type)
+      );
+    });
 
     for (const row of conflicting) {
       errors.push(`Row ${row._row}: ${event.name} is described differently here than in row ${event.rows[0]}`);
