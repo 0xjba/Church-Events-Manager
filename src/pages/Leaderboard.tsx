@@ -2,7 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { message } from 'antd';
 import { ArrowsClockwise, Certificate, Medal, Trophy } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
-import { ResultsCalculator } from '@/utils/resultsCalculator';
+import {
+  churchStandings,
+  districtStandings,
+  individualStandings,
+  type PlacedResult,
+  type Standing,
+} from '@/utils/championship';
 import { AppShell } from '@/components/shell/AppShell';
 import {
   Button,
@@ -12,7 +18,7 @@ import {
   StatusPill,
 } from '@/components/ui/primitives';
 import { SegmentedControl } from '@/components/ui/inputs';
-import { cn, formatScore } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 interface EventSummary {
   id: string;
@@ -25,9 +31,8 @@ interface EventSummary {
 
 interface EventResult {
   id: string;
+  event_id: string;
   participant_id: string;
-  total_score: number;
-  average_score: number;
   rank: number;
   tie_breaker_reason: string | null;
   participants: {
@@ -37,14 +42,6 @@ interface EventResult {
     church: string;
     district: string;
   } | null;
-}
-
-interface ChampionshipStanding {
-  participant: { full_name: string; chest_number: string; church: string } | null;
-  events_participated: number;
-  total_championship_points: number;
-  average_score: number;
-  rank: number;
 }
 
 const rankStyles = (rank: number) => {
@@ -70,9 +67,12 @@ const Leaderboard = () => {
   const [selectedEvent, setSelectedEvent] = useState<string>('');
   const [eventResults, setEventResults] = useState<EventResult[]>([]);
   const [championship, setChampionship] = useState<{
-    participants: ChampionshipStanding[];
+    individuals: Array<Standing<NonNullable<EventResult['participants']>>>;
+    churches: Array<Standing<string>>;
+    districts: Array<Standing<string>>;
     events_count: number;
   } | null>(null);
+  const [championshipView, setChampionshipView] = useState<'individual' | 'church' | 'district'>('individual');
   const [view, setView] = useState<'event' | 'championship'>('event');
   const [loading, setLoading] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
@@ -102,7 +102,8 @@ const Leaderboard = () => {
       const { data, error } = await supabase
         .from('results')
         .select(
-          `*, participants ( id, full_name, chest_number, church, district )`,
+          `id, event_id, participant_id, rank, tie_breaker_reason,
+           participants ( id, full_name, chest_number, church, district )`,
         )
         .eq('event_id', eventId)
         .order('rank', { ascending: true });
@@ -124,11 +125,33 @@ const Leaderboard = () => {
     if (selectedEvent) fetchEventResults(selectedEvent);
   }, [selectedEvent, fetchEventResults]);
 
+  // Standings come from placings alone: rank points added up, no scores. That
+  // is all this audience is allowed to see, and the database enforces it.
   const loadChampionship = async () => {
     try {
       setLoadingResults(true);
-      const standings = await ResultsCalculator.getChampionshipStandings(events.map((e) => e.id));
-      setChampionship(standings as unknown as { participants: ChampionshipStanding[]; events_count: number });
+
+      const { data, error } = await supabase
+        .from('results')
+        .select(
+          `event_id, rank,
+           participants ( id, full_name, chest_number, church, district )`,
+        )
+        .in('event_id', events.map((event) => event.id))
+        .not('rank', 'is', null);
+
+      if (error) throw error;
+
+      const placed = (data ?? []) as unknown as PlacedResult[];
+
+      setChampionship({
+        individuals: individualStandings(placed) as Array<
+          Standing<NonNullable<EventResult['participants']>>
+        >,
+        churches: churchStandings(placed),
+        districts: districtStandings(placed),
+        events_count: new Set(placed.map((row) => row.event_id)).size,
+      });
     } catch {
       message.error('Failed to load championship standings');
     } finally {
@@ -249,14 +272,11 @@ const Leaderboard = () => {
                               {result.participants?.district ? ` · ${result.participants.district}` : ''}
                             </p>
                           </div>
-                          <div className="shrink-0 text-right">
-                            <p className="tnum text-title font-semibold text-foreground">
-                              {formatScore(result.total_score)}
-                            </p>
-                            <p className="tnum text-caption text-muted-foreground">
-                              avg {formatScore(result.average_score)}
-                            </p>
-                          </div>
+                          {result.rank <= 3 && (
+                            <span className="shrink-0 text-caption font-medium capitalize text-muted-foreground">
+                              {result.rank === 1 ? 'First' : result.rank === 2 ? 'Second' : 'Third'}
+                            </span>
+                          )}
                         </div>
                       </Card>
                     </li>
@@ -273,7 +293,7 @@ const Leaderboard = () => {
                   <Skeleton className="h-[76px] w-full" />
                   <Skeleton className="h-[76px] w-full" />
                 </div>
-              ) : !championship || championship.participants.length === 0 ? (
+              ) : !championship || championship.individuals.length === 0 ? (
                 <EmptyState
                   icon={<Trophy size={22} />}
                   title="No championship standings"
@@ -281,31 +301,78 @@ const Leaderboard = () => {
                 />
               ) : (
                 <>
+                  {/* Church and district standings only mean something once the
+                      competition is bigger than one church. */}
+                  {(championship.churches.length > 1 || championship.districts.length > 1) && (
+                    <SegmentedControl
+                      value={championshipView}
+                      onChange={(value) =>
+                        setChampionshipView(value as 'individual' | 'church' | 'district')
+                      }
+                      className="mb-3"
+                      options={[
+                        { value: 'individual', label: 'Individual' },
+                        { value: 'church', label: 'Church' },
+                        { value: 'district', label: 'District' },
+                      ]}
+                    />
+                  )}
+
                   <p className="mb-3 text-caption text-muted-foreground">
-                    Overall rankings across {championship.events_count} published events
+                    Rank points across {championship.events_count} published events · first 5,
+                    second 3, third 1
                   </p>
+
                   <ol className="space-y-2">
-                    {championship.participants.map((standing) => (
-                      <li key={`${standing.rank}-${standing.participant?.chest_number}`}>
+                    {(championshipView === 'individual'
+                      ? championship.individuals.map((standing) => ({
+                          key: standing.key,
+                          rank: standing.rank,
+                          title: standing.subject?.full_name ?? 'Unknown',
+                          subtitle: [
+                            standing.subject?.chest_number ? `#${standing.subject.chest_number}` : null,
+                            standing.subject?.church,
+                          ]
+                            .filter(Boolean)
+                            .join(' · '),
+                          points: standing.points,
+                          placings: standing.placings,
+                          tied: standing.tied,
+                        }))
+                      : (championshipView === 'church' ? championship.churches : championship.districts).map(
+                          (standing) => ({
+                            key: standing.key,
+                            rank: standing.rank,
+                            title: standing.subject,
+                            subtitle: `${standing.events} placings`,
+                            points: standing.points,
+                            placings: standing.placings,
+                            tied: standing.tied,
+                          }),
+                        )
+                    ).map((row) => (
+                      <li key={row.key}>
                         <Card>
                           <div className="flex items-center gap-3 p-3">
-                            <RankBadge rank={standing.rank} />
+                            <RankBadge rank={row.rank} />
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-body font-medium text-foreground">
-                                {standing.participant?.full_name ?? 'Unknown'}
-                              </p>
+                              <div className="flex items-center gap-2">
+                                <p className="truncate text-body font-medium text-foreground">
+                                  {row.title}
+                                </p>
+                                {row.tied && <StatusPill tone="warning">Tie</StatusPill>}
+                              </div>
                               <p className="truncate text-caption text-muted-foreground">
-                                {standing.participant?.chest_number
-                                  ? `#${standing.participant.chest_number} · `
-                                  : ''}
-                                {standing.events_participated} events
+                                {row.subtitle}
                               </p>
                             </div>
                             <div className="shrink-0 text-right">
                               <p className="tnum text-title font-semibold text-foreground">
-                                {standing.total_championship_points}
+                                {row.points}
                               </p>
-                              <p className="text-caption text-muted-foreground">points</p>
+                              <p className="tnum text-caption text-muted-foreground">
+                                {row.placings.first}·{row.placings.second}·{row.placings.third}
+                              </p>
                             </div>
                           </div>
                         </Card>

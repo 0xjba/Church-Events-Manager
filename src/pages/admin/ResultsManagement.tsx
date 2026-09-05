@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { FormValues, SupabaseRow } from '@/lib/types';
 import { ResultsCalculator } from '@/utils/resultsCalculator';
 import { ExportUtils, WinnersExportData } from '@/utils/exportUtils';
+import { individualStandings, type PlacedResult } from '@/utils/championship';
 import { AppShell } from '@/components/shell/AppShell';
 import { DataTable } from '@/components/admin/DataTable';
 import {
@@ -27,6 +28,16 @@ interface EventRecord {
   age_category: string | null;
   results_published: boolean;
   event_order: number | null;
+  level_id: string;
+  result_count?: number;
+}
+
+interface LevelRecord {
+  id: string;
+  name: string;
+  year: number;
+  is_active: boolean;
+  results_published: boolean;
 }
 
 interface JudgeScore {
@@ -106,8 +117,11 @@ const rankTone = (rank: number) =>
 
 const ResultsManagement = () => {
   const [events, setEvents] = useState<EventRecord[]>([]);
+  const [levels, setLevels] = useState<LevelRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState<string | null>(null);
+  const [confirmLevel, setConfirmLevel] = useState<{ level: LevelRecord; publish: boolean } | null>(null);
 
   const [viewingResults, setViewingResults] = useState<string | null>(null);
   const [resultsData, setResultsData] = useState<DetailedResult[]>([]);
@@ -126,17 +140,72 @@ const ResultsManagement = () => {
 
   const fetchEvents = async () => {
     try {
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .order('event_order', { ascending: true, nullsFirst: false });
+      const [eventsResponse, levelsResponse, resultsResponse] = await Promise.all([
+        supabase.from('events').select('*').order('event_order', { ascending: true, nullsFirst: false }),
+        supabase.from('event_levels').select('id, name, year, is_active, results_published').order('year', { ascending: false }),
+        supabase.from('results').select('event_id'),
+      ]);
 
-      if (error) throw error;
-      setEvents((data || []) as EventRecord[]);
+      if (eventsResponse.error) throw eventsResponse.error;
+      if (levelsResponse.error) throw levelsResponse.error;
+
+      // How many results each event has, so the screen can say whether an
+      // event has been calculated but not yet released.
+      const counts = new Map<string, number>();
+      for (const row of resultsResponse.data ?? []) {
+        counts.set(row.event_id, (counts.get(row.event_id) ?? 0) + 1);
+      }
+
+      setEvents(((eventsResponse.data || []) as EventRecord[]).map((event) => ({
+        ...event,
+        result_count: counts.get(event.id) ?? 0,
+      })));
+      setLevels((levelsResponse.data || []) as LevelRecord[]);
     } catch {
       message.error('Failed to load events');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const setEventPublished = async (event: EventRecord, published: boolean) => {
+    try {
+      setPublishing(event.id);
+      const { error } = await supabase
+        .from('events')
+        .update({ results_published: published })
+        .eq('id', event.id);
+
+      if (error) throw error;
+      message.success(published ? `${event.name} results are now public` : `${event.name} results hidden again`);
+      await fetchEvents();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to change publication');
+    } finally {
+      setPublishing(null);
+    }
+  };
+
+  const setLevelPublished = async (level: LevelRecord, published: boolean) => {
+    try {
+      setPublishing(level.id);
+      const { error } = await supabase
+        .from('event_levels')
+        .update({ results_published: published })
+        .eq('id', level.id);
+
+      if (error) throw error;
+      message.success(
+        published
+          ? `Every calculated result in ${level.name} is now public`
+          : `${level.name} results hidden again`,
+      );
+      setConfirmLevel(null);
+      await fetchEvents();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to change publication');
+    } finally {
+      setPublishing(null);
     }
   };
 
@@ -215,17 +284,11 @@ const ResultsManagement = () => {
       const { error: insertError } = await supabase.from('results').insert(resultsToInsert);
       if (insertError) throw insertError;
 
-      const { error: updateError } = await supabase
-        .from('events')
-        .update({ results_published: true })
-        .eq('id', eventId);
-      if (updateError) throw updateError;
-
       message.destroy();
       message.success(
-        `Results published for ${results.results.length} ${
+        `Results calculated for ${results.results.length} ${
           eventData.event_type === 'individual' ? 'participants' : 'groups'
-        }`,
+        } — publish when you are ready to release them`,
       );
 
       await fetchEvents();
@@ -334,31 +397,41 @@ const ResultsManagement = () => {
   const eventSortKey = (ageCategory: string | null, eventName: string) =>
     (AGE_ORDER[ageCategory ?? ''] ?? 999) * 1000 + (EVENT_ORDER[eventName] ?? 999);
 
+  // Same maths as the leaderboard, so the champion cannot depend on which
+  // screen you are looking at.
   const calculateIndividualChampion = (
     winnerEvents: WinnersExportData['events'],
   ): Champion | null => {
-    const points: Record<string, ChampionEntry> = {};
+    const placed: PlacedResult[] = winnerEvents.flatMap((event) =>
+      event.winners.map((winner) => ({
+        event_id: event.event_id,
+        rank: winner.rank,
+        participant: {
+          full_name: winner.participant.full_name,
+          chest_number: winner.participant.chest_number,
+          church: winner.participant.church,
+          district: winner.participant.district,
+        },
+      })),
+    );
 
-    winnerEvents.forEach((event) => {
-      event.winners.forEach((winner) => {
-        const key = winner.participant.full_name;
-        if (!points[key]) points[key] = { participant: winner.participant, totalPoints: 0 };
-        if (winner.rank === 1) points[key].totalPoints += 5;
-        else if (winner.rank === 2) points[key].totalPoints += 3;
-      });
-    });
+    const standings = individualStandings(placed);
+    if (standings.length === 0) return null;
 
-    const entries = Object.values(points);
-    if (entries.length === 0) return null;
-
-    const maxPoints = Math.max(...entries.map((entry) => entry.totalPoints));
-    const champions = entries.filter((entry) => entry.totalPoints === maxPoints);
+    const best = standings.filter((standing) => standing.rank === 1);
 
     return {
-      champions,
-      maxPoints,
-      isTie: champions.length > 1,
-      totalParticipants: entries.length,
+      champions: best.map((standing) => ({
+        participant: {
+          full_name: standing.subject.full_name,
+          chest_number: standing.subject.chest_number,
+          church: standing.subject.church ?? '',
+        },
+        totalPoints: standing.points,
+      })),
+      maxPoints: best[0].points,
+      isTie: best.length > 1,
+      totalParticipants: standings.length,
     };
   };
 
@@ -484,33 +557,38 @@ const ResultsManagement = () => {
       title: 'Results',
       dataIndex: 'results_published',
       key: 'results_published',
-      width: 140,
-      render: (published: boolean) => (
-        <StatusPill tone={published ? 'success' : 'warning'}>
-          {published ? 'Published' : 'Not published'}
-        </StatusPill>
-      ),
+      width: 170,
+      render: (published: boolean, record: EventRecord) => {
+        const levelPublished = levels.find((level) => level.id === record.level_id)?.results_published;
+        const calculated = (record.result_count ?? 0) > 0;
+
+        if (published || levelPublished) {
+          return (
+            <StatusPill tone="success" dot>
+              {levelPublished && !published ? 'Public via level' : 'Published'}
+            </StatusPill>
+          );
+        }
+        return (
+          <StatusPill tone={calculated ? 'warning' : 'neutral'}>
+            {calculated ? 'Calculated, private' : 'Not calculated'}
+          </StatusPill>
+        );
+      },
     },
     {
       title: '',
       key: 'actions',
-      width: 190,
+      width: 300,
       fixed: 'right' as const,
-      render: (_: unknown, record: EventRecord) =>
-        record.results_published ? (
-          <div className="flex justify-end">
+      render: (_: unknown, record: EventRecord) => {
+        const calculated = (record.result_count ?? 0) > 0;
+        const levelPublished = levels.find((level) => level.id === record.level_id)?.results_published;
+
+        return (
+          <div className="flex justify-end gap-2">
             <Button
-              variant="secondary"
-              size="sm"
-              icon={<Eye size={14} />}
-              onClick={() => fetchResults(record.id, record.event_type)}
-            >
-              View results
-            </Button>
-          </div>
-        ) : (
-          <div className="flex justify-end">
-            <Button
+              variant={calculated ? 'secondary' : 'primary'}
               size="sm"
               icon={<Calculator size={14} />}
               loading={calculating === record.id}
@@ -518,14 +596,45 @@ const ResultsManagement = () => {
               title={
                 record.status !== 'completed'
                   ? 'Mark the event completed before calculating'
-                  : 'Calculate and publish results'
+                  : calculated
+                    ? 'Recalculate from the current scores'
+                    : 'Calculate results privately'
               }
               onClick={() => calculateResults(record.id)}
             >
-              Calculate
+              {calculated ? 'Recalculate' : 'Calculate'}
             </Button>
+
+            {calculated && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Eye size={14} />}
+                  onClick={() => fetchResults(record.id, record.event_type)}
+                >
+                  View
+                </Button>
+
+                <Button
+                  variant={record.results_published ? 'secondary' : 'primary'}
+                  size="sm"
+                  loading={publishing === record.id}
+                  disabled={levelPublished && !record.results_published}
+                  title={
+                    levelPublished && !record.results_published
+                      ? 'The whole event level is published, so this event is already public'
+                      : undefined
+                  }
+                  onClick={() => setEventPublished(record, !record.results_published)}
+                >
+                  {record.results_published ? 'Unpublish' : 'Publish'}
+                </Button>
+              </>
+            )}
           </div>
-        ),
+        );
+      },
     },
   ];
 
@@ -548,6 +657,44 @@ const ResultsManagement = () => {
         </Button>
       }
     >
+      {levels.length > 0 && (
+        <div className="mb-4 grid gap-3 md:grid-cols-2">
+          {levels.map((level) => {
+            const levelEvents = events.filter((event) => event.level_id === level.id);
+            const calculated = levelEvents.filter((event) => (event.result_count ?? 0) > 0).length;
+
+            return (
+              <Card key={level.id} className={level.results_published ? 'border-success/40' : undefined}>
+                <div className="flex items-center gap-3 p-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-body font-medium text-foreground">
+                        {level.name} {level.year}
+                      </p>
+                      <StatusPill tone={level.results_published ? 'success' : 'neutral'} dot>
+                        {level.results_published ? 'Results public' : 'Results private'}
+                      </StatusPill>
+                    </div>
+                    <p className="mt-0.5 text-caption text-muted-foreground">
+                      {calculated} of {levelEvents.length} events calculated
+                    </p>
+                  </div>
+                  <Button
+                    variant={level.results_published ? 'secondary' : 'primary'}
+                    size="sm"
+                    loading={publishing === level.id}
+                    disabled={!level.results_published && calculated === 0}
+                    onClick={() => setConfirmLevel({ level, publish: !level.results_published })}
+                  >
+                    {level.results_published ? 'Unpublish all' : 'Publish all'}
+                  </Button>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
       <DataTable
         columns={columns}
         dataSource={events}
@@ -563,6 +710,60 @@ const ResultsManagement = () => {
         emptyTitle="No events yet"
         emptyDescription="Create events and score them before results can be calculated."
       />
+
+      <Sheet
+        open={Boolean(confirmLevel)}
+        onClose={() => setConfirmLevel(null)}
+        dismissable={publishing === null}
+        title={
+          confirmLevel?.publish
+            ? `Publish all results for ${confirmLevel?.level.name}?`
+            : `Hide all results for ${confirmLevel?.level.name}?`
+        }
+        description={
+          confirmLevel?.publish
+            ? 'Every calculated event in this level becomes visible to judges and participants at once.'
+            : 'Judges and participants lose access to these results again.'
+        }
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" size="lg" onClick={() => setConfirmLevel(null)} disabled={publishing !== null}>
+              Cancel
+            </Button>
+            <Button
+              size="lg"
+              block
+              variant={confirmLevel?.publish ? 'primary' : 'danger'}
+              loading={publishing === confirmLevel?.level.id}
+              onClick={() => confirmLevel && setLevelPublished(confirmLevel.level, confirmLevel.publish)}
+            >
+              {confirmLevel?.publish ? 'Publish everything' : 'Hide everything'}
+            </Button>
+          </div>
+        }
+      >
+        {confirmLevel && (
+          <div className="pb-2">
+            <p className="mb-3 text-body text-muted-foreground">
+              {confirmLevel.publish
+                ? 'Placings become public. Points and per-judge scores stay admin-only.'
+                : 'Events published individually stay published; only the level-wide release is withdrawn.'}
+            </p>
+            <ul className="divide-y divide-border rounded-xl border border-border">
+              {events
+                .filter((event) => event.level_id === confirmLevel.level.id)
+                .map((event) => (
+                  <li key={event.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                    <span className="min-w-0 truncate text-body text-foreground">{event.name}</span>
+                    <StatusPill tone={(event.result_count ?? 0) > 0 ? 'success' : 'neutral'}>
+                      {(event.result_count ?? 0) > 0 ? 'calculated' : 'no results'}
+                    </StatusPill>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
+      </Sheet>
 
       {/* ------------------------------------------- results detail */}
       <Sheet

@@ -160,6 +160,8 @@ export type Database = {
           description: string | null
           id: string
           is_active: boolean
+          results_published: boolean
+          scope: string
           name: string
           updated_at: string
           year: number
@@ -169,6 +171,8 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean
+          results_published?: boolean
+          scope?: string
           name: string
           updated_at?: string
           year: number
@@ -178,6 +182,8 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean
+          results_published?: boolean
+          scope?: string
           name?: string
           updated_at?: string
           year?: number
