@@ -147,7 +147,7 @@ export const AppShell = ({
 
         {/* Mobile drawer for the admin screens */}
         {drawerOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="pt-safe pb-safe fixed inset-0 z-50 lg:hidden">
             <div
               className="absolute inset-0 animate-fade-in bg-foreground/40"
               onClick={() => setDrawerOpen(false)}
@@ -178,7 +178,7 @@ export const AppShell = ({
         )}
 
         <div className="lg:pl-sidebar">
-          <header className="sticky top-0 z-30 border-b border-border bg-surface/80 backdrop-blur">
+          <header className="pt-safe sticky top-0 z-30 border-b border-border bg-surface/80 backdrop-blur">
             <div className={cn('mx-auto flex items-center gap-3 px-4 py-3 md:px-6', widthClass)}>
               <button
                 type="button"
@@ -255,7 +255,7 @@ export const AppShell = ({
       </main>
 
       {/* Bottom tab bar: primary destinations stay under the thumb. */}
-      <nav className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface shadow-bar-up">
+      <nav className="pb-safe px-safe fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface shadow-bar-up">
         <div className="mx-auto flex max-w-3xl">
           {nav.map((item) => {
             const active = isActivePath(location.pathname, item.path);

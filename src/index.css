@@ -196,6 +196,13 @@
     padding-top: env(safe-area-inset-top, 0px);
   }
 
+  /* Landscape on a notched phone insets one side; full-bleed bars have to keep
+     their contents clear of it. */
+  .px-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
   .scrollbar-thin {
     scrollbar-width: thin;
   }
