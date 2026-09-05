@@ -150,44 +150,51 @@ const QUIZ_CRITERIA = [
  * in progress.
  */
 const EVENTS = [
+  // Two published events in every age category, so the championship rests on
+  // more than one result and the winners sheet has something to group.
   { key: 'sj-solo', name: 'Solo Song', category: 'Sub Juniors', type: 'stage', event_type: 'individual',
     status: 'completed', order: 1, time_limit: 3, criteria: STAGE_CRITERIA, entrants: 10, scoring: 'full' },
 
   { key: 'sj-story', name: 'Story Telling', category: 'Sub Juniors', type: 'stage', event_type: 'individual',
-    status: 'active', order: 2, time_limit: 4, criteria: STAGE_CRITERIA, entrants: 10, scoring: 'none' },
+    status: 'completed', order: 2, time_limit: 4, criteria: STAGE_CRITERIA, entrants: 10, scoring: 'full' },
 
-  { key: 'jr-solo', name: 'Solo Song Female', category: 'Juniors', type: 'stage', event_type: 'individual',
-    status: 'active', order: 3, time_limit: 3, criteria: STAGE_CRITERIA, entrants: 12, scoring: 'partial',
-    rules: 'Three minutes maximum, no backing track.' },
+  { key: 'sj-verses', name: 'Verses', category: 'Sub Juniors', type: 'writing', event_type: 'individual',
+    status: 'active', order: 3, time_limit: 30, criteria: WRITTEN_CRITERIA, entrants: 10, scoring: 'none' },
 
   { key: 'jr-quiz', name: 'Bible Quiz', category: 'Juniors', type: 'writing', event_type: 'individual',
     status: 'completed', order: 4, time_limit: 45, criteria: QUIZ_CRITERIA, entrants: 12, scoring: 'full',
     tie: true },
 
-  // Finished and published, so its placings feed the champion church on the
-  // group scale — the half of the championship individual events cannot show.
+  { key: 'jr-verses', name: 'Verses', category: 'Juniors', type: 'writing', event_type: 'individual',
+    status: 'completed', order: 5, time_limit: 30, criteria: WRITTEN_CRITERIA, entrants: 12, scoring: 'full' },
+
+  { key: 'jr-solo', name: 'Solo Song Female', category: 'Juniors', type: 'stage', event_type: 'individual',
+    status: 'active', order: 6, time_limit: 3, criteria: STAGE_CRITERIA, entrants: 12, scoring: 'partial',
+    rules: 'Three minutes maximum, no backing track.' },
+
   { key: 'jr-action', name: 'Action Song', category: 'Juniors', type: 'stage', event_type: 'group',
-    status: 'completed', order: 5, time_limit: 6, criteria: STAGE_CRITERIA, scoring: 'full' },
+    status: 'completed', order: 7, time_limit: 6, criteria: STAGE_CRITERIA, scoring: 'full' },
 
   { key: 'im-speech', name: 'Speech', category: 'Intermediates', type: 'stage', event_type: 'individual',
-    status: 'completed', order: 6, time_limit: 5, criteria: STAGE_CRITERIA, entrants: 11, scoring: 'full' },
+    status: 'completed', order: 8, time_limit: 5, criteria: STAGE_CRITERIA, entrants: 11, scoring: 'full' },
+
+  { key: 'im-story', name: 'Story Telling', category: 'Intermediates', type: 'stage', event_type: 'individual',
+    status: 'completed', order: 9, time_limit: 4, criteria: STAGE_CRITERIA, entrants: 11, scoring: 'full' },
 
   { key: 'im-verses', name: 'Verses', category: 'Intermediates', type: 'writing', event_type: 'individual',
-    status: 'active', order: 7, time_limit: 30, criteria: WRITTEN_CRITERIA, entrants: 11, scoring: 'partial' },
+    status: 'active', order: 10, time_limit: 30, criteria: WRITTEN_CRITERIA, entrants: 11, scoring: 'partial' },
 
-  { key: 'sr-speech', name: 'Speech', category: 'Seniors', type: 'stage', event_type: 'individual',
-    status: 'completed', order: 8, time_limit: 5, criteria: STAGE_CRITERIA, entrants: 12, scoring: 'full' },
-
-  { key: 'sr-essay', name: 'Essay', category: 'Seniors', type: 'writing', event_type: 'individual',
-    status: 'active', order: 9, time_limit: 60, criteria: WRITTEN_CRITERIA, entrants: 12, scoring: 'none' },
-
-  { key: 'sr-quiz', name: 'Bible Quiz', category: 'Seniors', type: 'writing', event_type: 'individual',
-    status: 'upcoming', order: 10, time_limit: 45, criteria: QUIZ_CRITERIA, entrants: 12, scoring: 'none' },
-
-  // A second group event, left mid-scoring, so a judge still has group scoring
-  // to demonstrate now that Action Song is finished.
   { key: 'im-group', name: 'Group Song', category: 'Intermediates', type: 'stage', event_type: 'group',
     status: 'active', order: 11, time_limit: 6, criteria: STAGE_CRITERIA, scoring: 'partial-group' },
+
+  { key: 'sr-speech', name: 'Speech', category: 'Seniors', type: 'stage', event_type: 'individual',
+    status: 'completed', order: 12, time_limit: 5, criteria: STAGE_CRITERIA, entrants: 12, scoring: 'full' },
+
+  { key: 'sr-essay', name: 'Essay', category: 'Seniors', type: 'writing', event_type: 'individual',
+    status: 'completed', order: 13, time_limit: 60, criteria: WRITTEN_CRITERIA, entrants: 12, scoring: 'full' },
+
+  { key: 'sr-quiz', name: 'Bible Quiz', category: 'Seniors', type: 'writing', event_type: 'individual',
+    status: 'upcoming', order: 14, time_limit: 45, criteria: QUIZ_CRITERIA, entrants: 12, scoring: 'none' },
 ];
 
 // A group is an entrant in its own right: one chest number, competing for a
