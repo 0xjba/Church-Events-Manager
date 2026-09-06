@@ -26,6 +26,7 @@ const EventDetails = lazy(() => import("./pages/admin/EventDetails"));
 const EventLevelManagement = lazy(() => import("./pages/admin/EventLevelManagement"));
 const RealtimeScoreboard = lazy(() => import("./pages/admin/RealtimeScoreboard"));
 const ResultsManagement = lazy(() => import("./pages/admin/ResultsManagement"));
+const WinnersPresentation = lazy(() => import("./pages/admin/WinnersPresentation"));
 const JudgeScoringInterface = lazy(() => import("./pages/judge/JudgeScoringInterface"));
 const ParticipantDashboard = lazy(() => import("./pages/participant/ParticipantDashboard"));
 const JudgeDashboard = lazy(() => import("./pages/judge/JudgeDashboard"));
@@ -105,6 +106,14 @@ const App = () => (
                   <ResultsManagement />
                 </ProtectedRoute>
               } 
+            />
+            <Route
+              path="/admin/results/present"
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <WinnersPresentation />
+                </ProtectedRoute>
+              }
             />
             
             {/* Judge Routes */}

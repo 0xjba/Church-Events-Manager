@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Select, message } from 'antd';
-import { Calculator, DownloadSimple, Eye, EyeSlash, Medal, Trophy, UploadSimple } from '@phosphor-icons/react';
+import { Calculator, DownloadSimple, Eye, EyeSlash, Medal, Slideshow, Trophy, UploadSimple } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import type { FormValues, SupabaseRow } from '@/lib/types';
 import { ResultsCalculator } from '@/utils/resultsCalculator';
@@ -171,6 +172,7 @@ const ChampionBoard = ({
 );
 
 const ResultsManagement = () => {
+  const navigate = useNavigate();
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [levels, setLevels] = useState<LevelRecord[]>([]);
   // The level being worked in, from the top bar.
@@ -530,19 +532,26 @@ const ResultsManagement = () => {
       setExportingWinners(true);
       message.loading('Loading winners...', 0);
 
-      const { data: completedEvents, error: eventsError } = await supabase
+      // What counts as published is settled in the database, by
+      // event_results_visible: the event's own flag or its level's. Nothing
+      // sets an event's status to completed on the way, so requiring that too
+      // meant a fully published level could still report nothing here.
+      const levelPublished = levels.find((level) => level.id === levelId)?.results_published;
+      const eventsQuery = supabase
         .from('events')
         .select('*')
         .eq('level_id', levelId)
-        .eq('status', 'completed')
-        .eq('results_published', true)
         .order('event_order', { ascending: true, nullsFirst: false });
+
+      const { data: completedEvents, error: eventsError } = await (levelPublished
+        ? eventsQuery
+        : eventsQuery.eq('results_published', true));
 
       if (eventsError) throw eventsError;
 
       if (!completedEvents || completedEvents.length === 0) {
         message.destroy();
-        message.warning('No completed events with published results');
+        message.warning('No events with published results in this level');
         return;
       }
 
@@ -918,6 +927,14 @@ const ResultsManagement = () => {
             onClick={openScoreImport}
           >
             <span className="hidden sm:inline">Import scores</span>
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Slideshow size={15} />}
+            onClick={() => navigate('/admin/results/present')}
+          >
+            <span className="hidden sm:inline">Present</span>
           </Button>
           <Button
             size="sm"
