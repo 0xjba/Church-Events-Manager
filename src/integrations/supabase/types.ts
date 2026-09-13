@@ -642,6 +642,10 @@ export type Database = {
         Args: { p_event_id: string; p_results: Json }
         Returns: number
       }
+      published_results: {
+        Args: { p_event_ids: string[] }
+        Returns: Json[]
+      }
     }
     Enums: {
       age_category: "Sub Juniors" | "Juniors" | "Intermediates" | "Seniors"

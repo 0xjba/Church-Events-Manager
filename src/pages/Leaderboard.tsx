@@ -127,15 +127,11 @@ const Leaderboard = () => {
   const fetchEventResults = useCallback(async (eventId: string) => {
     try {
       setLoadingResults(true);
-      const { data, error } = await supabase
-        .from('results')
-        .select(
-          `id, event_id, participant_id, group_id, rank, tie_breaker_reason,
-           participants ( id, full_name, chest_number, church, district ),
-           groups ( id, name, chest_number, church, district )`,
-        )
-        .eq('event_id', eventId)
-        .order('rank', { ascending: true });
+      // The entrant tables are closed to this audience, so identities come
+      // from a function that only answers for published events.
+      const { data, error } = await supabase.rpc('published_results', {
+        p_event_ids: [eventId],
+      });
 
       if (error) throw error;
       setEventResults((data ?? []) as unknown as EventResult[]);
@@ -160,15 +156,9 @@ const Leaderboard = () => {
     try {
       setLoadingResults(true);
 
-      const { data, error } = await supabase
-        .from('results')
-        .select(
-          `event_id, rank,
-           participants ( id, full_name, chest_number, church, district ),
-           groups ( id, name, chest_number, church, district )`,
-        )
-        .in('event_id', events.map((event) => event.id))
-        .not('rank', 'is', null);
+      const { data, error } = await supabase.rpc('published_results', {
+        p_event_ids: events.map((event) => event.id),
+      });
 
       if (error) throw error;
 
@@ -177,13 +167,15 @@ const Leaderboard = () => {
       // it came from.
       const typeByEvent = new Map(events.map((event) => [event.id, event.event_type]));
 
-      const placed: PlacedResult[] = (data ?? []).map((row: SupabaseRow) => ({
-        event_id: row.event_id,
-        event_type: typeByEvent.get(row.event_id) === 'group' ? 'group' : 'individual',
-        rank: row.rank,
-        participant: row.participants,
-        group: row.groups,
-      }));
+      const placed: PlacedResult[] = (data ?? [])
+        .filter((row: SupabaseRow) => row.rank != null)
+        .map((row: SupabaseRow) => ({
+          event_id: row.event_id,
+          event_type: typeByEvent.get(row.event_id) === 'group' ? 'group' : 'individual',
+          rank: row.rank,
+          participant: row.participants,
+          group: row.groups,
+        }));
 
       setChampionship({
         individuals: individualStandings(placed) as Array<

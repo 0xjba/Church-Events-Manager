@@ -154,47 +154,35 @@ const JudgeScoringInterface = () => {
 
       setEvent(eventData as EventRecord);
 
-      if (eventData.event_type === 'individual') {
-        const { data, error } = await supabase
-          .from('event_participants')
-          .select('participant:participants( id, chest_number )')
-          .eq('event_id', eventId);
+      // The entrant list comes from the judge API, not from the table. `anon`
+      // can still read participant names — the leaderboard needs them — so the
+      // only way to keep them off a judge's device is to have something that
+      // knows who is asking hand back chest numbers alone.
+      const token = localStorage.getItem('participant_token');
 
-        if (error) throw error;
+      const { data: entrantData, error: entrantError } = await supabase.functions.invoke(
+        'scores/entrants',
+        {
+          body: { event_id: eventId },
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
-        setEntrants(
-          (data ?? [])
-            .map((row: FormValues) => row.participant)
-            .filter(Boolean)
-            .map((p: FormValues) => ({
-              id: p.id,
-              kind: 'participant' as const,
-              chestNumber: String(p.chest_number ?? ''),
-              searchText: String(p.chest_number ?? '').toLowerCase(),
-            }))
-            .sort((a, b) => a.chestNumber.localeCompare(b.chestNumber, undefined, { numeric: true })),
-        );
-      } else {
-        const { data, error } = await supabase
-          .from('event_groups')
-          .select('group:groups( id, chest_number )')
-          .eq('event_id', eventId);
+      if (entrantError) throw entrantError;
+      if (entrantData?.error) throw new Error(entrantData.error);
 
-        if (error) throw error;
-
-        setEntrants(
-          (data ?? [])
-            .map((row: FormValues) => row.group)
-            .filter(Boolean)
-            .map((g: FormValues) => ({
-              id: g.id,
-              kind: 'group' as const,
-              chestNumber: String(g.chest_number ?? ''),
-              searchText: String(g.chest_number ?? '').toLowerCase(),
-            }))
-            .sort((a, b) => a.chestNumber.localeCompare(b.chestNumber, undefined, { numeric: true })),
-        );
-      }
+      setEntrants(
+        ((entrantData?.entrants ?? []) as Array<{
+          id: string;
+          kind: 'participant' | 'group';
+          chest_number: string;
+        }>).map((entrant) => ({
+          id: entrant.id,
+          kind: entrant.kind,
+          chestNumber: entrant.chest_number,
+          searchText: entrant.chest_number.toLowerCase(),
+        })),
+      );
 
       const { data: criteriaData, error: criteriaError } = await supabase
         .from('event_criteria')
@@ -207,7 +195,6 @@ const JudgeScoringInterface = () => {
 
       // The scores table is closed to clients; the edge function checks the
       // judge's token and returns only that judge's rows.
-      const token = localStorage.getItem('participant_token');
       const { data: mine, error: scoresError } = await supabase.functions.invoke('scores/mine', {
         body: { event_id: eventId },
         headers: { Authorization: `Bearer ${token}` },

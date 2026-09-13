@@ -32,6 +32,8 @@ serve(async (req) => {
         return await handleMine(req, judgeId);
       case 'summary':
         return await handleSummary(req, judgeId);
+      case 'entrants':
+        return await handleEntrants(req, judgeId);
       default:
         return json(req, { error: 'Invalid action' }, 400);
     }
@@ -68,6 +70,80 @@ async function handleMine(req: Request, judgeId: string) {
 }
 
 // Per-event count of the scores this judge has filed, for the dashboard.
+/*
+ * The entrant list for an event a judge is assigned to.
+ *
+ * A judge's requests reach PostgREST as `anon`, and `anon` has to keep reading
+ * participant names because the leaderboard announces winners by name. So the
+ * scoring screen cannot be blinded by hiding a column; the list has to come
+ * from somewhere that knows who is asking. It comes from here, and this returns
+ * chest numbers and nothing else — no name, no church, no district, not even
+ * for the members of a group.
+ */
+async function handleEntrants(req: Request, judgeId: string) {
+  const { event_id } = await req.json().catch(() => ({}));
+  if (typeof event_id !== 'string' || !event_id) {
+    return json(req, { error: 'event_id is required' }, 400);
+  }
+
+  if (!await isAssigned(event_id, judgeId)) {
+    return json(req, { error: 'You are not assigned to this event' }, 403);
+  }
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id, event_type')
+    .eq('id', event_id)
+    .maybeSingle();
+
+  if (!event) return json(req, { error: 'Event not found' }, 404);
+
+  if (event.event_type === 'group') {
+    const { data, error } = await supabase
+      .from('event_groups')
+      .select('group:groups( id, chest_number )')
+      .eq('event_id', event_id);
+
+    if (error) throw error;
+
+    return json(req, { entrants: shape(data, 'group') });
+  }
+
+  const { data, error } = await supabase
+    .from('event_participants')
+    .select('participant:participants( id, chest_number )')
+    .eq('event_id', event_id);
+
+  if (error) throw error;
+
+  return json(req, { entrants: shape(data, 'participant') });
+}
+
+interface EmbeddedEntrant {
+  id?: string;
+  chest_number?: string | null;
+}
+
+type EntrantRow = Record<string, EmbeddedEntrant | EmbeddedEntrant[] | null>;
+
+// PostgREST hands back an object for a to-one embed and an array when it reads
+// the relationship the other way round, so take either.
+const shape = (rows: EntrantRow[] | null, kind: 'participant' | 'group') =>
+  (rows ?? [])
+    .map((row) => {
+      const embedded = row[kind];
+      return Array.isArray(embedded) ? embedded[0] : embedded;
+    })
+    .filter((entrant): entrant is EmbeddedEntrant => Boolean(entrant?.id))
+    .map((entrant) => ({
+      id: entrant.id as string,
+      kind,
+      chest_number: entrant.chest_number ?? '',
+    }))
+    .sort((a, b) =>
+      a.chest_number.localeCompare(b.chest_number, undefined, { numeric: true }),
+    );
+
 async function handleSummary(req: Request, judgeId: string) {
   const { data, error } = await supabase
     .from('scores')
