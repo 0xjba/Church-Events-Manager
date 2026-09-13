@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -60,8 +60,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Distinguishes "the profile has not come back yet" from "this account has
   // no readable profile", so a failed read cannot leave the app spinning.
   const [profileChecked, setProfileChecked] = useState(false);
+  // Whose profile is already loaded. Supabase refreshes the token whenever the
+  // tab regains focus, and every refresh fires the listener below; without
+  // this we would drop back into the loading state each time, which unmounts
+  // the whole page and throws away the tab, the search, the selection and any
+  // half-finished import the admin was in the middle of.
+  const loadedFor = useRef<string | null>(null);
 
   const fetchProfile = async (userId: string) => {
+    loadedFor.current = userId;
+
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -74,6 +82,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } catch (error) {
       console.error('Error fetching profile:', error);
       setProfile(null);
+      // Let the next event try again rather than caching the failure.
+      loadedFor.current = null;
     } finally {
       setProfileChecked(true);
       setLoading(false);
@@ -88,6 +98,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(session?.user ?? null);
         
         if (session?.user) {
+          // Already holding this user's profile: a token refresh, a tab coming
+          // back into focus. Nothing to fetch and nothing to unmount.
+          if (loadedFor.current === session.user.id) return;
+
           // The profile decides where a signed-in user belongs, so nothing may
           // route until it has arrived. Without this the sign-in redirect
           // bounced off Index and back to the login page.
@@ -95,6 +109,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setProfileChecked(false);
           fetchProfile(session.user.id);
         } else {
+          loadedFor.current = null;
           setProfile(null);
           setProfileChecked(true);
           setLoading(false);
@@ -107,6 +122,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        if (loadedFor.current === session.user.id) return;
         setLoading(true);
         setProfileChecked(false);
         fetchProfile(session.user.id);
