@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { message } from 'antd';
-import { ArrowCounterClockwise, ArrowLeft, CaretRight, CheckCircle, CloudSlash, DownloadSimple, Pause, Play, Timer, UsersThree, WifiSlash } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, ArrowLeft, CaretRight, CheckCircle, CloudSlash, DownloadSimple, Hash, Pause, Play, Timer, UsersThree, WifiSlash } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import type { FormValues } from '@/lib/types';
 import { useParticipantAuth } from '@/hooks/useParticipantAuth';
@@ -47,16 +47,18 @@ interface ExistingScore {
   is_locked: boolean;
 }
 
-/** Participants and groups are scored identically, so the UI works on one shape. */
+/*
+ * Participants and groups are scored identically, so the UI works on one shape.
+ *
+ * A judge sees a chest number and nothing else. Names and churches are what
+ * bias is made of, so they are neither shown nor fetched.
+ */
 interface Entrant {
   id: string;
   kind: 'participant' | 'group';
-  title: string;
-  subtitle: string;
-  /** Chest number for participants, member count for groups. */
-  marker: string;
+  /** The entrant's chest number — the whole of their identity here. */
+  chestNumber: string;
   searchText: string;
-  members?: string[];
 }
 
 type Filter = 'todo' | 'done' | 'all';
@@ -137,7 +139,11 @@ const JudgeScoringInterface = () => {
       if (eventError) throw eventError;
 
       // A judge can still hold the link to an event whose level was put away.
-      const level = (eventData as Record<string, any>).event_levels;
+      const level = (eventData as Record<string, unknown>).event_levels as
+        | { is_active?: boolean }
+        | Array<{ is_active?: boolean }>
+        | null
+        | undefined;
       const levelActive = Array.isArray(level) ? level[0]?.is_active : level?.is_active;
 
       if (levelActive === false) {
@@ -151,7 +157,7 @@ const JudgeScoringInterface = () => {
       if (eventData.event_type === 'individual') {
         const { data, error } = await supabase
           .from('event_participants')
-          .select('participant:participants( id, full_name, chest_number, church )')
+          .select('participant:participants( id, chest_number )')
           .eq('event_id', eventId);
 
         if (error) throw error;
@@ -163,21 +169,15 @@ const JudgeScoringInterface = () => {
             .map((p: FormValues) => ({
               id: p.id,
               kind: 'participant' as const,
-              title: p.full_name,
-              subtitle: p.church,
-              marker: p.chest_number,
-              searchText: `${p.chest_number} ${p.full_name} ${p.church}`.toLowerCase(),
-            })),
+              chestNumber: String(p.chest_number ?? ''),
+              searchText: String(p.chest_number ?? '').toLowerCase(),
+            }))
+            .sort((a, b) => a.chestNumber.localeCompare(b.chestNumber, undefined, { numeric: true })),
         );
       } else {
         const { data, error } = await supabase
           .from('event_groups')
-          .select(
-            `group:groups(
-              id, name, description,
-              members:group_members( participant:participants( full_name, chest_number, church ) )
-            )`,
-          )
+          .select('group:groups( id, chest_number )')
           .eq('event_id', eventId);
 
         if (error) throw error;
@@ -186,22 +186,13 @@ const JudgeScoringInterface = () => {
           (data ?? [])
             .map((row: FormValues) => row.group)
             .filter(Boolean)
-            .map((g: FormValues) => {
-              const members: string[] = (g.members ?? [])
-                .map((m: FormValues) => m.participant)
-                .filter(Boolean)
-                .map((p: FormValues) => `#${p.chest_number} ${p.full_name}`);
-
-              return {
-                id: g.id,
-                kind: 'group' as const,
-                title: g.name,
-                subtitle: g.description || `${members.length} members`,
-                marker: String(members.length),
-                searchText: `${g.name} ${members.join(' ')}`.toLowerCase(),
-                members,
-              };
-            }),
+            .map((g: FormValues) => ({
+              id: g.id,
+              kind: 'group' as const,
+              chestNumber: String(g.chest_number ?? ''),
+              searchText: String(g.chest_number ?? '').toLowerCase(),
+            }))
+            .sort((a, b) => a.chestNumber.localeCompare(b.chestNumber, undefined, { numeric: true })),
         );
       }
 
@@ -333,7 +324,7 @@ const JudgeScoringInterface = () => {
 
       message.success(
         delivered
-          ? `Scores submitted for ${active.title}`
+          ? `Scores submitted for #${active.chestNumber}`
           : 'Saved on this device — will submit when you are back online',
       );
 
@@ -419,9 +410,7 @@ const JudgeScoringInterface = () => {
                 <SearchInput
                   value={search}
                   onChange={setSearch}
-                  placeholder={
-                    event?.event_type === 'individual' ? 'Search chest number or name' : 'Search groups'
-                  }
+                  placeholder="Search chest number"
                 />
                 <SegmentedControl
                   value={filter}
@@ -440,7 +429,7 @@ const JudgeScoringInterface = () => {
                   title={search ? 'No matches' : filter === 'todo' ? 'Everyone is scored' : 'Nothing here'}
                   description={
                     search
-                      ? 'Try a different chest number or name.'
+                      ? 'Try a different chest number.'
                       : filter === 'todo'
                         ? 'You have scored every entrant in this event.'
                         : undefined
@@ -465,20 +454,26 @@ const JudgeScoringInterface = () => {
                         >
                           <span
                             className={cn(
-                              'tnum flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-body font-semibold',
+                              'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl',
                               isScored
                                 ? 'bg-success-soft text-success'
                                 : 'bg-primary-soft text-primary-strong',
                             )}
                           >
-                            {entrant.kind === 'participant' ? entrant.marker : <UsersThree size={18} />}
+                            {entrant.kind === 'participant' ? (
+                              <Hash size={20} />
+                            ) : (
+                              <UsersThree size={20} />
+                            )}
                           </span>
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-body font-medium text-foreground">
-                              {entrant.title}
+                            {/* The chest number is the entrant, so it is the
+                                whole line rather than a label beside a name. */}
+                            <span className="tnum block truncate text-title font-semibold text-foreground">
+                              {entrant.chestNumber || '—'}
                             </span>
                             <span className="block truncate text-caption text-muted-foreground">
-                              {entrant.subtitle}
+                              {entrant.kind === 'group' ? 'Group' : 'Chest number'}
                             </span>
                           </span>
                           {isScored ? (
@@ -517,14 +512,8 @@ const JudgeScoringInterface = () => {
         onClose={closeEntrant}
         dismissable={!submitting}
         size="lg"
-        title={active?.title}
-        description={
-          active
-            ? active.kind === 'participant'
-              ? `#${active.marker} · ${active.subtitle}`
-              : active.subtitle
-            : undefined
-        }
+        title={active ? `#${active.chestNumber}` : undefined}
+        description={active?.kind === 'group' ? 'Group entrant' : 'Chest number'}
         footer={
           <div className="space-y-2">
             <div className="flex items-center justify-between text-caption">
@@ -553,13 +542,6 @@ const JudgeScoringInterface = () => {
       >
         {active && (
           <div className="space-y-3 pb-2">
-            {active.members && active.members.length > 0 && (
-              <div className="rounded-xl bg-surface-sunken p-3">
-                <p className="mb-1 text-caption font-medium text-foreground">Members</p>
-                <p className="text-caption text-muted-foreground">{active.members.join(' · ')}</p>
-              </div>
-            )}
-
             {event?.time_limit && (
               <div
                 className={cn(
@@ -624,7 +606,9 @@ const JudgeScoringInterface = () => {
         onClose={() => setConfirmOpen(false)}
         dismissable={!submitting}
         title="Submit these scores?"
-        description={active ? `${active.title} · scores cannot be changed afterwards` : undefined}
+        description={
+          active ? `#${active.chestNumber} · scores cannot be changed afterwards` : undefined
+        }
         footer={
           <div className="flex gap-2">
             <Button variant="secondary" size="lg" onClick={() => setConfirmOpen(false)} disabled={submitting}>
