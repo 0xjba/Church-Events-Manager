@@ -5,7 +5,7 @@ import { CalendarBlank, ChartBar, Gavel, List, SignOut, SquaresFour, Trophy, Use
 import { useAuth } from '@/hooks/useAuth';
 import { useParticipantAuth } from '@/hooks/useParticipantAuth';
 import { useEventLevel } from '@/hooks/useEventLevel';
-import { Avatar, Button, Separator } from '@/components/ui/primitives';
+import { Avatar, Button, Separator, StatusPill } from '@/components/ui/primitives';
 import { Sheet } from '@/components/ui/Sheet';
 import { cn } from '@/lib/utils';
 
@@ -67,7 +67,7 @@ export const AppShell = ({
 }) => {
   const { profile, signOut: adminSignOut } = useAuth();
   const { participant, signOut: participantSignOut } = useParticipantAuth();
-  const { levels, levelId, setLevelId } = useEventLevel();
+  const { levels, levelId, setLevelId, loading: loadingLevels } = useEventLevel();
   const location = useLocation();
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
@@ -194,14 +194,21 @@ export const AppShell = ({
                   <p className="truncate text-caption text-muted-foreground">{subtitle}</p>
                 )}
               </div>
+              {/* Everything an admin sees belongs to the level chosen here, so
+                  it cannot be a desktop-only control. */}
               {role === 'admin' && levels.length > 0 && (
-                <label className="hidden shrink-0 items-center gap-2 sm:flex">
-                  <span className="text-caption text-muted-foreground">Event level</span>
+                <label className="flex shrink-0 items-center gap-2">
+                  <span className="hidden text-caption text-muted-foreground sm:inline">
+                    Event level
+                  </span>
                   <select
                     value={levelId}
                     onChange={(changeEvent) => setLevelId(changeEvent.target.value)}
-                    className="h-9 rounded-lg border border-input bg-surface px-2 text-caption text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/25"
+                    className="h-9 max-w-[9rem] rounded-lg border border-input bg-surface px-2 text-caption text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/25 sm:max-w-none"
                   >
+                    {/* Without this, an empty selection silently displays the
+                        first level while the app holds no level at all. */}
+                    {!levelId && <option value="">Choose a level</option>}
                     {levels.map((level) => (
                       <option key={level.id} value={level.id}>
                         {level.name} {level.year}
@@ -209,6 +216,10 @@ export const AppShell = ({
                     ))}
                   </select>
                 </label>
+              )}
+
+              {role === 'admin' && !loadingLevels && levels.length === 0 && (
+                <StatusPill tone="warning">No active level</StatusPill>
               )}
               {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
               <button

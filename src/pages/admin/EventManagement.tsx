@@ -261,6 +261,11 @@ const EventManagement = () => {
         return;
       }
 
+      if (!levelId) {
+        message.error('Choose an event level in the top bar first');
+        return;
+      }
+
       const payload = {
         name: values.name,
         type: values.type,
@@ -414,6 +419,11 @@ const EventManagement = () => {
   const runEventImport = async () => {
     try {
       setImportingEvents(true);
+
+      if (!levelId) {
+        message.error('Choose an event level in the top bar first');
+        return;
+      }
 
       const { data: created, error } = await supabase
         .from('events')
