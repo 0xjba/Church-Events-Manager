@@ -516,9 +516,21 @@ const EventManagement = () => {
 
       const csvData = parseCSV(await file.text());
 
+      if (!levelId) {
+        message.error('Choose an event level in the top bar before importing');
+        return;
+      }
+
+      // Both lookups are keyed by things that are only unique inside a level:
+      // an event by name and age category, a participant by chest number. Read
+      // across every level and the second Speech (Juniors) silently overwrites
+      // the first, so a sheet meant for one level could register its entrants
+      // into another level's events — or against another level's participant
+      // who happens to share a chest number.
       const { data: allEvents, error: eventsError } = await supabase
         .from('events')
         .select('id, name, age_category')
+        .eq('level_id', levelId)
         .eq('event_type', 'individual');
       if (eventsError) throw eventsError;
 
@@ -529,7 +541,8 @@ const EventManagement = () => {
 
       const { data: allParticipants, error: participantsError } = await supabase
         .from('participants')
-        .select('id, chest_number, age_category');
+        .select('id, chest_number, age_category')
+        .eq('level_id', levelId);
       if (participantsError) throw participantsError;
 
       const participantMap = new Map<string, { id: string; age_category: string }>();
