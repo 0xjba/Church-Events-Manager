@@ -29,6 +29,16 @@ export const TEMPLATES = {
     note: 'Chest numbers and usernames must be unique; clashes are renumbered automatically and reported before import. Passwords need 8 characters and are hashed on the server.',
   },
 
+  groups: {
+    file: 'groups-template.csv',
+    headers: ['name', 'chest_number', 'church', 'district'],
+    examples: [
+      ['Grace Church Team', '501', 'Grace Church', 'North District'],
+      ['Hope Church Team', '502', 'Hope Church', 'South District'],
+    ],
+    note: 'A group is an entrant in its own right: it has a chest number, not a list of members. Church and district are what its placings count towards, so spell them exactly as the participants of that church do.',
+  },
+
   judges: {
     file: 'judges-template.csv',
     headers: ['full_name', 'username', 'password', 'email', 'church', 'contact'],

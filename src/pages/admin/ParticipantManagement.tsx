@@ -11,7 +11,10 @@ import { DataTable } from '@/components/admin/DataTable';
 import { Toolbar } from '@/components/admin/Toolbar';
 import { Button, Card, StatusPill } from '@/components/ui/primitives';
 import { SearchInput, SegmentedControl } from '@/components/ui/inputs';
-import { ImportPanel } from '@/components/admin/ImportPanel';
+import { ImportIssues, ImportPanel, ImportSummary } from '@/components/admin/ImportPanel';
+import { parseCsv } from '@/utils/csv';
+import { TEMPLATES } from '@/utils/importTemplates';
+import { parseGroupRows, type ParsedGroup } from '@/utils/importGroups';
 import { Sheet } from '@/components/ui/Sheet';
 
 interface Participant {
@@ -52,6 +55,12 @@ const ParticipantManagement = () => {
   const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
+
+  const [isGroupImportOpen, setIsGroupImportOpen] = useState(false);
+  const [groupImportFile, setGroupImportFile] = useState<File | null>(null);
+  const [parsedGroups, setParsedGroups] = useState<ParsedGroup[]>([]);
+  const [groupImportErrors, setGroupImportErrors] = useState<string[]>([]);
+  const [importingGroups, setImportingGroups] = useState(false);
 
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
@@ -264,6 +273,71 @@ const ParticipantManagement = () => {
         }
       },
     });
+  };
+
+  /* --------------------------------------------------- group import */
+
+  const resetGroupImport = () => {
+    setGroupImportFile(null);
+    setParsedGroups([]);
+    setGroupImportErrors([]);
+  };
+
+  const handleGroupImportFile = async (file: File) => {
+    try {
+      setImportingGroups(true);
+      const parsed = parseCsv(await file.text(), TEMPLATES.groups.headers);
+
+      // Clashes are judged against this level's groups only: a chest number
+      // means nothing outside the level it was issued in.
+      const { groups: list, errors } = parseGroupRows(
+        parsed.rows,
+        groups.map((group) => ({ name: group.name, chest_number: group.chest_number })),
+      );
+
+      setGroupImportFile(file);
+      setParsedGroups(list);
+      setGroupImportErrors(errors);
+
+      if (errors.length > 0) message.warning(`${errors.length} problems to fix before import`);
+      else message.success(`${list.length} groups ready to import`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Could not read that file');
+    } finally {
+      setImportingGroups(false);
+    }
+  };
+
+  const runGroupImport = async () => {
+    if (!levelId) {
+      message.error('Choose an event level in the top bar first');
+      return;
+    }
+
+    try {
+      setImportingGroups(true);
+
+      const { error } = await supabase.from('groups').insert(
+        parsedGroups.map((group) => ({
+          name: group.name,
+          chest_number: group.chest_number,
+          church: group.church,
+          district: group.district,
+          level_id: levelId,
+        })),
+      );
+
+      if (error) throw new Error(error.message);
+
+      message.success(`Imported ${parsedGroups.length} groups`);
+      setIsGroupImportOpen(false);
+      resetGroupImport();
+      fetchGroups();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to import groups');
+    } finally {
+      setImportingGroups(false);
+    }
   };
 
   /* ----------------------------------------------------------- groups */
@@ -743,14 +817,14 @@ const ParticipantManagement = () => {
             size="sm"
             icon={<UploadSimple size={15} />}
             disabled={!levelId}
-            onClick={() => setIsBulkImportOpen(true)}
+            onClick={() => (tab === 'people' ? setIsBulkImportOpen(true) : setIsGroupImportOpen(true))}
           >
             <span className="hidden sm:inline">Import</span>
           </Button>
           <Button
             size="sm"
             icon={<Plus size={15} />}
-            disabled={tab === 'people' && !levelId}
+            disabled={!levelId}
             onClick={() => (tab === 'people' ? openParticipantModal() : openGroupModal())}
           >
             <span className="hidden sm:inline">
@@ -1030,6 +1104,75 @@ const ParticipantManagement = () => {
         <p className="pb-2 text-caption text-muted-foreground">
           Placings earned by this group count towards its church, and its district above that.
         </p>
+      </Sheet>
+
+      {/* ---------------------------------------------- group import */}
+      <Sheet
+        open={isGroupImportOpen}
+        onClose={() => {
+          setIsGroupImportOpen(false);
+          resetGroupImport();
+        }}
+        dismissable={!importingGroups}
+        size="lg"
+        title="Import groups"
+        description={`One CSV, one group per row, into ${level?.name ?? 'this level'}.`}
+        footer={
+          groupImportFile ? (
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="lg"
+                onClick={resetGroupImport}
+                disabled={importingGroups}
+              >
+                Change file
+              </Button>
+              <Button
+                size="lg"
+                block
+                loading={importingGroups}
+                disabled={groupImportErrors.length > 0 || parsedGroups.length === 0}
+                onClick={runGroupImport}
+              >
+                Import {parsedGroups.length} group{parsedGroups.length === 1 ? '' : 's'}
+              </Button>
+            </div>
+          ) : undefined
+        }
+      >
+        {!groupImportFile ? (
+          <ImportPanel template="groups" onFile={handleGroupImportFile} disabled={importingGroups} />
+        ) : (
+          <div className="space-y-3">
+            <ImportSummary file={groupImportFile} rows={parsedGroups.length} label="groups" />
+            <ImportIssues
+              errors={groupImportErrors}
+              title={`${groupImportErrors.length} problems — fix these and upload again`}
+            />
+
+            {groupImportErrors.length === 0 && parsedGroups.length > 0 && (
+              <div className="scrollbar-thin max-h-72 overflow-y-auto rounded-xl border border-border">
+                {parsedGroups.map((group) => (
+                  <div
+                    key={`${group.name}-${group.row}`}
+                    className="flex items-center gap-3 border-b border-border px-3 py-2 last:border-b-0"
+                  >
+                    <span className="tnum w-12 shrink-0 text-caption font-semibold text-foreground">
+                      {group.chest_number ? `#${group.chest_number}` : '—'}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-body text-foreground">{group.name}</span>
+                      <span className="block truncate text-caption text-muted-foreground">
+                        {[group.church, group.district].filter(Boolean).join(' · ') || 'No affiliation'}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </Sheet>
 
       {/* ----------------------------------------------- bulk import */}
